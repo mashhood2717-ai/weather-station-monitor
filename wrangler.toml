@@ -1,0 +1,44 @@
+# Cloudflare Workers Configuration
+# weatherlink-monitor/wrangler.toml
+
+name = "weatherlink-monitor"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Account ID (get from Cloudflare dashboard)
+account_id = "6c8e757f437498dc32b4a9d311b92af7"
+
+# Workers Settings
+workers_dev = true
+
+# D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "weatherlink-monitor"
+database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"  # From: wrangler d1 create weatherlink-monitor
+
+# Cron Triggers (runs every 30 minutes)
+[triggers]
+crons = ["*/30 * * * *"]
+
+# Environment Variables (non-sensitive)
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets (set via: wrangler secret put SECRET_NAME)
+# WEATHERLINK_API_KEY
+# WEATHERLINK_API_SECRET
+
+# Routes (optional - for custom domain)
+# [[routes]]
+# pattern = "monitor.yourdomain.com/*"
+# zone_name = "yourdomain.com"
+
+# Build Configuration
+[build]
+command = ""
+
+# Limits (Free Tier)
+[limits]
+cpu_ms = 10
