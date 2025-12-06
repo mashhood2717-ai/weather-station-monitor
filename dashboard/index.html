@@ -5,100 +5,306 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Station Monitor</title>
     
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+    
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
     <style>
+        :root {
+            --primary: #0ea5e9;
+            --primary-dark: #0284c7;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
         
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes countUp {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes ripple {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7),
+                           0 0 0 10px rgba(239, 68, 68, 0.7),
+                           0 0 0 20px rgba(239, 68, 68, 0.7);
+            }
+            100% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.7),
+                           0 0 0 20px rgba(239, 68, 68, 0.7),
+                           0 0 0 30px rgba(239, 68, 68, 0);
+            }
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f5f5f5;
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
             padding: 20px;
-            color: #333;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
+            position: relative;
+            z-index: 1;
         }
         
+        /* Header */
         header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 25px 35px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            border: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            animation: fadeIn 0.6s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         
         h1 {
-            font-size: 24px;
-            font-weight: 600;
-            color: #2c3e50;
+            font-family: 'Orbitron', monospace;
+            font-size: 32px;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--success) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            border-radius: 20px;
+        }
+        
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .live-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--success);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .last-update {
-            color: #7f8c8d;
+            color: var(--text-secondary);
             font-size: 14px;
+            font-weight: 300;
         }
         
-        /* Stats Container with Ring Chart */
-        .stats-wrapper {
+        /* Stats Grid */
+        .stats-grid {
             display: grid;
-            grid-template-columns: 300px 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
+            margin-bottom: 25px;
+            animation: fadeIn 0.8s ease 0.2s backwards;
+        }
+        
+        .stat-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.5s ease;
+        }
+        
+        .stat-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary);
+            box-shadow: 0 12px 40px rgba(14, 165, 233, 0.2);
+        }
+        
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .stat-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 36px;
+            font-weight: 900;
+            color: var(--text-primary);
+        }
+        
+        .stat-card.online .stat-value {
+            color: var(--success);
+        }
+        
+        .stat-card.offline .stat-value {
+            color: var(--danger);
+            animation: pulse 2s infinite;
+        }
+        
+        /* Charts Container */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+            animation: fadeIn 1s ease 0.4s backwards;
+        }
+        
+        .chart-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+        
+        .chart-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            font-weight: 700;
             margin-bottom: 20px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chart-icon {
+            font-size: 20px;
         }
         
         /* Ring Chart */
-        .ring-chart-container {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .ring-chart-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            gap: 20px;
         }
         
         .ring-chart {
             position: relative;
-            width: 200px;
-            height: 200px;
+            width: 250px;
+            height: 250px;
         }
         
         .ring-svg {
             transform: rotate(-90deg);
+            filter: drop-shadow(0 0 20px rgba(14, 165, 233, 0.3));
         }
         
         .ring-background {
             fill: none;
-            stroke: #ecf0f1;
+            stroke: rgba(51, 65, 85, 0.5);
             stroke-width: 25;
         }
         
         .ring-online {
             fill: none;
-            stroke: #27ae60;
+            stroke: var(--success);
             stroke-width: 25;
             stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         .ring-offline {
             fill: none;
-            stroke: #e74c3c;
+            stroke: var(--danger);
             stroke-width: 25;
             stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         .ring-center {
@@ -110,30 +316,32 @@
         }
         
         .ring-total {
+            font-family: 'Orbitron', monospace;
             font-size: 48px;
-            font-weight: 700;
-            color: #2c3e50;
-            line-height: 1;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--success));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .ring-label {
-            font-size: 13px;
-            color: #7f8c8d;
+            font-size: 14px;
+            color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             margin-top: 5px;
         }
         
         .ring-legend {
             display: flex;
-            gap: 20px;
-            margin-top: 20px;
+            gap: 30px;
         }
         
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
         
         .legend-dot {
@@ -143,370 +351,393 @@
         }
         
         .legend-dot.online {
-            background: #27ae60;
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
         }
         
         .legend-dot.offline {
-            background: #e74c3c;
+            background: var(--danger);
+            box-shadow: 0 0 10px var(--danger);
         }
         
-        .legend-text {
+        .legend-label {
             font-size: 14px;
-            color: #2c3e50;
+            color: var(--text-secondary);
         }
         
-        .legend-value {
-            font-weight: 600;
-            margin-left: 4px;
-        }
-        
-        /* Stats Cards */
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .stat-label {
-            font-size: 13px;
-            color: #7f8c8d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        
-        .stat-value {
-            font-size: 32px;
+        .legend-count {
+            font-family: 'Orbitron', monospace;
             font-weight: 700;
-            color: #2c3e50;
+            color: var(--text-primary);
+            margin-left: 5px;
         }
         
-        .stat-card.online .stat-value {
-            color: #27ae60;
-        }
-        
-        .stat-card.offline .stat-value {
-            color: #e74c3c;
-        }
-        
-        /* Main Content */
-        .content {
-            display: grid;
-            grid-template-columns: 1fr 350px;
-            gap: 20px;
-            margin-bottom: 20px;
+        /* Uptime Chart */
+        #uptimeChart {
+            height: 250px !important;
         }
         
         /* Map Container */
         .map-container {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
             overflow: hidden;
-            height: 500px;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            animation: fadeIn 1.2s ease 0.6s backwards;
         }
         
         .map-header {
-            padding: 20px 30px;
-            border-bottom: 1px solid #ecf0f1;
-            background: white;
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border);
         }
         
         .map-title {
+            font-family: 'Orbitron', monospace;
             font-size: 18px;
-            font-weight: 600;
-            color: #2c3e50;
+            font-weight: 700;
+            color: var(--text-primary);
         }
         
         #map {
-            height: 440px;
+            height: 500px;
             width: 100%;
         }
         
-        /* Custom Marker Popup */
-        .custom-popup {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        
-        .popup-title {
-            font-weight: 700;
-            font-size: 16px;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-        
-        .popup-info {
-            font-size: 13px;
-            color: #7f8c8d;
-            margin-bottom: 4px;
-        }
-        
-        .popup-status {
-            margin-top: 8px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            display: inline-block;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .popup-status.online {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .popup-status.offline {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        /* Station List and Table */
+        /* Station List */
         .station-list-wrapper {
             display: grid;
             grid-template-columns: 1fr 350px;
             gap: 20px;
+            animation: fadeIn 1.4s ease 0.8s backwards;
         }
         
-        /* Station List */
         .station-list {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
             overflow: hidden;
         }
         
         .list-header {
-            padding: 20px 30px;
-            border-bottom: 1px solid #ecf0f1;
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
         .list-title {
+            font-family: 'Orbitron', monospace;
             font-size: 18px;
-            font-weight: 600;
-            color: #2c3e50;
+            font-weight: 700;
+            color: var(--text-primary);
         }
         
         .controls {
             display: flex;
             gap: 10px;
-            align-items: center;
         }
         
         .search-box {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
             font-size: 14px;
             width: 250px;
+            transition: all 0.3s ease;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
         
         .filter-btn {
-            padding: 8px 16px;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 6px;
-            cursor: pointer;
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
             font-size: 14px;
-            transition: all 0.2s;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
         }
         
-        .filter-btn:hover {
-            background: #ecf0f1;
-        }
-        
+        .filter-btn:hover,
         .filter-btn.active {
-            background: #3498db;
+            background: var(--primary);
             color: white;
-            border-color: #3498db;
+            border-color: var(--primary);
         }
         
-        .sort-btn {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        .table-container {
+            overflow-x: auto;
         }
         
-        .sort-btn:hover {
-            background: #ecf0f1;
-        }
-        
-        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
         }
         
-        thead {
-            background: #f8f9fa;
-            border-bottom: 2px solid #ecf0f1;
-        }
-        
         th {
-            padding: 15px 30px;
             text-align: left;
-            font-size: 13px;
-            font-weight: 600;
-            color: #7f8c8d;
+            padding: 16px 25px;
+            background: rgba(15, 23, 42, 0.5);
+            color: var(--text-secondary);
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
+            font-weight: 600;
             cursor: pointer;
             user-select: none;
+            transition: all 0.3s ease;
         }
         
         th:hover {
-            background: #ecf0f1;
+            background: rgba(14, 165, 233, 0.1);
+            color: var(--primary);
         }
         
         td {
-            padding: 18px 30px;
-            border-bottom: 1px solid #ecf0f1;
+            padding: 16px 25px;
+            border-top: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 14px;
         }
         
-        tbody tr:hover {
-            background: #f8f9fa;
+        tr {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        tr:hover {
+            background: rgba(14, 165, 233, 0.05);
+        }
+        
+        tr.selected {
+            background: rgba(14, 165, 233, 0.1);
+            border-left: 3px solid var(--primary);
         }
         
         .status-badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             padding: 4px 12px;
             border-radius: 12px;
             font-size: 12px;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .status-badge.online {
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
         }
         
         .status-badge.offline {
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+            animation: pulse 2s infinite;
         }
         
-        /* Recent Offline Panel */
-        .recent-offline {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 20px;
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.online {
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+        }
+        
+        .status-dot.offline {
+            background: var(--danger);
+            box-shadow: 0 0 6px var(--danger);
+        }
+        
+        /* Offline Panel */
+        .offline-panel {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(239, 68, 68, 0.05);
         }
         
         .panel-title {
+            font-family: 'Orbitron', monospace;
             font-size: 16px;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 15px;
+            font-weight: 700;
+            color: var(--danger);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
-        .offline-list {
-            max-height: 600px;
-            overflow-y: auto;
+        .panel-content {
+            padding: 20px;
         }
         
         .offline-item {
-            padding: 12px;
-            border: 1px solid #ecf0f1;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            transition: all 0.2s;
+            padding: 16px;
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
         }
         
         .offline-item:hover {
-            background: #f8f9fa;
-            border-color: #e74c3c;
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--danger);
+            transform: translateX(4px);
+        }
+        
+        .offline-item:last-child {
+            margin-bottom: 0;
         }
         
         .offline-name {
             font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 4px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
         
-        .offline-location {
+        .offline-since {
             font-size: 13px;
-            color: #7f8c8d;
+            color: var(--text-secondary);
+        }
+        
+        .no-offline {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+        
+        .no-offline-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        
+        /* Custom Map Markers */
+        .pulse-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: relative;
+        }
+        
+        .pulse-marker.online {
+            background: var(--success);
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 1);
+        }
+        
+        .pulse-marker.offline {
+            background: var(--danger);
+            animation: ripple 1.5s infinite;
+        }
+        
+        /* Leaflet Popup Custom */
+        .leaflet-popup-content-wrapper {
+            background: rgba(30, 41, 59, 0.95) !important;
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        .leaflet-popup-content {
+            margin: 16px !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .leaflet-popup-tip {
+            background: rgba(30, 41, 59, 0.95) !important;
+        }
+        
+        .popup-title {
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+        
+        .popup-info {
+            font-size: 13px;
+            color: var(--text-secondary);
             margin-bottom: 6px;
         }
         
-        .offline-time {
+        .popup-status {
+            margin-top: 12px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            display: inline-block;
             font-size: 12px;
-            color: #e74c3c;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
-        /* Loading */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #7f8c8d;
+        .popup-status.online {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
         }
         
-        .spinner {
-            border: 3px solid #ecf0f1;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .popup-status.offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+            border: 1px solid var(--danger);
         }
         
         /* Responsive */
-        @media (max-width: 1024px) {
-            .stats-wrapper {
+        @media (max-width: 1200px) {
+            .charts-container {
                 grid-template-columns: 1fr;
             }
             
             .station-list-wrapper {
                 grid-template-columns: 1fr;
             }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
             
-            .controls {
-                flex-wrap: wrap;
+            h1 {
+                font-size: 24px;
             }
             
             .search-box {
                 width: 100%;
             }
-        }
-        
-        @media (max-width: 768px) {
-            .stats-container {
-                grid-template-columns: 1fr 1fr;
-            }
             
-            .ring-chart {
-                width: 160px;
-                height: 160px;
-            }
-            
-            .ring-total {
-                font-size: 36px;
-            }
-            
-            th, td {
-                padding: 12px 15px;
-                font-size: 13px;
+            .controls {
+                flex-direction: column;
+                width: 100%;
             }
         }
     </style>
@@ -515,73 +746,78 @@
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>Weather Station Monitor</h1>
-            <div class="last-update">
-                Last updated: <span id="lastUpdate">--:--</span>
+            <h1>⚡ WEATHER STATION MONITOR</h1>
+            <div class="header-right">
+                <div class="live-indicator">
+                    <div class="live-dot"></div>
+                    <span class="live-text">Live</span>
+                </div>
+                <div class="last-update">
+                    Last updated: <span id="lastUpdate">--:--</span>
+                </div>
             </div>
         </header>
 
-        <!-- Stats with Ring Chart -->
-        <div class="stats-wrapper">
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card online">
+                <div class="stat-label">Online</div>
+                <div class="stat-value" id="onlineCount">0</div>
+            </div>
+            
+            <div class="stat-card offline">
+                <div class="stat-label">Offline</div>
+                <div class="stat-value" id="offlineCount">0</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-label">Stations Up</div>
+                <div class="stat-value" id="stationsUp">0%</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-label">Stations Down</div>
+                <div class="stat-value" id="stationsDown">0%</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-container">
             <!-- Ring Chart -->
-            <div class="ring-chart-container">
-                <div class="ring-chart">
-                    <svg class="ring-svg" width="200" height="200">
-                        <!-- Background ring -->
-                        <circle class="ring-background" cx="100" cy="100" r="80"></circle>
-                        <!-- Online ring (green) -->
-                        <circle class="ring-online" cx="100" cy="100" r="80" 
-                                id="ringOnline"
-                                stroke-dasharray="502.4" 
-                                stroke-dashoffset="0"></circle>
-                        <!-- Offline ring (red) -->
-                        <circle class="ring-offline" cx="100" cy="100" r="80"
-                                id="ringOffline"
-                                stroke-dasharray="502.4" 
-                                stroke-dashoffset="502.4"></circle>
-                    </svg>
-                    <div class="ring-center">
-                        <div class="ring-total" id="ringTotal">300</div>
-                        <div class="ring-label">Stations</div>
-                    </div>
-                </div>
-                <div class="ring-legend">
-                    <div class="legend-item">
-                        <div class="legend-dot online"></div>
-                        <div class="legend-text">
-                            Online: <span class="legend-value" id="legendOnline">295</span>
+            <div class="chart-card">
+                <div class="ring-chart-wrapper">
+                    <div class="ring-chart">
+                        <svg class="ring-svg" width="250" height="250">
+                            <circle class="ring-background" cx="125" cy="125" r="80"></circle>
+                            <circle id="ringOnline" class="ring-online" cx="125" cy="125" r="80"></circle>
+                            <circle id="ringOffline" class="ring-offline" cx="125" cy="125" r="80"></circle>
+                        </svg>
+                        <div class="ring-center">
+                            <div class="ring-total" id="ringTotal">0</div>
+                            <div class="ring-label">Stations</div>
                         </div>
                     </div>
-                    <div class="legend-item">
-                        <div class="legend-dot offline"></div>
-                        <div class="legend-text">
-                            Offline: <span class="legend-value" id="legendOffline">5</span>
+                    
+                    <div class="ring-legend">
+                        <div class="legend-item">
+                            <div class="legend-dot online"></div>
+                            <span class="legend-label">Online: <span class="legend-count" id="legendOnline">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot offline"></div>
+                            <span class="legend-label">Offline: <span class="legend-count" id="legendOffline">0</span></span>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- Stats Cards -->
-            <div class="stats-container">
-                <div class="stat-card online">
-                    <div class="stat-label">Online</div>
-                    <div class="stat-value" id="onlineCount">295</div>
+            
+            <!-- Uptime Trend Chart -->
+            <div class="chart-card">
+                <div class="chart-title">
+                    <span class="chart-icon">📊</span>
+                    24-Hour Uptime Trend
                 </div>
-                
-                <div class="stat-card offline">
-                    <div class="stat-label">Offline</div>
-                    <div class="stat-value" id="offlineCount">5</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Stations Up</div>
-                    <div class="stat-value" id="stationsUp">98.3%</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-label">Stations Down</div>
-                    <div class="stat-value" id="stationsDown">1.7%</div>
-                </div>
+                <canvas id="uptimeChart"></canvas>
             </div>
         </div>
 
@@ -593,51 +829,49 @@
             <div id="map"></div>
         </div>
 
-        <!-- Main Content -->
+        <!-- Station List and Offline Panel -->
         <div class="station-list-wrapper">
             <!-- Station List -->
             <div class="station-list">
                 <div class="list-header">
                     <h2 class="list-title">All Stations</h2>
                     <div class="controls">
-                        <input type="text" class="search-box" id="searchBox" placeholder="Search stations...">
+                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search stations...">
                         <button class="filter-btn active" data-filter="all">All</button>
                         <button class="filter-btn" data-filter="online">Online</button>
                         <button class="filter-btn" data-filter="offline">Offline</button>
                     </div>
                 </div>
                 
-                <table id="stationTable">
-                    <thead>
-                        <tr>
-                            <th onclick="sortTable('name')">Station Name ↕</th>
-                            <th onclick="sortTable('location')">Location ↕</th>
-                            <th onclick="sortTable('status')">Status ↕</th>
-                            <th onclick="sortTable('lastSeen')">Last Seen ↕</th>
-                            <th onclick="sortTable('uptime')">Uptime ↕</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr>
-                            <td colspan="5">
-                                <div class="loading">
-                                    <div class="spinner"></div>
-                                    <p>Loading stations...</p>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('name')">Station ↕</th>
+                                <th onclick="sortTable('location')">Location ↕</th>
+                                <th onclick="sortTable('status')">Status ↕</th>
+                                <th onclick="sortTable('temperature')">Temp ↕</th>
+                                <th onclick="sortTable('uptime')">Uptime ↕</th>
+                                <th onclick="sortTable('last_seen')">Last Seen ↕</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stationsTable">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Recent Offline Panel -->
-            <div class="recent-offline">
-                <h3 class="panel-title">Recent Offline Stations</h3>
-                <div class="offline-list" id="recentOffline">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading...</p>
-                    </div>
+            <div class="offline-panel">
+                <div class="panel-header">
+                    <h3 class="panel-title">
+                        <span>⚠️</span>
+                        Recent Offline Stations
+                    </h3>
+                </div>
+                <div class="panel-content" id="offlinePanel">
+                    <!-- Populated by JS -->
                 </div>
             </div>
         </div>
@@ -645,10 +879,11 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
         // Configuration
-        const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev/api'; // Your Worker URL
+        const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev/api';
         
         // Global data
         let allStations = [];
@@ -656,176 +891,224 @@
         let sortColumn = 'name';
         let sortDirection = 'asc';
         let map = null;
+        let markerClusterGroup = null;
         let markers = [];
+        let uptimeChart = null;
         
         // Initialize map
         function initMap() {
-            // Center on Pakistan
-            map = L.map('map').setView([30.3753, 69.3451], 6);
+            map = L.map('map', {
+                zoomControl: true,
+                scrollWheelZoom: true
+            }).setView([30.3753, 69.3451], 6);
             
-            // Add OpenStreetMap tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap, © CartoDB',
                 maxZoom: 18
             }).addTo(map);
+            
+            markerClusterGroup = L.markerClusterGroup({
+                maxClusterRadius: 50,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: false
+            });
+            map.addLayer(markerClusterGroup);
+        }
+        
+        // Initialize uptime chart
+        function initUptimeChart() {
+            const ctx = document.getElementById('uptimeChart').getContext('2d');
+            
+            const hours = [];
+            const uptimeData = [];
+            
+            for (let i = 23; i >= 0; i--) {
+                const hour = new Date();
+                hour.setHours(hour.getHours() - i);
+                hours.push(hour.toLocaleTimeString('en-US', { hour: '2-digit', timeZone: 'Asia/Karachi' }));
+                
+                // Simulate data - in production, fetch from API
+                uptimeData.push(85 + Math.random() * 15);
+            }
+            
+            uptimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: hours,
+                    datasets: [{
+                        label: 'Uptime %',
+                        data: uptimeData,
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#94a3b8',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Uptime: ' + context.parsed.y.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(51, 65, 85, 0.3)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                maxRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            grid: {
+                                color: 'rgba(51, 65, 85, 0.3)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
         
         // Update map markers
         function updateMapMarkers() {
-            // Clear existing markers
-            markers.forEach(marker => map.removeLayer(marker));
+            markerClusterGroup.clearLayers();
             markers = [];
             
-            // Add markers for each station
             allStations.forEach(station => {
                 if (!station.lat || !station.lon) return;
                 
-                // Choose marker color based on status
-                const markerColor = station.status === 'online' ? 'green' : 'red';
+                const isOnline = station.status === 'online';
+                const markerClass = isOnline ? 'online' : 'offline';
                 
-                // Create custom icon
                 const icon = L.divIcon({
                     className: 'custom-marker',
-                    html: `<div style="
-                        background-color: ${markerColor};
-                        width: 12px;
-                        height: 12px;
-                        border-radius: 50%;
-                        border: 3px solid white;
-                        box-shadow: 0 0 4px rgba(0,0,0,0.4);
-                    "></div>`,
-                    iconSize: [18, 18],
-                    iconAnchor: [9, 9]
+                    html: `<div class="pulse-marker ${markerClass}"></div>`,
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
                 });
                 
-                // Create marker
                 const marker = L.marker([station.lat, station.lon], { icon })
                     .bindPopup(`
                         <div class="custom-popup">
                             <div class="popup-title">${station.name}</div>
                             <div class="popup-info">📍 ${station.location}</div>
-                            <div class="popup-info">🌡️ ${station.temperature ? station.temperature + '°F' : 'N/A'}</div>
+                            <div class="popup-info">🌡️ ${station.temperature ? station.temperature + '°C' : 'N/A'}</div>
                             <div class="popup-status ${station.status}">
-                                ${station.status === 'online' ? '● Online' : '○ Offline'}
+                                ${isOnline ? '● Online' : '○ Offline'}
                             </div>
                         </div>
                     `, {
-                        maxWidth: 250
-                    })
-                    .addTo(map);
+                        maxWidth: 250,
+                        className: 'custom-leaflet-popup'
+                    });
                 
+                marker.stationId = station.station_id;
+                markerClusterGroup.addLayer(marker);
                 markers.push(marker);
             });
         }
         
-        // Initialize
-        async function init() {
-            initMap();
-            await loadData();
-            setupEventListeners();
+        // Animate counter
+        function animateCounter(element, target) {
+            const duration = 1000;
+            const start = 0;
+            const increment = target / (duration / 16);
+            let current = start;
             
-            // Auto-refresh every 30 minutes
-            setInterval(loadData, 30 * 60 * 1000);
-        }
-        
-        // Load data from API
-        async function loadData() {
-            try {
-                const response = await fetch(`${API_BASE}/stations`);
-                const data = await response.json();
-                
-                allStations = data.stations;
-                updateStats(data.stats);
-                updateRecentOffline(data.alerts.recent);
-                updateMapMarkers();
-                renderTable();
-                updateLastUpdate();
-            } catch (error) {
-                console.error('Error loading data:', error);
-            }
+            const timer = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    element.textContent = Math.round(target);
+                    clearInterval(timer);
+                } else {
+                    element.textContent = Math.round(current);
+                }
+            }, 16);
         }
         
         // Update stats cards
         function updateStats(stats) {
-            const total = stats.total || 300;
+            const total = stats.total || 0;
             const online = stats.online || 0;
             const offline = stats.offline || 0;
             
-            // Update numbers
-            document.getElementById('ringTotal').textContent = total;
-            document.getElementById('onlineCount').textContent = online;
-            document.getElementById('offlineCount').textContent = offline;
-            document.getElementById('legendOnline').textContent = online;
-            document.getElementById('legendOffline').textContent = offline;
+            animateCounter(document.getElementById('ringTotal'), total);
+            animateCounter(document.getElementById('onlineCount'), online);
+            animateCounter(document.getElementById('offlineCount'), offline);
+            animateCounter(document.getElementById('legendOnline'), online);
+            animateCounter(document.getElementById('legendOffline'), offline);
             
-            // Calculate percentages (current status, not historical uptime)
-            const stationsUp = ((online / total) * 100).toFixed(1);
-            const stationsDown = (100 - stationsUp).toFixed(1);
+            const stationsUp = total > 0 ? ((online / total) * 100).toFixed(1) : 0;
+            const stationsDown = total > 0 ? (100 - stationsUp).toFixed(1) : 0;
             
             document.getElementById('stationsUp').textContent = stationsUp + '%';
             document.getElementById('stationsDown').textContent = stationsDown + '%';
             
-            // Update ring chart
             updateRingChart(online, offline, total);
         }
         
-        // Update ring chart visualization
+        // Update ring chart
         function updateRingChart(online, offline, total) {
-            const circumference = 2 * Math.PI * 80; // radius = 80
-            const onlinePercent = (online / total) * 100;
-            const offlinePercent = (offline / total) * 100;
+            const circumference = 2 * Math.PI * 80;
+            const onlinePercent = total > 0 ? (online / total) * 100 : 0;
+            const offlinePercent = total > 0 ? (offline / total) * 100 : 0;
             
-            // Green ring - shows online portion
             const ringOnline = document.getElementById('ringOnline');
             const onlineLength = (circumference * onlinePercent) / 100;
             ringOnline.style.strokeDasharray = `${onlineLength} ${circumference}`;
             ringOnline.style.strokeDashoffset = '0';
             
-            // Red ring - shows offline portion, starts where green ends
             const ringOffline = document.getElementById('ringOffline');
             const offlineLength = (circumference * offlinePercent) / 100;
             ringOffline.style.strokeDasharray = `${offlineLength} ${circumference}`;
             ringOffline.style.strokeDashoffset = -onlineLength;
         }
         
-        // Update recent offline panel
-        function updateRecentOffline(recentList) {
-            const container = document.getElementById('recentOffline');
-            
-            if (!recentList || recentList.length === 0) {
-                container.innerHTML = '<p style="color: #27ae60; text-align: center; padding: 20px;">✓ All stations online!</p>';
-                return;
-            }
-            
-            container.innerHTML = recentList.map(station => `
-                <div class="offline-item">
-                    <div class="offline-name">${station.name}</div>
-                    <div class="offline-location">${station.location}</div>
-                    <div class="offline-time">Offline: ${station.downtime}</div>
-                </div>
-            `).join('');
-        }
-        
         // Format relative time
         function formatRelativeTime(timestamp) {
-            if (!timestamp) return 'Unknown';
-            
             const now = new Date();
-            const then = new Date(timestamp + 'Z'); // Add Z to treat as UTC
+            const then = new Date(timestamp + 'Z');
             const diffMs = now - then;
             const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
             
             if (diffMins < 1) return 'Just now';
             if (diffMins < 60) return `${diffMins} min ago`;
-            
-            const diffHours = Math.floor(diffMins / 60);
-            const remainMins = diffMins % 60;
-            
-            if (diffHours < 24) {
-                return remainMins > 0 ? `${diffHours}h ${remainMins}min ago` : `${diffHours}h ago`;
-            }
-            
-            const diffDays = Math.floor(diffHours / 24);
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
             return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
         }
         
@@ -834,10 +1117,17 @@
             let stations = [...allStations];
             
             // Filter
-            if (currentFilter === 'online') {
-                stations = stations.filter(s => s.status === 'online');
-            } else if (currentFilter === 'offline') {
-                stations = stations.filter(s => s.status === 'offline');
+            if (currentFilter !== 'all') {
+                stations = stations.filter(s => s.status === currentFilter);
+            }
+            
+            // Search
+            const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+            if (searchTerm) {
+                stations = stations.filter(s => 
+                    s.name.toLowerCase().includes(searchTerm) ||
+                    s.location.toLowerCase().includes(searchTerm)
+                );
             }
             
             // Sort
@@ -845,37 +1135,74 @@
                 let aVal = a[sortColumn];
                 let bVal = b[sortColumn];
                 
-                // Handle numeric sorting
-                if (sortColumn === 'uptime') {
-                    aVal = parseFloat(aVal);
-                    bVal = parseFloat(bVal);
+                if (sortColumn === 'temperature') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                } else if (sortColumn === 'uptime') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                } else {
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
                 }
                 
-                if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-                if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-                return 0;
+                if (sortDirection === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
             });
             
-            // Render
-            const tbody = document.getElementById('tableBody');
-            
-            if (stations.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #7f8c8d;">No stations found</td></tr>';
-                return;
-            }
-            
+            const tbody = document.getElementById('stationsTable');
             tbody.innerHTML = stations.map(station => `
-                <tr>
+                <tr onclick="focusStation('${station.station_id}')" data-station-id="${station.station_id}">
                     <td><strong>${station.name}</strong></td>
                     <td>${station.location}</td>
                     <td>
                         <span class="status-badge ${station.status}">
-                            ${station.status === 'online' ? '● Online' : '○ Offline'}
+                            <span class="status-dot ${station.status}"></span>
+                            ${station.status}
                         </span>
                     </td>
+                    <td>${station.temperature ? station.temperature + '°C' : 'N/A'}</td>
+                    <td>${station.uptime ? station.uptime.toFixed(1) + '%' : 'N/A'}</td>
                     <td>${formatRelativeTime(station.last_seen)}</td>
-                    <td><strong>${parseFloat(station.uptime || 0).toFixed(1)}%</strong></td>
                 </tr>
+            `).join('');
+        }
+        
+        // Focus on station (click table row -> zoom to marker)
+        function focusStation(stationId) {
+            const marker = markers.find(m => m.stationId == stationId);
+            if (marker) {
+                map.setView(marker.getLatLng(), 12);
+                marker.openPopup();
+                
+                // Highlight table row
+                document.querySelectorAll('tr').forEach(tr => tr.classList.remove('selected'));
+                document.querySelector(`tr[data-station-id="${stationId}"]`)?.classList.add('selected');
+            }
+        }
+        
+        // Update recent offline panel
+        function updateRecentOffline(alerts) {
+            const panel = document.getElementById('offlinePanel');
+            
+            if (!alerts || alerts.length === 0) {
+                panel.innerHTML = `
+                    <div class="no-offline">
+                        <div class="no-offline-icon">✓</div>
+                        <div>All stations online!</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            panel.innerHTML = alerts.map(alert => `
+                <div class="offline-item" onclick="focusStation('${alert.station_id}')">
+                    <div class="offline-name">${alert.station_name}</div>
+                    <div class="offline-since">Offline since ${formatRelativeTime(alert.went_offline_at)}</div>
+                </div>
             `).join('');
         }
         
@@ -888,33 +1215,6 @@
                 sortDirection = 'asc';
             }
             renderTable();
-        }
-        
-        // Setup event listeners
-        function setupEventListeners() {
-            // Search
-            document.getElementById('searchBox').addEventListener('input', (e) => {
-                const searchTerm = e.target.value.toLowerCase();
-                const rows = document.querySelectorAll('#tableBody tr');
-                
-                rows.forEach(row => {
-                    const text = row.textContent.toLowerCase();
-                    row.style.display = text.includes(searchTerm) ? '' : 'none';
-                });
-            });
-            
-            // Filter buttons
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    // Update active state
-                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    
-                    // Update filter
-                    currentFilter = btn.dataset.filter;
-                    renderTable();
-                });
-            });
         }
         
         // Update last update time
@@ -930,8 +1230,52 @@
                 now.toLocaleTimeString('en-US', options) + ' PKT';
         }
         
-        // Initialize on load
-        init();
+        // Load data from API
+        async function loadData() {
+            try {
+                const response = await fetch(`${API_BASE}/stations`);
+                const data = await response.json();
+                
+                allStations = data.stations || [];
+                updateStats(data.stats || {});
+                updateRecentOffline(data.alerts?.recent || []);
+                updateMapMarkers();
+                renderTable();
+                updateLastUpdate();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // Search
+            document.getElementById('searchBox').addEventListener('input', renderTable);
+            
+            // Filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.dataset.filter;
+                    renderTable();
+                });
+            });
+        }
+        
+        // Initialize
+        async function init() {
+            initMap();
+            initUptimeChart();
+            await loadData();
+            setupEventListeners();
+            
+            // Auto-refresh every 30 minutes
+            setInterval(loadData, 30 * 60 * 1000);
+        }
+        
+        // Start when page loads
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>

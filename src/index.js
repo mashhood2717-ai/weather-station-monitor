@@ -3,6 +3,12 @@
 
 import crypto from 'node:crypto';
 
+// Helper function to convert Fahrenheit to Celsius
+function fahrenheitToCelsius(fahrenheit) {
+  if (fahrenheit === null || fahrenheit === undefined) return null;
+  return Math.round((fahrenheit - 32) * 5 / 9 * 10) / 10; // Round to 1 decimal
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -360,10 +366,16 @@ async function handleStationsRequest(env, corsHeaders) {
 
   // Get alerts
   const alerts = await getAlerts(env);
+  
+  // Convert temperatures to Celsius
+  const stationsWithCelsius = stations.results.map(station => ({
+    ...station,
+    temperature: fahrenheitToCelsius(station.temperature)
+  }));
 
   return new Response(
     JSON.stringify({
-      stations: stations.results,
+      stations: stationsWithCelsius,
       stats,
       alerts,
     }),
