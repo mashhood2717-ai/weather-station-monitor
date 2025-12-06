@@ -1099,13 +1099,29 @@
         
         // Format relative time
         function formatRelativeTime(timestamp) {
+            if (!timestamp) return 'Unknown';
+            
             const now = new Date();
-            const then = new Date(timestamp + 'Z');
+            let then;
+            
+            // Handle different timestamp formats
+            if (timestamp.includes('T')) {
+                // ISO format with T: 2025-12-05T20:00:00
+                then = new Date(timestamp);
+            } else if (timestamp.includes('Z')) {
+                // Already has Z
+                then = new Date(timestamp);
+            } else {
+                // Assume UTC: 2025-12-05 20:00:00
+                then = new Date(timestamp + 'Z');
+            }
+            
             const diffMs = now - then;
             const diffMins = Math.floor(diffMs / 60000);
             const diffHours = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHours / 24);
             
+            if (isNaN(diffMins)) return 'Unknown';
             if (diffMins < 1) return 'Just now';
             if (diffMins < 60) return `${diffMins} min ago`;
             if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
@@ -1188,7 +1204,7 @@
         function updateRecentOffline(alerts) {
             const panel = document.getElementById('offlinePanel');
             
-            if (!alerts || alerts.length === 0) {
+            if (!alerts || !alerts.recent || alerts.recent.length === 0) {
                 panel.innerHTML = `
                     <div class="no-offline">
                         <div class="no-offline-icon">✓</div>
@@ -1198,10 +1214,12 @@
                 return;
             }
             
-            panel.innerHTML = alerts.map(alert => `
+            const alertsList = alerts.recent || alerts;
+            
+            panel.innerHTML = alertsList.map(alert => `
                 <div class="offline-item" onclick="focusStation('${alert.station_id}')">
-                    <div class="offline-name">${alert.station_name}</div>
-                    <div class="offline-since">Offline since ${formatRelativeTime(alert.went_offline_at)}</div>
+                    <div class="offline-name">${alert.station_name || 'Unknown Station'}</div>
+                    <div class="offline-since">Offline since ${formatRelativeTime(alert.went_offline_at || alert.timestamp)}</div>
                 </div>
             `).join('');
         }
@@ -1238,7 +1256,7 @@
                 
                 allStations = data.stations || [];
                 updateStats(data.stats || {});
-                updateRecentOffline(data.alerts?.recent || []);
+                updateRecentOffline(data.alerts || {});
                 updateMapMarkers();
                 renderTable();
                 updateLastUpdate();
