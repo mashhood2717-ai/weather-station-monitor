@@ -1101,27 +1101,34 @@
         function formatRelativeTime(timestamp) {
             if (!timestamp) return 'Unknown';
             
-            const now = new Date();
-            let then;
+            // Both timestamps from API are in Pakistan time
+            // Parse as local time string and calculate difference
+            const parts = timestamp.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+            if (!parts) return 'Unknown';
             
-            // Handle different timestamp formats
-            if (timestamp.includes('T')) {
-                // ISO format with T: 2025-12-05T20:00:00
-                then = new Date(timestamp);
-            } else if (timestamp.includes('Z')) {
-                // Already has Z
-                then = new Date(timestamp);
-            } else {
-                // Assume UTC: 2025-12-05 20:00:00
-                then = new Date(timestamp + 'Z');
-            }
+            const [, year, month, day, hour, minute, second] = parts;
             
-            const diffMs = now - then;
+            // Create date object treating it as UTC (to avoid browser timezone issues)
+            const then = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+            
+            // Get current time and add 5 hours to convert to Pakistan time, then treat as UTC
+            const nowUTC = new Date();
+            const nowPakistanHours = nowUTC.getUTCHours() + 5;
+            const nowPakistan = new Date(Date.UTC(
+                nowUTC.getUTCFullYear(),
+                nowUTC.getUTCMonth(),
+                nowUTC.getUTCDate(),
+                nowPakistanHours,
+                nowUTC.getUTCMinutes(),
+                nowUTC.getUTCSeconds()
+            ));
+            
+            const diffMs = nowPakistan - then;
             const diffMins = Math.floor(diffMs / 60000);
             const diffHours = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHours / 24);
             
-            if (isNaN(diffMins)) return 'Unknown';
+            if (isNaN(diffMins) || diffMins < 0) return 'Unknown';
             if (diffMins < 1) return 'Just now';
             if (diffMins < 60) return `${diffMins} min ago`;
             if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;

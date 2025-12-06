@@ -476,39 +476,87 @@ async function getStats(env) {
 }
 
 async function getAlerts(env) {
-  // Recent offline (last went offline)
+  // Get all currently offline stations with their actual offline start time
+  // IMPORTANT: Calculate duration using Pakistan time to avoid timezone issues
   const recent = await env.DB.prepare(`
     SELECT 
-      s.station_name as name,
+      s.station_id,
+      s.station_name,
       s.location,
-      CASE 
-        WHEN (julianday('now') - julianday(d.start_time)) * 24 * 60 < 60 
-        THEN ROUND((julianday('now') - julianday(d.start_time)) * 24 * 60) || 'min'
-        ELSE ROUND((julianday('now') - julianday(d.start_time)) * 24) || 'h ' || 
-             ROUND(((julianday('now') - julianday(d.start_time)) * 24 * 60) % 60) || 'min'
-      END as downtime
-    FROM downtime_records d
-    JOIN stations s ON d.station_id = s.station_id
-    WHERE d.status = 'active'
-    ORDER BY d.start_time DESC
+      COALESCE(
+        datetime(d.start_time, '+5 hours'),
+        datetime(
+          (SELECT MIN(timestamp) 
+           FROM status_logs 
+           WHERE station_id = s.station_id 
+           AND is_online = 0 
+           AND timestamp > COALESCE(
+             (SELECT MAX(timestamp) 
+              FROM status_logs 
+              WHERE station_id = s.station_id AND is_online = 1),
+             '2000-01-01'
+           )
+          ), '+5 hours'
+        )
+      ) as went_offline_at
+    FROM stations s
+    JOIN (
+      SELECT station_id, is_online, timestamp,
+             ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) as rn
+      FROM status_logs
+    ) sl ON s.station_id = sl.station_id AND sl.rn = 1
+    LEFT JOIN downtime_records d ON s.station_id = d.station_id AND d.status = 'active'
+    WHERE sl.is_online = 0
+    ORDER BY went_offline_at DESC
     LIMIT 10
   `).all();
 
-  // Longest downtime (currently offline)
+  // Longest downtime (currently offline, sorted by duration)
   const longest = await env.DB.prepare(`
     SELECT 
-      s.station_name as name,
+      s.station_id,
+      s.station_name,
       s.location,
-      CASE 
-        WHEN (julianday('now') - julianday(d.start_time)) * 24 * 60 < 60 
-        THEN ROUND((julianday('now') - julianday(d.start_time)) * 24 * 60) || 'min'
-        ELSE ROUND((julianday('now') - julianday(d.start_time)) * 24) || 'h ' || 
-             ROUND(((julianday('now') - julianday(d.start_time)) * 24 * 60) % 60) || 'min'
-      END as downtime,
-      (julianday('now') - julianday(d.start_time)) * 24 * 60 as minutes
-    FROM downtime_records d
-    JOIN stations s ON d.station_id = s.station_id
-    WHERE d.status = 'active'
+      COALESCE(
+        datetime(d.start_time, '+5 hours'),
+        datetime(
+          (SELECT MIN(timestamp) 
+           FROM status_logs 
+           WHERE station_id = s.station_id 
+           AND is_online = 0 
+           AND timestamp > COALESCE(
+             (SELECT MAX(timestamp) 
+              FROM status_logs 
+              WHERE station_id = s.station_id AND is_online = 1),
+             '2000-01-01'
+           )
+          ), '+5 hours'
+        )
+      ) as went_offline_at,
+      COALESCE(
+        (julianday(datetime('now', '+5 hours')) - julianday(datetime(d.start_time, '+5 hours'))) * 24 * 60,
+        (julianday(datetime('now', '+5 hours')) - julianday(datetime(
+          (SELECT MIN(timestamp) 
+           FROM status_logs 
+           WHERE station_id = s.station_id 
+           AND is_online = 0 
+           AND timestamp > COALESCE(
+             (SELECT MAX(timestamp) 
+              FROM status_logs 
+              WHERE station_id = s.station_id AND is_online = 1),
+             '2000-01-01'
+           )
+          ), '+5 hours'
+        ))) * 24 * 60
+      ) as minutes
+    FROM stations s
+    JOIN (
+      SELECT station_id, is_online, timestamp,
+             ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) as rn
+      FROM status_logs
+    ) sl ON s.station_id = sl.station_id AND sl.rn = 1
+    LEFT JOIN downtime_records d ON s.station_id = d.station_id AND d.status = 'active'
+    WHERE sl.is_online = 0
     ORDER BY minutes DESC
     LIMIT 10
   `).all();
