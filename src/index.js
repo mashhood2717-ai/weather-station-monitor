@@ -9,6 +9,74 @@ function fahrenheitToCelsius(fahrenheit) {
   return Math.round((fahrenheit - 32) * 5 / 9 * 10) / 10; // Round to 1 decimal
 }
 
+// Fetch all stations from WeatherLink API
+async function fetchAllStationsFromAPI(env) {
+  const apiKey = env.WEATHERLINK_API_KEY;
+  const apiSecret = env.WEATHERLINK_API_SECRET;
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  const params = {
+    'api-key': apiKey,
+    't': timestamp,
+  };
+
+  const signature = generateWeatherLinkSignature(apiSecret, params);
+  const url = `https://api.weatherlink.com/v2/stations?api-key=${apiKey}&api-signature=${signature}&t=${timestamp}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`WeatherLink API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.stations || [];
+}
+
+// Check for and add new stations automatically
+async function syncNewStations(env) {
+  try {
+    // Get all stations from WeatherLink API
+    const apiStations = await fetchAllStationsFromAPI(env);
+    
+    // Get existing stations from database
+    const existingStations = await env.DB.prepare(`
+      SELECT station_id FROM stations
+    `).all();
+    
+    const existingIds = new Set(existingStations.results.map(s => s.station_id.toString()));
+    
+    // Find new stations
+    const newStations = apiStations.filter(s => !existingIds.has(s.station_id.toString()));
+    
+    if (newStations.length === 0) {
+      return { added: 0, stations: [] };
+    }
+    
+    // Insert new stations
+    for (const station of newStations) {
+      await env.DB.prepare(`
+        INSERT INTO stations (station_id, station_name, location, latitude, longitude, install_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        station.station_id,
+        station.station_name || 'Unknown Station',
+        `${station.city || ''}, ${station.state || ''} ${station.country || ''}`.trim() || 'Unknown Location',
+        station.latitude || 0,
+        station.longitude || 0,
+        station.recording_start || new Date().toISOString().split('T')[0]
+      ).run();
+    }
+    
+    return {
+      added: newStations.length,
+      stations: newStations.map(s => ({ id: s.station_id, name: s.station_name }))
+    };
+  } catch (error) {
+    console.error('Error syncing new stations:', error);
+    return { added: 0, error: error.message };
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -111,7 +179,13 @@ async function syncAllStations(env, corsHeaders = {}) {
   const startTime = Date.now();
 
   try {
-    // Get all stations from database
+    // First, check for and add any new stations automatically
+    const newStationResult = await syncNewStations(env);
+    if (newStationResult.added > 0) {
+      console.log(`Added ${newStationResult.added} new station(s):`, newStationResult.stations);
+    }
+
+    // Get all stations from database (including newly added ones)
     const stationsResult = await env.DB.prepare(
       'SELECT station_id, station_name FROM stations'
     ).all();
@@ -148,6 +222,8 @@ async function syncAllStations(env, corsHeaders = {}) {
       success: true,
       synced: successCount,
       failed: failCount,
+      new_stations_added: newStationResult.added,
+      new_stations: newStationResult.stations || [],
       duration_ms: duration,
       timestamp: new Date().toISOString(),
     };
