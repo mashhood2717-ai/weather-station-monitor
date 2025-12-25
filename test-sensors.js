@@ -1,3 +1,9 @@
+// Safety guard: don't hit WeatherLink when disabled
+if (process.env.DISABLE_WEATHERLINK_SCRIPTS === '1') {
+  console.log('DISABLED: test scripts disabled via DISABLE_WEATHERLINK_SCRIPTS=1');
+  process.exit(0);
+}
+
 const crypto = require('crypto');
 const https = require('https');
 

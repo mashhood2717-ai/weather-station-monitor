@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Station Monitor</title>
+    <title>Weatherwalay Stations Monitoring Dashboard</title>
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
@@ -17,6 +17,42 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
     <style>
+        /* Loading overlay and progress */
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(2,6,23,0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: #e2e8f0;
+            font-family: inherit;
+        }
+        #loadingBox {
+            width: 320px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.06);
+            padding: 18px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        #loadingTitle { font-weight: 600; margin-bottom: 8px; }
+        #loadingMessage { font-size: 13px; color: #cbd5e1; margin-bottom: 12px; }
+        #loadingProgress {
+            height: 10px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        #loadingProgressBar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #06b6d4, #3b82f6);
+            transition: width 300ms ease;
+        }
+        #loadingPercent { margin-top: 8px; font-size: 12px; color: #cbd5e1; }
+        
         :root {
             --primary: #0ea5e9;
             --primary-dark: #0284c7;
@@ -29,6 +65,58 @@
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --border: #334155;
+        }
+        
+        /* Light theme - Professional modern look */
+        [data-theme="light"] {
+            --primary: #0284c7;
+            --primary-dark: #0369a1;
+            --bg-dark: #ffffff;
+            --bg-card: #f8fafc;
+            --bg-card-hover: #e2e8f0;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border: #cbd5e1;
+        }
+        
+        /* Light theme specific adjustments */
+        [data-theme="light"] .stat-card,
+        [data-theme="light"] .chart-card,
+        [data-theme="light"] .map-container,
+        [data-theme="light"] .station-list,
+        [data-theme="light"] .offline-panel,
+        [data-theme="light"] header {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        [data-theme="light"] .ring-background {
+            stroke: #e2e8f0;
+        }
+        
+        [data-theme="light"] th {
+            background: #f1f5f9;
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="light"] tr:hover {
+            background: #f8fafc;
+        }
+        
+        [data-theme="light"] .search-box,
+        [data-theme="light"] .filter-btn {
+            background: white;
+            border-color: var(--border);
+        }
+        
+        [data-theme="light"] .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.98) !important;
+            border: 1px solid var(--border) !important;
+        }
+        
+        [data-theme="light"] .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.98) !important;
         }
         
         * {
@@ -72,12 +160,13 @@
         
         body {
             font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            background: var(--bg-dark);
             min-height: 100vh;
             color: var(--text-primary);
             padding: 20px;
             position: relative;
             overflow-x: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
         }
         
         body::before {
@@ -92,6 +181,18 @@
                 radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
             pointer-events: none;
             z-index: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        [data-theme="light"] body {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        
+        [data-theme="light"] body::before {
+            opacity: 0.5;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
         }
         
         .container {
@@ -131,6 +232,33 @@
             display: flex;
             align-items: center;
             gap: 20px;
+        }
+        
+        .theme-toggle {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .theme-toggle:hover {
+            background: var(--primary);
+            transform: scale(1.1);
+        }
+        
+        .theme-icon {
+            font-size: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .theme-toggle:hover .theme-icon {
+            transform: rotate(20deg);
         }
         
         .live-indicator {
@@ -551,6 +679,25 @@
             animation: pulse 2s infinite;
         }
         
+        .status-badge.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+        
+        .status-badge.inactive {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+            border: 1px solid var(--warning);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-badge.disabled {
+            background: rgba(156, 163, 175, 0.1);
+            color: #9ca3af;
+            border: 1px solid #9ca3af;
+        }
+        
         .status-dot {
             width: 6px;
             height: 6px;
@@ -565,6 +712,111 @@
         .status-dot.offline {
             background: var(--danger);
             box-shadow: 0 0 6px var(--danger);
+        }
+        
+        .status-dot.active {
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+        }
+        
+        .status-dot.inactive {
+            background: var(--warning);
+            box-shadow: 0 0 6px var(--warning);
+        }
+        
+        .status-dot.disabled {
+            background: #9ca3af;
+            box-shadow: 0 0 6px #9ca3af;
+        }
+        
+        /* Category Tabs */
+        .category-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .category-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .category-tab:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+        
+        .category-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .cat-count {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .category-tab.active .cat-count {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Category Badges */
+        .category-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .category-badge.corporate {
+            background: rgba(139, 92, 246, 0.15);
+            color: #8b5cf6;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        
+        .category-badge.community {
+            background: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        
+        .category-badge.owner {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        
+        .category-badge.wu {
+            background: rgba(236, 72, 153, 0.15);
+            color: #ec4899;
+            border: 1px solid rgba(236, 72, 153, 0.3);
+        }
+        
+        .category-badge.reference {
+            background: rgba(20, 184, 166, 0.15);
+            color: #14b8a6;
+            border: 1px solid rgba(20, 184, 166, 0.3);
         }
         
         /* Offline Panel */
@@ -656,6 +908,26 @@
             animation: ripple 1.5s infinite;
         }
         
+        .pulse-marker.inactive {
+            background: var(--warning);
+            animation: ripple 1.5s infinite;
+        }
+        
+        .pulse-marker.disabled {
+            background: #6b7280;
+            opacity: 0.7;
+        }
+        
+        .popup-status.inactive {
+            color: var(--warning);
+            font-weight: 600;
+        }
+        
+        .popup-status.disabled {
+            color: #6b7280;
+            font-weight: 600;
+        }
+        
         /* Leaflet Popup Custom */
         .leaflet-popup-content-wrapper {
             background: rgba(30, 41, 59, 0.95) !important;
@@ -686,6 +958,25 @@
             font-size: 13px;
             color: var(--text-secondary);
             margin-bottom: 6px;
+        }
+        
+        .popup-uptime {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+        
+        .popup-uptime-good {
+            color: var(--success);
+        }
+        
+        .popup-uptime-warning {
+            color: var(--warning);
+        }
+        
+        .popup-uptime-bad {
+            color: var(--danger);
         }
         
         .popup-status {
@@ -743,11 +1034,23 @@
     </style>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading stations...</div>
+            <div id="loadingPercent" class="loading-percent">0%</div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>⚡ WEATHER STATION MONITOR</h1>
+            <h1>⚡ WEATHERWALAY STATIONS MONITORING</h1>
             <div class="header-right">
+                <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
                 <div class="live-indicator">
                     <div class="live-dot"></div>
                     <span class="live-text">Live</span>
@@ -801,23 +1104,30 @@
                     <div class="ring-legend">
                         <div class="legend-item">
                             <div class="legend-dot online"></div>
-                            <span class="legend-label">Online: <span class="legend-count" id="legendOnline">0</span></span>
+                            <span class="legend-label">Active: <span class="legend-count" id="legendOnline">0</span></span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-dot offline"></div>
-                            <span class="legend-label">Offline: <span class="legend-count" id="legendOffline">0</span></span>
+                            <span class="legend-label">Inactive/Disabled: <span class="legend-count" id="legendOffline">0</span></span>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Uptime Trend Chart -->
+            <!-- Category Uptime Summary -->
             <div class="chart-card">
                 <div class="chart-title">
                     <span class="chart-icon">📊</span>
-                    24-Hour Uptime Trend
+                    <span id="categoryChartTitle">Category Uptime Summary</span>
                 </div>
-                <canvas id="uptimeChart"></canvas>
+                <div class="chart-controls" style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center;">
+                    <div style="font-size:13px; color:var(--text-secondary);">View:</div>
+                    <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
+                    <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
+                </div>
+                <div style="height: 200px; max-height: 200px; margin-top:8px;">
+                    <canvas id="categoryUptimeChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -835,11 +1145,33 @@
             <div class="station-list">
                 <div class="list-header">
                     <h2 class="list-title">All Stations</h2>
+                    <!-- Category Tabs -->
+                    <div class="category-tabs">
+                        <button class="category-tab active" data-category="all">
+                            <span>📊</span> All <span class="cat-count" id="countAll">0</span>
+                        </button>
+                        <button class="category-tab" data-category="corporate">
+                            <span>🏢</span> Corporate <span class="cat-count" id="countCorporate">0</span>
+                        </button>
+                        <button class="category-tab" data-category="community">
+                            <span>👥</span> Community <span class="cat-count" id="countCommunity">0</span>
+                        </button>
+                        <button class="category-tab" data-category="reference">
+                            <span>📍</span> Reference <span class="cat-count" id="countReference">0</span>
+                        </button>
+                        <button class="category-tab" data-category="owner">
+                            <span>👤</span> Owner <span class="cat-count" id="countOwner">0</span>
+                        </button>
+                        <button class="category-tab" data-category="wu">
+                            <span>🌐</span> WU <span class="cat-count" id="countWU">0</span>
+                        </button>
+                    </div>
                     <div class="controls">
                         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search stations...">
                         <button class="filter-btn active" data-filter="all">All</button>
-                        <button class="filter-btn" data-filter="online">Online</button>
-                        <button class="filter-btn" data-filter="offline">Offline</button>
+                        <button class="filter-btn" data-filter="active">Active</button>
+                        <button class="filter-btn" data-filter="inactive">Inactive</button>
+                        <button class="filter-btn" data-filter="disabled">Disabled</button>
                     </div>
                 </div>
                 
@@ -848,7 +1180,7 @@
                         <thead>
                             <tr>
                                 <th onclick="sortTable('name')">Station ↕</th>
-                                <th onclick="sortTable('location')">Location ↕</th>
+                                <th onclick="sortTable('category')">Category ↕</th>
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
                                 <th onclick="sortTable('uptime')">Uptime ↕</th>
@@ -877,13 +1209,402 @@
         </div>
     </div>
 
+    <!-- Station Detail Modal -->
+    <div id="stationModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeStationModal()">&times;</button>
+            <div class="modal-header">
+                <h2 id="modalStationName">Station Name</h2>
+                <div class="modal-badges">
+                    <span id="modalStationCategory" class="category-badge community">🏠 Community</span>
+                    <span id="modalStationStatus" class="status-badge"></span>
+                </div>
+                <div class="modal-intervals" style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                    <button class="modal-interval-btn active" data-days="0" data-hours="24" id="int24">24h</button>
+                    <button class="modal-interval-btn" data-days="7" data-hours="0" id="int7">7d</button>
+                    <button class="modal-interval-btn" data-days="30" data-hours="0" id="int30">30d</button>
+                    <button class="modal-interval-btn" data-days="365" data-hours="0" id="int365">1y</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-stats-grid">
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">24h Uptime</div>
+                        <div class="modal-stat-value" id="modalUptime">--</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">Temperature</div>
+                        <div class="modal-stat-value" id="modalTemperature">--</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">Downtime (24h)</div>
+                        <div class="modal-stat-value" id="modalDowntime">--</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="modal-stat-label">Incidents</div>
+                        <div class="modal-stat-value" id="modalIncidents">--</div>
+                    </div>
+                </div>
+                <div class="modal-info-row">
+                    <span><strong>Station ID:</strong> <span id="modalStationId">--</span></span>
+                    <span><strong>Tracking Since:</strong> <span id="modalTrackingSince">--</span></span>
+                </div>
+                <div class="modal-chart-container">
+                    <h3>Uptime History (Last 24 Hours)</h3>
+                    <canvas id="stationUptimeChart"></canvas>
+                </div>
+                <div class="modal-chart-container">
+                    <h3>Temperature History</h3>
+                    <canvas id="stationTempChart"></canvas>
+                </div>
+                <div class="modal-downtime-section" id="modalDowntimeList">
+                    <h3>Recent Downtime Incidents</h3>
+                    <div id="downtimeRecords">No downtime records</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 32px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            z-index: 10;
+            transition: color 0.2s;
+        }
+        
+        .modal-close:hover {
+            color: var(--danger);
+        }
+        
+        .modal-header {
+            padding: 25px 30px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .modal-header h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        
+        .modal-badges {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .modal-intervals {
+            gap: 6px;
+        }
+        .modal-interval-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .modal-interval-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary-dark);
+        }
+        .chart-toggle {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .chart-toggle.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary-dark);
+        }
+        
+        .modal-body {
+            padding: 25px 30px;
+        }
+        
+        .modal-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .modal-stat {
+            background: var(--bg-dark);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+        
+        .modal-stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        
+        .modal-stat-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .modal-stat-value.good { color: var(--success); }
+        .modal-stat-value.warning { color: var(--warning); }
+        .modal-stat-value.bad { color: var(--danger); }
+        
+        .modal-info-row {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .modal-chart-container {
+            margin-bottom: 25px;
+        }
+        
+        .modal-chart-container h3 {
+            font-size: 16px;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+        
+        .modal-chart-container canvas {
+            background: var(--bg-dark);
+            border-radius: 12px;
+            padding: 15px;
+            max-height: 250px;
+        }
+        
+        .modal-chart-container {
+            height: 280px;
+            position: relative;
+        }
+        
+        .modal-downtime-section h3 {
+            font-size: 16px;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+        
+        #downtimeRecords {
+            background: var(--bg-dark);
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .downtime-record {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .downtime-record:last-child {
+            border-bottom: none;
+        }
+        
+        .downtime-time {
+            color: var(--text-primary);
+        }
+        
+        .downtime-duration {
+            color: var(--danger);
+            font-weight: 600;
+        }
+        
+        @media (max-width: 768px) {
+            .modal-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .modal-info-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
         // Configuration
-        const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev/api';
+        const API_BASE = 'https://hubservice.weatherwalay.com';
+        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Your Cloudflare Worker URL
+        
+        // Station Categories Mapping (from Excel)
+        const STATION_CATEGORIES = {
+            '217041': 'community', '160484': 'corporate', '224681': 'owner', '160497': 'community',
+            '169631': 'community', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
+            '169682': 'community', '169694': 'community', 'C13': 'community', '165897': 'community',
+            '176678': 'community', '176749': 'community', '169767': 'community', 'C14': 'reference',
+            '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
+            '163746': 'owner', '192287': 'corporate', '176854': 'corporate', '177200': 'community',
+            '169859': 'community', 'IPASRU1': 'wu', '161483': 'community', '207397': 'community',
+            'C20': 'community', '163831': 'community', '163843': 'community', '169947': 'community',
+            '172461': 'reference', '172475': 'reference', '174619': 'community', '161580': 'community',
+            '188331': 'corporate', '188337': 'corporate', '177303': 'reference', '177310': 'reference',
+            '198090': 'corporate', '177389': 'community', '172577': 'community', '177408': 'corporate',
+            'C11': 'community', 'C15': 'community', '186109': 'corporate', '1294980': 'corporate',
+            '159738': 'corporate', '163601': 'corporate', '163333': 'community', '158829': 'corporate',
+            'C21': 'community', '164176': 'corporate', '169205': 'corporate', 'C16': 'community',
+            'C17': 'reference', '160691': 'reference', '160700': 'community', '170332': 'community',
+            '175132': 'corporate', '147761': 'community', '147492': 'community', '162057': 'community',
+            '162130': 'community', '164315': 'community', '164179': 'corporate', '164181': 'corporate',
+            '170382': 'community', '175222': 'corporate', 'C12': 'community', '188822': 'corporate',
+            '188834': 'corporate', '177683': 'reference', '170426': 'community', '170433': 'community',
+            '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
+            '177740': 'reference', '177802': 'community', '170462': 'community', '170469': 'community',
+            '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
+            '170556': 'corporate', '162416': 'community', '162474': 'reference', 'C23': 'reference',
+            '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
+            '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
+            '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
+            '164690': 'community', '191766': 'corporate', '168734': 'community', '170712': 'community',
+            '175682': 'community', '166840': 'corporate', '166842': 'community', '168851': 'community',
+            '178269': 'corporate', '170725': 'community', '170765': 'community', '175830': 'corporate',
+            '174057': 'community', '162588': 'community', '166865': 'community', '166868': 'community',
+            '168865': 'community', '175970': 'corporate', '166904': 'community', '166907': 'community',
+            '169020': 'community', '178395': 'community', '178386': 'community', '166990': 'community',
+            '167006': 'community', '192289': 'corporate', '202668': 'corporate', '160726': 'community',
+            '160777': 'corporate', 'C7': 'reference', '178475': 'reference', '178480': 'community',
+            'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
+            'C26': 'owner', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
+            '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
+            '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
+            '169407': 'community', '169438': 'community', '169455': 'community', 'C6': 'corporate',
+            '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'community',
+            '169500': 'community', '174130': 'community', '163360': 'community', '163347': 'community',
+            '169639': 'community', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
+            'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
+            '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'reference',
+            '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
+            'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
+            'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
+            'IPUNJABR2': 'wu', 'IRAWAL18': 'wu', 'IRAWAL29': 'wu', 'IRAWAL16': 'wu',
+            'INUSHK12': 'wu', 'IFEDERAL8': 'wu', 'IKMILPUR2': 'wu', 'IKHYBERP3': 'wu',
+            'IKHYBE2': 'wu', 'ILAHOR14': 'wu', 'I90582126': 'wu', 'I90582706': 'wu',
+            'ISINDH20': 'wu', 'ISINDH23': 'wu', 'ISINDH25': 'wu', 'IMURID1': 'wu',
+            'ITURBA4': 'wu', 'IKARAC33': 'wu', 'IKARAC12': 'wu', 'IKARAC25': 'wu',
+            'IKARAC24': 'wu', 'IKARAC17': 'wu', 'ITANDO3': 'wu', 'IKARAC38': 'wu',
+            'IJATI2': 'wu', '101361': 'corporate', '104536': 'corporate', '117090': 'corporate',
+            '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'owner',
+            '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'owner',
+            '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
+            '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'owner',
+            '131643': 'reference', '131893': 'reference', '220024': 'corporate', '132393': 'community',
+            '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
+            '133035': 'corporate', '133150': 'owner', '133253': 'community', '133425': 'community',
+            '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
+            '201736': 'community', '129498': 'community', '134268': 'community', '134297': 'community',
+            'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
+            'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
+            'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
+            '150367': 'reference', '150967': 'corporate', '131812': 'reference', '129090': 'community',
+            '129952': 'community', '142628': 'corporate', '139347': 'community', '133500': 'community',
+            '217831': 'community', '216612': 'corporate', '221544': 'corporate', '221563': 'corporate',
+            '221555': 'corporate', '221695': 'corporate', '221726': 'corporate', '221703': 'corporate',
+            '221746': 'corporate', '221873': 'corporate', '221910': 'corporate', '221938': 'corporate'
+        };
+        
+        // Category display names and colors
+        const CATEGORY_CONFIG = {
+            'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
+            'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
+            'owner': { name: 'Owner', color: '#f59e0b', icon: '👤' },
+            'wu': { name: 'Weather Underground', color: '#ec4899', icon: '🌐' },
+            'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' }
+        };
+        
+        // Current category filter
+        let currentCategory = 'all';
+        
+        // Check authentication
+        const token = localStorage.getItem('ww_token');
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+        
+        // Theme management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+        
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+        
+        function updateThemeIcon(theme) {
+            const icon = document.querySelector('.theme-icon');
+            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
         
         // Global data
         let allStations = [];
@@ -893,7 +1614,6 @@
         let map = null;
         let markerClusterGroup = null;
         let markers = [];
-        let uptimeChart = null;
         
         // Initialize map
         function initMap() {
@@ -915,91 +1635,269 @@
             map.addLayer(markerClusterGroup);
         }
         
-        // Initialize uptime chart
-        function initUptimeChart() {
-            const ctx = document.getElementById('uptimeChart').getContext('2d');
-            
-            const hours = [];
-            const uptimeData = [];
-            
-            for (let i = 23; i >= 0; i--) {
-                const hour = new Date();
-                hour.setHours(hour.getHours() - i);
-                hours.push(hour.toLocaleTimeString('en-US', { hour: '2-digit', timeZone: 'Asia/Karachi' }));
-                
-                // Simulate data - in production, fetch from API
-                uptimeData.push(85 + Math.random() * 15);
+        // Category Uptime Chart
+        let categoryUptimeChart = null;
+            let categoryChartType = 'bar';
+        
+        function initCategoryUptimeChart() {
+            const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
+
+            if (categoryUptimeChart) {
+                categoryUptimeChart.destroy();
             }
-            
-            uptimeChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: hours,
-                    datasets: [{
-                        label: 'Uptime %',
-                        data: uptimeData,
-                        borderColor: 'rgba(16, 185, 129, 1)',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 0,
-                        pointHoverRadius: 6,
-                        pointHoverBackgroundColor: 'rgba(16, 185, 129, 1)',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                            titleColor: '#f1f5f9',
-                            bodyColor: '#94a3b8',
-                            borderColor: '#334155',
-                            borderWidth: 1,
-                            padding: 12,
-                            displayColors: false,
-                            callbacks: {
-                                label: function(context) {
-                                    return 'Uptime: ' + context.parsed.y.toFixed(1) + '%';
+
+            // Calculate uptime for each category - prefer real 24h uptime when available
+            const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'Owner', 'WU'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const uptimeData = [];
+            const activeData = [];
+            const totalData = [];
+
+            categories.forEach(cat => {
+                const catStations = allStations.filter(s => s.category === cat);
+                const total = catStations.length;
+                const active = catStations.filter(s => s.status === 'Active').length;
+
+                // Compute average uptime using stations that have real checks (checks_24h > 0).
+                // Prefer `uptime_24h` when present, otherwise fall back to `uptime` which may be supplied by realtime API.
+                const uptimes = catStations
+                    .filter(s => s.checks_24h && s.checks_24h > 0)
+                    .map(s => {
+                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
+                    })
+                    .filter(v => !isNaN(v));
+
+                let avgUptime = 0;
+                if (uptimes.length > 0) {
+                    const sum = uptimes.reduce((a, b) => a + b, 0);
+                    avgUptime = sum / uptimes.length;
+                } else {
+                    // No recorded checks for this category — show 0 rather than deriving from current state
+                    avgUptime = 0;
+                }
+
+                uptimeData.push(Number(avgUptime.toFixed(1)));
+                activeData.push(active);
+                totalData.push(total);
+            });
+
+            const chartType = categoryChartType === 'line' ? 'line' : 'bar';
+            const commonDataset = {
+                label: 'Uptime %',
+                data: uptimeData
+            };
+
+            if (chartType === 'bar') {
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: categoryNames,
+                        datasets: [{
+                            ...commonDataset,
+                            backgroundColor: categoryColors.map(c => c + '80'),
+                            borderColor: categoryColors,
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            minBarLength: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [
+                                            `Uptime: ${context.parsed.y.toFixed(1)}%`,
+                                            `Active: ${activeData[idx]} / ${totalData[idx]}`
+                                        ];
+                                    }
                                 }
                             }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
                         }
+                    }
+                });
+            } else {
+                // line chart
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: categoryNames,
+                        datasets: [{
+                            ...commonDataset,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.08)',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: categoryColors,
+                            borderWidth: 2,
+                            fill: true
+                        }]
                     },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(51, 65, 85, 0.3)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                maxRotation: 0,
-                                autoSkip: true,
-                                maxTicksLimit: 12
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                    }
+                                }
                             }
                         },
-                        y: {
-                            min: 0,
-                            max: 100,
-                            grid: {
-                                color: 'rgba(51, 65, 85, 0.3)',
-                                drawBorder: false
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Compute category arrays (labels, uptimes, active counts, totals)
+        function computeCategoryUptimeArrays() {
+            const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'Owner', 'WU'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const uptimeData = [];
+            const activeData = [];
+            const totalData = [];
+
+            categories.forEach(cat => {
+                const catStations = allStations.filter(s => s.category === cat);
+                const total = catStations.length;
+                const active = catStations.filter(s => s.status === 'Active').length;
+
+                // Use only stations with real checks for averaging
+                const uptimes = catStations
+                    .filter(s => s.checks_24h && s.checks_24h > 0)
+                    .map(s => {
+                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
+                    })
+                    .filter(v => !isNaN(v));
+
+                let avgUptime = 0;
+                if (uptimes.length > 0) {
+                    const sum = uptimes.reduce((a, b) => a + b, 0);
+                    avgUptime = sum / uptimes.length;
+                } else {
+                    avgUptime = 0;
+                }
+
+                uptimeData.push(Number(avgUptime.toFixed(1)));
+                activeData.push(active);
+                totalData.push(total);
+            });
+
+            return { categories, categoryNames, categoryColors, uptimeData, activeData, totalData };
+        }
+
+        // Update existing category chart in-place (if present) with fresh data
+        function refreshCategoryUptimeChart() {
+            try {
+                const computed = computeCategoryUptimeArrays();
+                if (categoryUptimeChart) {
+                    categoryUptimeChart.data.labels = computed.categoryNames;
+                    if (categoryUptimeChart.data.datasets && categoryUptimeChart.data.datasets[0]) {
+                        categoryUptimeChart.data.datasets[0].data = computed.uptimeData;
+                        if (categoryUptimeChart.data.datasets[0].backgroundColor) {
+                            categoryUptimeChart.data.datasets[0].backgroundColor = computed.categoryColors.map(c => c + '80');
+                        }
+                    }
+                    categoryUptimeChart.update();
+                } else {
+                    initCategoryUptimeChart();
+                }
+            } catch (e) {
+                console.warn('refreshCategoryUptimeChart error:', e.message);
+            }
+        }
+
+        // Update category chart when category is selected
+        function updateCategoryChart() {
+            if (currentCategory === 'all') {
+                document.getElementById('categoryChartTitle').textContent = 'Category Uptime Summary';
+                initCategoryUptimeChart();
+            } else {
+                const catConfig = CATEGORY_CONFIG[currentCategory];
+                document.getElementById('categoryChartTitle').textContent = `${catConfig.name} Stations Uptime`;
+                
+                // Show single category stats
+                const catStations = allStations.filter(s => s.category === currentCategory);
+                const total = catStations.length;
+                const active = catStations.filter(s => s.status === 'Active').length;
+                const inactive = catStations.filter(s => s.status === 'Inactive').length;
+                const disabled = catStations.filter(s => s.status === 'Disabled').length;
+                
+                if (categoryUptimeChart) {
+                    categoryUptimeChart.destroy();
+                }
+                
+                const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Active', 'Inactive', 'Disabled'],
+                        datasets: [{
+                            data: [active, inactive, disabled],
+                            backgroundColor: ['#10b981', '#f59e0b', '#6b7280'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '60%',
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    color: '#94a3b8',
+                                    padding: 15,
+                                    usePointStyle: true
+                                }
                             },
-                            ticks: {
-                                color: '#94a3b8',
-                                callback: function(value) {
-                                    return value + '%';
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                callbacks: {
+                                    label: function(context) {
+                                        const pct = ((context.parsed / total) * 100).toFixed(1);
+                                        return `${context.label}: ${context.parsed} (${pct}%)`;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
         }
         
         // Update map markers
@@ -1007,11 +1905,38 @@
             markerClusterGroup.clearLayers();
             markers = [];
             
-            allStations.forEach(station => {
-                if (!station.lat || !station.lon) return;
+            let stations = [...allStations];
+            
+            // Filter by category
+            if (currentCategory !== 'all') {
+                stations = stations.filter(s => s.category === currentCategory);
+            }
+            
+            stations.forEach(station => {
+                // Use latitude/longitude fields
+                const lat = station.latitude;
+                const lng = station.longitude;
                 
-                const isOnline = station.status === 'online';
-                const markerClass = isOnline ? 'online' : 'offline';
+                if (!lat || !lng || lat === 0 || lng === 0) return;
+                
+                // Color-code by status: Active=green, Inactive=yellow, Disabled=gray
+                let markerClass = 'offline';
+                if (station.status === 'Active') {
+                    markerClass = 'online';
+                } else if (station.status === 'Inactive') {
+                    markerClass = 'inactive';
+                } else if (station.status === 'Disabled') {
+                    markerClass = 'disabled';
+                }
+                
+                const uptime = station.uptime !== undefined ? parseFloat(station.uptime) : 0;
+                const category = station.category || 'community';
+                const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
+                
+                // Determine uptime color
+                let uptimeClass = 'popup-uptime-bad';
+                if (uptime >= 95) uptimeClass = 'popup-uptime-good';
+                else if (uptime >= 80) uptimeClass = 'popup-uptime-warning';
                 
                 const icon = L.divIcon({
                     className: 'custom-marker',
@@ -1020,14 +1945,16 @@
                     iconAnchor: [10, 10]
                 });
                 
-                const marker = L.marker([station.lat, station.lon], { icon })
+                const marker = L.marker([lat, lng], { icon })
                     .bindPopup(`
                         <div class="custom-popup">
-                            <div class="popup-title">${station.name}</div>
-                            <div class="popup-info">📍 ${station.location}</div>
+                            <div class="popup-title">${station.station_name || 'Unknown'}</div>
+                            <div class="popup-info">📍 ${station.location || 'Unknown'}</div>
+                            <div class="popup-info">🏷️ <span class="category-badge ${category}" style="font-size: 11px;">${catConfig.icon} ${catConfig.name}</span></div>
                             <div class="popup-info">🌡️ ${station.temperature ? station.temperature + '°C' : 'N/A'}</div>
-                            <div class="popup-status ${station.status}">
-                                ${isOnline ? '● Online' : '○ Offline'}
+                            <div class="popup-uptime ${uptimeClass}">📊 Uptime: ${uptime.toFixed(1)}%</div>
+                            <div class="popup-status ${markerClass}">
+                                ${station.status === 'Active' ? '● Active' : station.status === 'Inactive' ? '◐ Inactive' : '○ Disabled'}
                             </div>
                         </div>
                     `, {
@@ -1079,6 +2006,47 @@
             
             updateRingChart(online, offline, total);
         }
+
+        // Helper to format date in Pakistan timezone
+        function formatDatePKT(dateStr) {
+            const d = new Date(dateStr);
+            if (isNaN(d)) return 'N/A';
+            return d.toLocaleString('en-US', {
+                timeZone: 'Asia/Karachi',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        // Loading overlay controls
+        function showLoadingOverlay(message) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (!overlay) return;
+            const msg = document.getElementById('loadingMessage');
+            const bar = document.getElementById('loadingProgressBar');
+            const pct = document.getElementById('loadingPercent');
+            msg.textContent = message || 'Loading...';
+            bar.style.width = '0%';
+            pct.textContent = '0%';
+            overlay.style.display = 'flex';
+        }
+
+        function setLoadingProgress(percent) {
+            const bar = document.getElementById('loadingProgressBar');
+            const pct = document.getElementById('loadingPercent');
+            if (bar) bar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+            if (pct) pct.textContent = Math.round(Math.min(100, Math.max(0, percent))) + '%';
+        }
+
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (!overlay) return;
+            overlay.style.display = 'none';
+        }
         
         // Update ring chart
         function updateRingChart(online, offline, total) {
@@ -1095,6 +2063,40 @@
             const offlineLength = (circumference * offlinePercent) / 100;
             ringOffline.style.strokeDasharray = `${offlineLength} ${circumference}`;
             ringOffline.style.strokeDashoffset = -onlineLength;
+        }
+        
+        // Update category counts
+        function updateCategoryCounts() {
+            const counts = {
+                all: allStations.length,
+                corporate: 0,
+                community: 0,
+                reference: 0,
+                owner: 0,
+                wu: 0
+            };
+            
+            allStations.forEach(station => {
+                const category = station.category || 'community';
+                if (counts[category] !== undefined) {
+                    counts[category]++;
+                }
+            });
+            
+            // Update tab counts
+            const countAll = document.getElementById('countAll');
+            const countCorporate = document.getElementById('countCorporate');
+            const countCommunity = document.getElementById('countCommunity');
+            const countReference = document.getElementById('countReference');
+            const countOwner = document.getElementById('countOwner');
+            const countWU = document.getElementById('countWU');
+            
+            if (countAll) countAll.textContent = counts.all;
+            if (countCorporate) countCorporate.textContent = counts.corporate;
+            if (countCommunity) countCommunity.textContent = counts.community;
+            if (countReference) countReference.textContent = counts.reference;
+            if (countOwner) countOwner.textContent = counts.owner;
+            if (countWU) countWU.textContent = counts.wu;
         }
         
         // Format relative time
@@ -1139,17 +2141,29 @@
         function renderTable() {
             let stations = [...allStations];
             
-            // Filter
+            // Filter by category
+            if (currentCategory !== 'all') {
+                stations = stations.filter(s => s.category === currentCategory);
+            }
+            
+            // Filter by status (Active, Inactive, Disabled)
             if (currentFilter !== 'all') {
-                stations = stations.filter(s => s.status === currentFilter);
+                stations = stations.filter(s => {
+                    if (currentFilter === 'active') return s.status === 'Active';
+                    if (currentFilter === 'inactive') return s.status === 'Inactive';
+                    if (currentFilter === 'disabled') return s.status === 'Disabled';
+                    return true;
+                });
             }
             
             // Search
             const searchTerm = document.getElementById('searchBox').value.toLowerCase();
             if (searchTerm) {
                 stations = stations.filter(s => 
-                    s.name.toLowerCase().includes(searchTerm) ||
-                    s.location.toLowerCase().includes(searchTerm)
+                    (s.station_name && s.station_name.toLowerCase().includes(searchTerm)) ||
+                    (s.location && s.location.toLowerCase().includes(searchTerm)) ||
+                    (s.station_id && s.station_id.toString().includes(searchTerm)) ||
+                    (s.category && s.category.toLowerCase().includes(searchTerm))
                 );
             }
             
@@ -1177,24 +2191,53 @@
             });
             
             const tbody = document.getElementById('stationsTable');
-            tbody.innerHTML = stations.map(station => `
+            tbody.innerHTML = stations.map(station => {
+                const statusText = station.status ? station.status.toLowerCase() : 'unknown';
+                const lastSeen = station.status === 'Active' ? 'Active now' : (formatRelativeTime(station.last_seen) || 'Unknown');
+                const category = station.category || 'community';
+                const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
+                
+                // Get uptime - use real 24h uptime if available, otherwise based on current status
+                let uptime = 'N/A';
+                if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
+                    uptime = parseFloat(station.uptime_24h).toFixed(1);
+                } else if (station.uptime !== undefined && station.uptime !== null) {
+                    uptime = parseFloat(station.uptime).toFixed(1);
+                } else if (station.status === 'Active') {
+                    uptime = '100.0';
+                } else {
+                    uptime = '0.0';
+                }
+                
+                // Color code uptime
+                let uptimeClass = '';
+                const uptimeVal = parseFloat(uptime);
+                if (uptimeVal >= 90) uptimeClass = 'style="color: var(--success)"';
+                else if (uptimeVal >= 50) uptimeClass = 'style="color: var(--warning)"';
+                else uptimeClass = 'style="color: var(--danger)"';
+                
+                return `
                 <tr onclick="focusStation('${station.station_id}')" data-station-id="${station.station_id}">
-                    <td><strong>${station.name}</strong></td>
-                    <td>${station.location}</td>
+                    <td><strong>${station.station_name || 'Unknown'}</strong></td>
+                    <td><span class="category-badge ${category}">${catConfig.icon} ${catConfig.name}</span></td>
                     <td>
-                        <span class="status-badge ${station.status}">
-                            <span class="status-dot ${station.status}"></span>
-                            ${station.status}
+                        <span class="status-badge ${statusText}">
+                            <span class="status-dot ${statusText}"></span>
+                            ${(station.status || 'UNKNOWN').toUpperCase()}
                         </span>
                     </td>
                     <td>${station.temperature ? station.temperature + '°C' : 'N/A'}</td>
-                    <td>${station.uptime ? station.uptime.toFixed(1) + '%' : 'N/A'}</td>
-                    <td>${formatRelativeTime(station.last_seen)}</td>
+                    <td><strong ${uptimeClass}>${uptime}%</strong></td>
+                    <td>${lastSeen}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
+            
+            // Update category counts
+            updateCategoryCounts();
         }
         
-        // Focus on station (click table row -> zoom to marker)
+        // Focus on station (click table row -> zoom to marker and open modal)
         function focusStation(stationId) {
             const marker = markers.find(m => m.stationId == stationId);
             if (marker) {
@@ -1205,7 +2248,349 @@
                 document.querySelectorAll('tr').forEach(tr => tr.classList.remove('selected'));
                 document.querySelector(`tr[data-station-id="${stationId}"]`)?.classList.add('selected');
             }
+            
+            // Open the station detail modal
+            openStationModal(stationId);
         }
+        
+        // Station detail modal charts
+        let stationUptimeChart = null;
+        let stationTempChart = null;
+        
+        // Open station modal and load details
+        async function openStationModal(stationId) {
+            const modal = document.getElementById('stationModal');
+            modal.style.display = 'flex';
+            
+            // Find station in allStations (this has correct data)
+            const station = allStations.find(s => String(s.station_id) === String(stationId));
+            currentModalStation = station; // Store for reference in updateModalWithData
+            
+            // Set basic info immediately from LOCAL data (not API)
+            document.getElementById('modalStationName').textContent = station?.station_name || 'Loading...';
+            document.getElementById('modalStationId').textContent = stationId;
+            
+            if (station) {
+                const statusText = (station.status || 'unknown').toLowerCase();
+                const statusBadge = document.getElementById('modalStationStatus');
+                statusBadge.textContent = station.status || 'UNKNOWN';
+                statusBadge.className = `status-badge ${statusText}`;
+                
+                // Set category badge
+                const category = station.category || 'community';
+                const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
+                const categoryBadge = document.getElementById('modalStationCategory');
+                categoryBadge.textContent = `${catConfig.icon} ${catConfig.name}`;
+                categoryBadge.className = `category-badge ${category}`;
+                
+                // Set temperature from local data - this is correct
+                const tempElement = document.getElementById('modalTemperature');
+                tempElement.textContent = station.temperature ? `${station.temperature}°C` : 'N/A';
+                tempElement.setAttribute('data-original', station.temperature || ''); // Preserve original
+            }
+            
+            // Load detailed history from persisted samples (background ingestion)
+            try {
+                let query = '?hours=24';
+                if (modalPeriodDays && modalPeriodDays > 0) query = `?days=${modalPeriodDays}`;
+                else if (modalPeriodHours && modalPeriodHours !== 24) query = `?hours=${modalPeriodHours}`;
+
+                const response = await fetch(`${WORKER_API}/api/station-samples/${stationId}${query}`);
+                if (response.ok) {
+                    const payload = await response.json();
+                    // Convert samples response into shape expected by updateModalWithData
+                    // payload.samples: [{ period, uptime, checks, avg_temperature }]
+                    const samples = payload.samples || [];
+
+                    // Build uptime aggregation
+                    let totalChecks = 0;
+                    let weightedOnline = 0; // sum(uptime% * checks)
+                    samples.forEach(s => {
+                        const checks = parseInt(s.checks) || 0;
+                        const uptime = s.uptime !== null && s.uptime !== undefined ? parseFloat(s.uptime) : null;
+                        if (checks > 0 && uptime !== null) {
+                            totalChecks += checks;
+                            weightedOnline += (uptime / 100.0) * checks;
+                        }
+                    });
+
+                    const overallPercentage = totalChecks > 0 ? Number(((weightedOnline / totalChecks) * 100).toFixed(2)) : (station && station.is_online ? 100 : 0);
+
+                    const hourly_data = samples.map(s => ({
+                        period: s.period,
+                        period_label: s.period,
+                        uptime: s.uptime !== null ? Number(s.uptime) : null,
+                        checks: s.checks || 0,
+                        online: s.checks && s.uptime !== null ? Math.round((s.uptime/100.0) * s.checks) : 0,
+                        avg_temperature: s.avg_temperature !== undefined ? s.avg_temperature : null
+                    }));
+
+                    const data = {
+                        success: true,
+                        station: station || { station_id: stationId, station_name: 'Unknown' },
+                        uptime: {
+                            percentage: overallPercentage,
+                            total_checks: totalChecks,
+                            online_checks: Math.round(weightedOnline),
+                            offline_checks: totalChecks - Math.round(weightedOnline),
+                            period_hours: modalPeriodHours || (modalPeriodDays ? modalPeriodDays*24 : 24),
+                            granularity: modalPeriodDays >= 365 ? 'year' : modalPeriodDays >= 30 ? 'month' : modalPeriodDays >= 7 ? 'day' : 'hour'
+                        },
+                        downtime: { total_minutes: 0, total_hours: '0.00', incidents: 0, records: [] },
+                        hourly_data,
+                        tracking_since: station ? station.tracking_since : null,
+                        last_updated: new Date().toISOString()
+                    };
+
+                    updateModalWithData(data);
+                } else {
+                    console.error('Failed to load station samples');
+                    setModalPlaceholders();
+                }
+            } catch (error) {
+                console.error('Error loading station samples:', error);
+                setModalPlaceholders();
+            }
+        }
+        
+        function setModalPlaceholders() {
+            document.getElementById('modalUptime').textContent = 'N/A';
+            document.getElementById('modalDowntime').textContent = 'N/A';
+            document.getElementById('modalIncidents').textContent = '0';
+            document.getElementById('modalTrackingSince').textContent = 'No data yet';
+            document.getElementById('downtimeRecords').innerHTML = 'No tracking data available yet. Data will accumulate over time.';
+        }
+        
+        // Store current modal station for reference
+        let currentModalStation = null;
+        // Modal period (days/hours) used when fetching history
+        let modalPeriodDays = 0;
+        let modalPeriodHours = 24;
+        
+        function updateModalWithData(data) {
+            // Check if we have historical data
+            const hasHistoricalData = data.uptime.total_checks > 0;
+            
+            // Update uptime
+            const uptimeValue = document.getElementById('modalUptime');
+            if (hasHistoricalData) {
+                uptimeValue.textContent = `${data.uptime.percentage}%`;
+                uptimeValue.className = 'modal-stat-value ' + (data.uptime.percentage >= 90 ? 'good' : data.uptime.percentage >= 50 ? 'warning' : 'bad');
+            } else {
+                // No historical data - show current status from local data
+                const isActive = currentModalStation && currentModalStation.status === 'Active';
+                uptimeValue.textContent = isActive ? '100%' : '0%';
+                uptimeValue.className = 'modal-stat-value ' + (isActive ? 'good' : 'bad');
+            }
+            
+            // DON'T update temperature from API response - it returns wrong station
+            // Keep the temperature from local station data which was set in openStationModal
+            
+            // Update downtime
+            const downtimeValue = document.getElementById('modalDowntime');
+            downtimeValue.textContent = data.downtime.total_minutes > 0 ? `${data.downtime.total_hours}h` : '0h';
+            downtimeValue.className = 'modal-stat-value ' + (data.downtime.total_minutes === 0 ? 'good' : 'bad');
+            
+            // Update incidents
+            document.getElementById('modalIncidents').textContent = data.downtime.incidents;
+            
+            // Tracking since
+            if (data.tracking_since) {
+                document.getElementById('modalTrackingSince').textContent = formatDatePKT(data.tracking_since);
+            } else {
+                document.getElementById('modalTrackingSince').textContent = 'Just started tracking';
+            }
+            
+            // Downtime records
+            if (data.downtime.records && data.downtime.records.length > 0) {
+                document.getElementById('downtimeRecords').innerHTML = data.downtime.records.map(d => `
+                    <div class="downtime-record">
+                        <span class="downtime-time">${formatDatePKT(d.start_time)}</span>
+                        <span class="downtime-duration">${d.duration_minutes ? d.duration_minutes + ' min' : 'Ongoing'}</span>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('downtimeRecords').innerHTML = '<div style="text-align: center; padding: 20px;">✅ No downtime recorded in the last 24 hours</div>';
+            }
+            
+            // Create uptime chart
+            createStationUptimeChart(data.hourly_data);
+            
+            // Create temperature chart
+            createStationTempChart(data.hourly_data);
+        }
+        
+        function createStationUptimeChart(hourlyData) {
+            const ctx = document.getElementById('stationUptimeChart').getContext('2d');
+            
+            if (stationUptimeChart) {
+                stationUptimeChart.destroy();
+            }
+            
+            // Format labels - data is in UTC, convert to PKT (+5 hours)
+            const labels = hourlyData.map(h => {
+                const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // Period format is "YYYY-MM-DD HH:MM:SS" in UTC, add 5 hours for PKT
+                const match = raw.match(/(\d{2}):(\d{2})/);
+                if (match) {
+                    let hour = parseInt(match[1]) + 5; // UTC to PKT
+                    if (hour >= 24) hour -= 24;
+                    const min = match[2];
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    return `${displayHour}:${min} ${ampm}`;
+                }
+                return raw || '';
+            });
+            const uptimeValues = hourlyData.map(h => (h.uptime !== null && h.uptime !== undefined) ? h.uptime : null);
+
+            // If there's no data to plot, show a friendly message on the canvas
+            const hasAny = uptimeValues.some(v => v !== null && !isNaN(v));
+            if (!hasAny || labels.length === 0) {
+                // Clear canvas and write message
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.fillStyle = '#94a3b8';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '14px Arial';
+                ctx.fillText('No uptime data available for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+            
+            stationUptimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Uptime %',
+                        data: uptimeValues,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#10b981'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100,
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#94a3b8', maxTicksLimit: 12 }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+        
+        function createStationTempChart(hourlyData) {
+            const ctx = document.getElementById('stationTempChart').getContext('2d');
+            
+            if (stationTempChart) {
+                stationTempChart.destroy();
+            }
+            
+            // Format labels - data is in UTC, convert to PKT (+5 hours)
+            const labels = hourlyData.map(h => {
+                const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // Period format is "YYYY-MM-DD HH:MM:SS" in UTC, add 5 hours for PKT
+                const match = raw.match(/(\d{2}):(\d{2})/);
+                if (match) {
+                    let hour = parseInt(match[1]) + 5; // UTC to PKT
+                    if (hour >= 24) hour -= 24;
+                    const min = match[2];
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    return `${displayHour}:${min} ${ampm}`;
+                }
+                return raw || '';
+            });
+            const tempValues = hourlyData.map(h => {
+                if (h.avg_temperature !== undefined && h.avg_temperature !== null) return h.avg_temperature;
+                if (h.avg_temp !== undefined && h.avg_temp !== null) return h.avg_temp;
+                if (h.avgTemp !== undefined && h.avgTemp !== null) return h.avgTemp;
+                return null;
+            });
+
+            // If no temperature samples, show message
+            const hasTemp = tempValues.some(v => v !== null && !isNaN(v));
+            if (!hasTemp || labels.length === 0) {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.fillStyle = '#94a3b8';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '14px Arial';
+                ctx.fillText('No temperature data available for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+            
+            stationTempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperature °C',
+                        data: tempValues,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#f59e0b',
+                        spanGaps: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#94a3b8', maxTicksLimit: 12 }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+        
+        function closeStationModal() {
+            document.getElementById('stationModal').style.display = 'none';
+            
+            // Destroy charts to free memory
+            if (stationUptimeChart) {
+                stationUptimeChart.destroy();
+                stationUptimeChart = null;
+            }
+            if (stationTempChart) {
+                stationTempChart.destroy();
+                stationTempChart = null;
+            }
+        }
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeStationModal();
+            }
+        });
         
         // Update recent offline panel
         function updateRecentOffline(alerts) {
@@ -1255,18 +2640,144 @@
                 now.toLocaleTimeString('en-US', options) + ' PKT';
         }
         
+        // Load uptime data from Worker API
+        async function loadUptimePercentages() {
+            try {
+                console.log('📊 Loading real-time station status from Worker...');
+                
+                // POST with empty body to get ALL stations - no need to send IDs
+                const response = await fetch(`${WORKER_API}/api/uptime-percentages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`✅ Received ${data.total} stations from API`);
+                    
+                    if (data.uptime_data && Array.isArray(data.uptime_data)) {
+                        // Create a map of station_id -> full station data
+                        const stationDataMap = {};
+                        data.uptime_data.forEach(item => {
+                            stationDataMap[String(item.station_id)] = {
+                                status: item.status,
+                                is_active: item.is_active,
+                                temperature: item.temperature,
+                                last_update: item.last_update,
+                                latitude: item.latitude,
+                                longitude: item.longitude,
+                                uptime_24h: item.uptime_24h,
+                                checks_24h: item.checks_24h,
+                                tracking_since: item.tracking_since
+                            };
+                        });
+                        
+                        // Update all stations with real-time status
+                        let matched = 0;
+                        allStations.forEach(station => {
+                            const id = String(station.station_id);
+                            if (stationDataMap[id]) {
+                                const apiData = stationDataMap[id];
+                                // Update status and temperature from API
+                                station.status = apiData.status;
+                                station.is_online = apiData.is_active;
+                                station.temperature = apiData.temperature;
+                                station.last_update = apiData.last_update;
+                                // Use real 24h uptime if available
+                                station.uptime_24h = apiData.uptime_24h;
+                                station.checks_24h = apiData.checks_24h;
+                                station.tracking_since = apiData.tracking_since;
+                                // Fallback uptime for sorting
+                                station.uptime = apiData.uptime_24h !== undefined ? apiData.uptime_24h : (apiData.is_active === 1 ? 100.0 : 0.0);
+                                matched++;
+                            } else {
+                                // Fallback: keep existing data if not in API
+                                station.uptime = station.is_online === 1 ? 100.0 : 0.0;
+                            }
+                        });
+                        
+                        console.log(`✅ Updated ${matched} stations with real-time status`);
+                        renderTable();
+                        updateMapMarkers();
+                        
+                        // Calculate stats from allStations
+                        const active = allStations.filter(s => s.status === 'Active').length;
+                        const inactive = allStations.filter(s => s.status === 'Inactive').length;
+                        const disabled = allStations.filter(s => s.status === 'Disabled').length;
+                        updateStats({
+                            total: allStations.length,
+                            online: active,
+                            offline: inactive + disabled
+                        });
+                        // Refresh category uptime chart now that uptimes were updated
+                        try {
+                            initCategoryUptimeChart();
+                        } catch (e) {
+                            console.warn('Could not refresh category uptime chart:', e.message);
+                        }
+                    }
+                } else {
+                    console.error('❌ Failed to load uptime percentages:', response.statusText);
+                }
+            } catch (error) {
+                console.error('❌ Error loading uptime percentages:', error);
+            }
+        }
+
         // Load data from API
         async function loadData() {
             try {
-                const response = await fetch(`${API_BASE}/stations`);
-                const data = await response.json();
-                
-                allStations = data.stations || [];
-                updateStats(data.stats || {});
-                updateRecentOffline(data.alerts || {});
+                // Fetch stations + 24h uptime from Worker in a single request
+                const resp = await fetch(`${WORKER_API}/api/stations-with-uptime`);
+                if (!resp.ok) throw new Error('Failed to fetch stations from Worker');
+                const payload = await resp.json();
+                if (!payload || !payload.stations) throw new Error('Invalid stations payload');
+
+                allStations = payload.stations.map(s => {
+                    const category = STATION_CATEGORIES[s.station_id] || 'community';
+                    return {
+                        station_id: s.station_id,
+                        station_name: s.station_name || s.location || `Station ${s.station_id}`,
+                        location: s.location || s.station_name || '',
+                        latitude: parseFloat(s.latitude) || 0,
+                        longitude: parseFloat(s.longitude) || 0,
+                        is_online: s.is_active === 1 ? 1 : 0,
+                        status: s.status || (s.is_active === 1 ? 'Active' : 'Inactive'),
+                        temperature: s.temperature !== undefined ? s.temperature : null,
+                        last_seen: s.last_update || null,
+                        category: category,
+                        uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
+                        checks_24h: s.checks_24h || 0,
+                        uptime: s.uptime_24h !== undefined && s.uptime_24h !== null ? s.uptime_24h : (s.is_active === 1 ? 100.0 : 0.0)
+                    };
+                });
+
+                const stats = {
+                    total: allStations.length,
+                    online: allStations.filter(s => s.is_online === 1).length,
+                    offline: allStations.filter(s => s.is_online === 0).length
+                };
+
+                updateStats(stats);
                 updateMapMarkers();
                 renderTable();
                 updateLastUpdate();
+                
+                // Update recent offline stations panel
+                const offlineStations = allStations.filter(s => s.status !== 'Active');
+                updateRecentOffline({ recent: offlineStations.slice(0, 10) });
+                
+                // Initialize category chart
+                initCategoryUptimeChart();
+
+                // Load uptime percentages from Worker
+                await loadUptimePercentages();
+
+                // Rebuild category chart after realtime uptimes applied
+                try { initCategoryUptimeChart(); } catch(e) { console.warn('Could not re-init category chart:', e.message); }
             } catch (error) {
                 console.error('Error loading data:', error);
             }
@@ -1274,8 +2785,14 @@
         
         // Setup event listeners
         function setupEventListeners() {
+            // Theme toggle
+            document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+            
             // Search
             document.getElementById('searchBox').addEventListener('input', renderTable);
+            
+            // Hide WU checkbox
+            document.getElementById('hideWU')?.addEventListener('change', renderTable);
             
             // Filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -1286,17 +2803,59 @@
                     renderTable();
                 });
             });
+            
+            // Category tabs
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentCategory = tab.dataset.category;
+                    renderTable();
+                    updateMapMarkers();
+                    updateCategoryChart();
+                });
+            });
+            
+            // Chart type toggles (Bar / Line)
+            document.getElementById('btnBar')?.addEventListener('click', () => {
+                categoryChartType = 'bar';
+                document.getElementById('btnBar')?.classList.add('active');
+                document.getElementById('btnLine')?.classList.remove('active');
+                if (currentCategory === 'all') initCategoryUptimeChart();
+            });
+            document.getElementById('btnLine')?.addEventListener('click', () => {
+                categoryChartType = 'line';
+                document.getElementById('btnLine')?.classList.add('active');
+                document.getElementById('btnBar')?.classList.remove('active');
+                if (currentCategory === 'all') initCategoryUptimeChart();
+            });
+
+            // Modal interval buttons (24h, 7d, 30d, 1y)
+            document.querySelectorAll('.modal-interval-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.modal-interval-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const days = parseInt(btn.dataset.days) || 0;
+                    const hours = parseInt(btn.dataset.hours) || 0;
+                    modalPeriodDays = days;
+                    modalPeriodHours = hours || (days === 0 ? 24 : 0);
+                    // If modal is open for a station, reload history
+                    if (currentModalStation && currentModalStation.station_id) {
+                        openStationModal(currentModalStation.station_id);
+                    }
+                });
+            });
         }
         
         // Initialize
         async function init() {
+            initTheme();
             initMap();
-            initUptimeChart();
             await loadData();
             setupEventListeners();
             
-            // Auto-refresh every 30 minutes
-            setInterval(loadData, 30 * 60 * 1000);
+            // Auto-refresh every 5 minutes
+            setInterval(loadData, 5 * 60 * 1000);
         }
         
         // Start when page loads

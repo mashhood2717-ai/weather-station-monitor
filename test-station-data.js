@@ -47,6 +47,11 @@ function fetchStations() {
 
 async function main() {
   try {
+    // Safety guard: don't hit WeatherLink when disabled
+    if (process.env.DISABLE_WEATHERLINK_SCRIPTS === '1') {
+      console.log('DISABLED: test scripts disabled via DISABLE_WEATHERLINK_SCRIPTS=1');
+      process.exit(0);
+    }
     const response = await fetchStations();
     
     // Save full response to file

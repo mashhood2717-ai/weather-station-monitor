@@ -172,6 +172,24 @@ WHERE timestamp > datetime('now', '-24 hours')
 GROUP BY station_id;
 
 -- ============================================================
+-- STATION SAMPLES TABLE
+-- Periodic aggregated samples for charting (hourly by default)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS station_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    station_id TEXT NOT NULL,
+    sample_time TEXT NOT NULL, -- UTC timestamp of the sample (e.g. 2025-12-24 14:00:00)
+    uptime_pct REAL,
+    checks INTEGER DEFAULT 0,
+    avg_temp REAL,
+    source TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(station_id, sample_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_station_samples_station_time ON station_samples(station_id, sample_time DESC);
+
+-- ============================================================
 -- TRIGGER FOR UPDATED_AT
 -- ============================================================
 

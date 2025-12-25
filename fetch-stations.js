@@ -1,6 +1,15 @@
 // fetch-stations.js
 // This script fetches your stations from WeatherLink API
 
+// Safety guard: set DISABLE_WEATHERLINK_SCRIPTS=1 to prevent this script
+// from making any external WeatherLink API requests. Useful when the
+// Worker or other systems are the canonical source and you want to
+// avoid duplicate API calls.
+if (process.env.DISABLE_WEATHERLINK_SCRIPTS === '1') {
+  console.log('DISABLED: WeatherLink scripts are disabled via DISABLE_WEATHERLINK_SCRIPTS=1');
+  process.exit(0);
+}
+
 const crypto = require('crypto');
 const https = require('https');
 const fs = require('fs');
