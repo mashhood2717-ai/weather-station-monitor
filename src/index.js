@@ -141,10 +141,10 @@ async function fetchAllStationsFromHubService(env) {
 
     const allStations = [];
     
-    // Fetch all pages from your API
+    // Fetch all pages from your API with all required fields
     for (let page = 1; page <= 6; page++) {
       const response = await fetch(
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={"stationName":1,"stationID":1,"poi":1,"socketLastUpdate":1,"status":1,"latitude":1,"longitude":1}&globalSearch=`,
+        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={"lat":1,"long":1,"temperature":1,"status":1,"apiSource":1,"stationName":1,"stationID":1}&globalSearch=`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -193,16 +193,17 @@ async function syncNewStations(env) {
     
     const existingIds = new Set(existingStations.results.map(s => s.station_id.toString()));
     
-    // Transform HubService stations to our format
+    // Transform HubService stations to our format (using new field names: lat, long, temperature, status, apiSource, stationName, stationID)
     const newStations = apiStations
       .filter(s => !existingIds.has(s.stationID.toString()))
       .map(s => ({
         stationID: s.stationID,
         stationName: s.stationName,
-        poi: s.poi,
         status: s.status,
-        latitude: s.latitude,
-        longitude: s.longitude
+        lat: s.lat,
+        lng: s.long,
+        temperature: s.temperature,
+        apiSource: s.apiSource
       }));
     
     if (newStations.length === 0) {
@@ -221,14 +222,14 @@ async function syncNewStations(env) {
           VALUES (?, ?, ?, ?, ?, ?)
         `).bind(
           station.stationID,
-          station.poi || station.stationName,
-          station.poi || station.stationName,
-          parseFloat(station.latitude) || 0,
-          parseFloat(station.longitude) || 0,
+          station.stationName,
+          station.stationName,
+          parseFloat(station.lat) || 0,
+          parseFloat(station.lng) || 0,
           new Date().toISOString().split('T')[0]
         ).run();
         
-        addedStations.push({ id: station.stationID, name: station.poi || station.stationName });
+        addedStations.push({ id: station.stationID, name: station.stationName });
       } catch (err) {
         console.warn(`Failed to insert station ${station.stationID}:`, err);
       }
@@ -369,7 +370,7 @@ async function syncAllStations(env, corsHeaders = {}) {
       try {
         const stationId = String(station.stationID);
         const isOnline = station.status === 'Active' ? 1 : 0;
-        const stationName = station.poi || station.stationName || 'Unknown';
+        const stationName = station.stationName || 'Unknown';
         
         // Ensure station exists in stations table (upsert)
         await env.DB.prepare(`
@@ -383,14 +384,14 @@ async function syncAllStations(env, corsHeaders = {}) {
           stationId,
           stationName,
           stationName,
-          parseFloat(station.latitude) || 0,
-          parseFloat(station.longitude) || 0
+          parseFloat(station.lat) || 0,
+          parseFloat(station.long) || 0
         ).run();
         
-        // Extract temperature
+        // Use temperature directly from API
         let temperature = null;
-        if (station.socketLastUpdate && station.socketLastUpdate.temp && station.socketLastUpdate.temp !== 'N/A') {
-          temperature = parseFloat(station.socketLastUpdate.temp);
+        if (station.temperature !== undefined && station.temperature !== null && station.temperature !== 'N/A') {
+          temperature = parseFloat(station.temperature);
         }
 
         // Insert status log
@@ -455,10 +456,13 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         const hubStations = await fetchAllStationsFromHubService(env);
         stationMeta = hubStations.map(s => ({
           station_id: s.stationID,
-          station_name: s.poi || s.stationName,
-          location: s.poi || s.stationName,
-          latitude: s.latitude,
-          longitude: s.longitude
+          station_name: s.stationName,
+          location: s.stationName,
+          latitude: s.lat,
+          longitude: s.long,
+          temperature: s.temperature,
+          api_source: s.apiSource,
+          status: s.status
         }));
       } catch (e) {
         console.warn('Failed to fetch HubService stations fallback:', e.message);
@@ -530,15 +534,19 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       const agg = aggMap[id] || { total_checks: 0, online_checks: 0 };
       const latest = latestMap[id] || {};
       const uptime = agg.total_checks > 0 ? (agg.online_checks * 100.0 / agg.total_checks) : null;
+      // Use status from HubService if available, otherwise from latest log
+      const statusFromMeta = s.status;
+      const statusFromLog = latest.is_online === 1 ? 'Active' : (latest.is_online === 0 ? 'Inactive' : null);
       return {
         station_id: s.station_id,
         station_name: s.station_name,
         location: s.location,
         latitude: s.latitude,
         longitude: s.longitude,
-        status: latest.is_online === 1 ? 'Active' : (latest.is_online === 0 ? 'Inactive' : 'Unknown'),
-        is_active: latest.is_online === 1 ? 1 : 0,
-        temperature: latest.temperature !== undefined ? latest.temperature : null,
+        api_source: s.api_source || null,
+        status: statusFromMeta || statusFromLog || 'Unknown',
+        is_active: (statusFromMeta === 'Active' || latest.is_online === 1) ? 1 : 0,
+        temperature: latest.temperature !== undefined ? latest.temperature : (s.temperature || null),
         last_update: latest.last_update || null,
         checks_24h: agg.total_checks || 0,
         uptime_24h: uptime !== null ? Number(parseFloat(uptime).toFixed(2)) : null

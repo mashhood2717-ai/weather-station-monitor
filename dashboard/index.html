@@ -260,6 +260,22 @@
         .theme-toggle:hover .theme-icon {
             transform: rotate(20deg);
         }
+
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: var(--danger);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: var(--danger);
+            color: white;
+        }
         
         .live-indicator {
             display: flex;
@@ -1058,6 +1074,9 @@
                 <div class="last-update">
                     Last updated: <span id="lastUpdate">--:--</span>
                 </div>
+                <button id="logoutBtn" class="logout-btn" title="Logout" onclick="logout()">
+                    🚪 Logout
+                </button>
             </div>
         </header>
 
@@ -1180,11 +1199,11 @@
                         <thead>
                             <tr>
                                 <th onclick="sortTable('name')">Station ↕</th>
-                                <th onclick="sortTable('category')">Category ↕</th>
+                                <th onclick="sortTable('api_source')">Source ↕</th>
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
                                 <th onclick="sortTable('uptime')">Uptime ↕</th>
-                                <th onclick="sortTable('last_seen')">Last Seen ↕</th>
+                                <th>Lat/Lng</th>
                             </tr>
                         </thead>
                         <tbody id="stationsTable">
@@ -1250,11 +1269,11 @@
                     <span><strong>Tracking Since:</strong> <span id="modalTrackingSince">--</span></span>
                 </div>
                 <div class="modal-chart-container">
-                    <h3>Uptime History (Last 24 Hours)</h3>
+                    <h3 id="uptimeChartTitle">Uptime History (Last 24 Hours)</h3>
                     <canvas id="stationUptimeChart"></canvas>
                 </div>
                 <div class="modal-chart-container">
-                    <h3>Temperature History</h3>
+                    <h3 id="tempChartTitle">Temperature History (Last 24 Hours)</h3>
                     <canvas id="stationTempChart"></canvas>
                 </div>
                 <div class="modal-downtime-section" id="modalDowntimeList">
@@ -1586,6 +1605,14 @@
             window.location.href = 'login.html';
         }
         
+        // Logout function
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+        }
+        
         // Theme management
         function initTheme() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -1599,6 +1626,7 @@
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
+            updateMapTiles(); // Update map tiles for new theme
         }
         
         function updateThemeIcon(theme) {
@@ -1614,6 +1642,16 @@
         let map = null;
         let markerClusterGroup = null;
         let markers = [];
+        let tileLayer = null;
+        
+        // Get tile URL based on theme
+        function getTileUrl() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            if (theme === 'light') {
+                return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            }
+            return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        }
         
         // Initialize map
         function initMap() {
@@ -1622,7 +1660,7 @@
                 scrollWheelZoom: true
             }).setView([30.3753, 69.3451], 6);
             
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            tileLayer = L.tileLayer(getTileUrl(), {
                 attribution: '© OpenStreetMap, © CartoDB',
                 maxZoom: 18
             }).addTo(map);
@@ -1633,6 +1671,17 @@
                 showCoverageOnHover: false
             });
             map.addLayer(markerClusterGroup);
+        }
+        
+        // Update map tiles when theme changes
+        function updateMapTiles() {
+            if (tileLayer && map) {
+                map.removeLayer(tileLayer);
+                tileLayer = L.tileLayer(getTileUrl(), {
+                    attribution: '© OpenStreetMap, © CartoDB',
+                    maxZoom: 18
+                }).addTo(map);
+            }
         }
         
         // Category Uptime Chart
@@ -1949,8 +1998,9 @@
                     .bindPopup(`
                         <div class="custom-popup">
                             <div class="popup-title">${station.station_name || 'Unknown'}</div>
-                            <div class="popup-info">📍 ${station.location || 'Unknown'}</div>
-                            <div class="popup-info">🏷️ <span class="category-badge ${category}" style="font-size: 11px;">${catConfig.icon} ${catConfig.name}</span></div>
+                            <div class="popup-info">🆔 ID: ${station.station_id}</div>
+                            <div class="popup-info">📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+                            <div class="popup-info">🔌 Source: ${station.api_source || 'N/A'}</div>
                             <div class="popup-info">🌡️ ${station.temperature ? station.temperature + '°C' : 'N/A'}</div>
                             <div class="popup-uptime ${uptimeClass}">📊 Uptime: ${uptime.toFixed(1)}%</div>
                             <div class="popup-status ${markerClass}">
@@ -2193,9 +2243,6 @@
             const tbody = document.getElementById('stationsTable');
             tbody.innerHTML = stations.map(station => {
                 const statusText = station.status ? station.status.toLowerCase() : 'unknown';
-                const lastSeen = station.status === 'Active' ? 'Active now' : (formatRelativeTime(station.last_seen) || 'Unknown');
-                const category = station.category || 'community';
-                const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
                 
                 // Get uptime - use real 24h uptime if available, otherwise based on current status
                 let uptime = 'N/A';
@@ -2215,11 +2262,15 @@
                 if (uptimeVal >= 90) uptimeClass = 'style="color: var(--success)"';
                 else if (uptimeVal >= 50) uptimeClass = 'style="color: var(--warning)"';
                 else uptimeClass = 'style="color: var(--danger)"';
+
+                // Format lat/lng
+                const lat = station.latitude ? station.latitude.toFixed(4) : 'N/A';
+                const lng = station.longitude ? station.longitude.toFixed(4) : 'N/A';
                 
                 return `
                 <tr onclick="focusStation('${station.station_id}')" data-station-id="${station.station_id}">
-                    <td><strong>${station.station_name || 'Unknown'}</strong></td>
-                    <td><span class="category-badge ${category}">${catConfig.icon} ${catConfig.name}</span></td>
+                    <td><strong>${station.station_name || 'Unknown'}</strong><br><small style="color: var(--text-secondary)">ID: ${station.station_id}</small></td>
+                    <td>${station.api_source || 'N/A'}</td>
                     <td>
                         <span class="status-badge ${statusText}">
                             <span class="status-dot ${statusText}"></span>
@@ -2228,7 +2279,7 @@
                     </td>
                     <td>${station.temperature ? station.temperature + '°C' : 'N/A'}</td>
                     <td><strong ${uptimeClass}>${uptime}%</strong></td>
-                    <td>${lastSeen}</td>
+                    <td><small>${lat}, ${lng}</small></td>
                 </tr>
             `;
             }).join('');
@@ -2289,66 +2340,23 @@
                 tempElement.setAttribute('data-original', station.temperature || ''); // Preserve original
             }
             
-            // Load detailed history from persisted samples (background ingestion)
+            // Load detailed history from station-history API (uses status_logs)
             try {
                 let query = '?hours=24';
                 if (modalPeriodDays && modalPeriodDays > 0) query = `?days=${modalPeriodDays}`;
                 else if (modalPeriodHours && modalPeriodHours !== 24) query = `?hours=${modalPeriodHours}`;
 
-                const response = await fetch(`${WORKER_API}/api/station-samples/${stationId}${query}`);
+                const response = await fetch(`${WORKER_API}/api/station-history/${stationId}${query}`);
                 if (response.ok) {
-                    const payload = await response.json();
-                    // Convert samples response into shape expected by updateModalWithData
-                    // payload.samples: [{ period, uptime, checks, avg_temperature }]
-                    const samples = payload.samples || [];
-
-                    // Build uptime aggregation
-                    let totalChecks = 0;
-                    let weightedOnline = 0; // sum(uptime% * checks)
-                    samples.forEach(s => {
-                        const checks = parseInt(s.checks) || 0;
-                        const uptime = s.uptime !== null && s.uptime !== undefined ? parseFloat(s.uptime) : null;
-                        if (checks > 0 && uptime !== null) {
-                            totalChecks += checks;
-                            weightedOnline += (uptime / 100.0) * checks;
-                        }
-                    });
-
-                    const overallPercentage = totalChecks > 0 ? Number(((weightedOnline / totalChecks) * 100).toFixed(2)) : (station && station.is_online ? 100 : 0);
-
-                    const hourly_data = samples.map(s => ({
-                        period: s.period,
-                        period_label: s.period,
-                        uptime: s.uptime !== null ? Number(s.uptime) : null,
-                        checks: s.checks || 0,
-                        online: s.checks && s.uptime !== null ? Math.round((s.uptime/100.0) * s.checks) : 0,
-                        avg_temperature: s.avg_temperature !== undefined ? s.avg_temperature : null
-                    }));
-
-                    const data = {
-                        success: true,
-                        station: station || { station_id: stationId, station_name: 'Unknown' },
-                        uptime: {
-                            percentage: overallPercentage,
-                            total_checks: totalChecks,
-                            online_checks: Math.round(weightedOnline),
-                            offline_checks: totalChecks - Math.round(weightedOnline),
-                            period_hours: modalPeriodHours || (modalPeriodDays ? modalPeriodDays*24 : 24),
-                            granularity: modalPeriodDays >= 365 ? 'year' : modalPeriodDays >= 30 ? 'month' : modalPeriodDays >= 7 ? 'day' : 'hour'
-                        },
-                        downtime: { total_minutes: 0, total_hours: '0.00', incidents: 0, records: [] },
-                        hourly_data,
-                        tracking_since: station ? station.tracking_since : null,
-                        last_updated: new Date().toISOString()
-                    };
-
+                    const data = await response.json();
+                    // station-history returns data in the exact format updateModalWithData expects
                     updateModalWithData(data);
                 } else {
-                    console.error('Failed to load station samples');
+                    console.error('Failed to load station history');
                     setModalPlaceholders();
                 }
             } catch (error) {
-                console.error('Error loading station samples:', error);
+                console.error('Error loading station history:', error);
                 setModalPlaceholders();
             }
         }
@@ -2370,6 +2378,23 @@
         function updateModalWithData(data) {
             // Check if we have historical data
             const hasHistoricalData = data.uptime.total_checks > 0;
+            
+            // Determine period label for titles
+            let periodLabel = 'Last 24 Hours';
+            if (modalPeriodDays === 7) periodLabel = 'Last 7 Days';
+            else if (modalPeriodDays === 30) periodLabel = 'Last 30 Days';
+            else if (modalPeriodDays === 365) periodLabel = 'Last Year';
+            else if (modalPeriodHours && modalPeriodHours !== 24) periodLabel = `Last ${modalPeriodHours} Hours`;
+            
+            // Update chart titles
+            document.getElementById('uptimeChartTitle').textContent = `Uptime History (${periodLabel})`;
+            document.getElementById('tempChartTitle').textContent = `Temperature History (${periodLabel})`;
+            
+            // Update uptime stat label
+            const uptimeLabelText = modalPeriodDays >= 7 ? `${modalPeriodDays}d Uptime` : `${modalPeriodHours || 24}h Uptime`;
+            const downtimeLabelText = modalPeriodDays >= 7 ? `Downtime (${modalPeriodDays}d)` : `Downtime (${modalPeriodHours || 24}h)`;
+            document.querySelector('#modalUptime').closest('.modal-stat').querySelector('.modal-stat-label').textContent = uptimeLabelText;
+            document.querySelector('#modalDowntime').closest('.modal-stat').querySelector('.modal-stat-label').textContent = downtimeLabelText;
             
             // Update uptime
             const uptimeValue = document.getElementById('modalUptime');
@@ -2410,7 +2435,7 @@
                     </div>
                 `).join('');
             } else {
-                document.getElementById('downtimeRecords').innerHTML = '<div style="text-align: center; padding: 20px;">✅ No downtime recorded in the last 24 hours</div>';
+                document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No downtime recorded (${periodLabel.toLowerCase()})</div>`;
             }
             
             // Create uptime chart
@@ -2611,7 +2636,7 @@
             panel.innerHTML = alertsList.map(alert => `
                 <div class="offline-item" onclick="focusStation('${alert.station_id}')">
                     <div class="offline-name">${alert.station_name || 'Unknown Station'}</div>
-                    <div class="offline-since">Offline since ${formatRelativeTime(alert.went_offline_at || alert.timestamp)}</div>
+                    <div class="offline-since">Status: ${alert.status || 'Inactive'}</div>
                 </div>
             `).join('');
         }
@@ -2744,6 +2769,7 @@
                         location: s.location || s.station_name || '',
                         latitude: parseFloat(s.latitude) || 0,
                         longitude: parseFloat(s.longitude) || 0,
+                        api_source: s.api_source || 'N/A',
                         is_online: s.is_active === 1 ? 1 : 0,
                         status: s.status || (s.is_active === 1 ? 'Active' : 'Inactive'),
                         temperature: s.temperature !== undefined ? s.temperature : null,
