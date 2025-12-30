@@ -2452,22 +2452,37 @@
                 stationUptimeChart.destroy();
             }
             
-            // Format labels - data is in UTC, convert to PKT (+5 hours)
+            // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
-                // Period format is "YYYY-MM-DD HH:MM:SS" in UTC, add 5 hours for PKT
+                // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
+                if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                    // Daily format - show as "Dec 30"
+                    const d = new Date(raw + 'T00:00:00Z');
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+                }
+                if (/^\d{4}-\d{2}$/.test(raw)) {
+                    // Monthly format - show as "Dec 2025"
+                    const [year, month] = raw.split('-');
+                    const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+                    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                }
+                if (/^\d{4}$/.test(raw)) {
+                    // Yearly format
+                    return raw;
+                }
+                // Hourly format - parse time and convert to PKT
                 const match = raw.match(/(\d{2}):(\d{2})/);
                 if (match) {
                     let hour = parseInt(match[1]) + 5; // UTC to PKT
                     if (hour >= 24) hour -= 24;
-                    const min = match[2];
                     const ampm = hour >= 12 ? 'PM' : 'AM';
                     const displayHour = hour % 12 || 12;
-                    return `${displayHour}:${min} ${ampm}`;
+                    return `${displayHour} ${ampm}`;
                 }
                 return raw || '';
             });
-            const uptimeValues = hourlyData.map(h => (h.uptime !== null && h.uptime !== undefined) ? h.uptime : null);
+            const uptimeValues = hourlyData.map(h => (h.uptime !== null && h.uptime !== undefined) ? Number(h.uptime.toFixed(1)) : null);
 
             // If there's no data to plot, show a friendly message on the canvas
             const hasAny = uptimeValues.some(v => v !== null && !isNaN(v));
@@ -2490,11 +2505,14 @@
                         label: 'Uptime %',
                         data: uptimeValues,
                         borderColor: '#10b981',
+                        borderWidth: 2,
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#10b981'
+                        pointRadius: 4,
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#10b981',
+                        spanGaps: true
                     }]
                 },
                 options: {
@@ -2505,7 +2523,10 @@
                             min: 0,
                             max: 100,
                             grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { color: '#94a3b8' }
+                            ticks: { 
+                                color: '#94a3b8',
+                                callback: function(value) { return value + '%'; }
+                            }
                         },
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -2513,7 +2534,14 @@
                         }
                     },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Uptime: ' + context.parsed.y + '%';
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -2526,26 +2554,43 @@
                 stationTempChart.destroy();
             }
             
-            // Format labels - data is in UTC, convert to PKT (+5 hours)
+            // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
-                // Period format is "YYYY-MM-DD HH:MM:SS" in UTC, add 5 hours for PKT
+                // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
+                if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                    // Daily format - show as "Dec 30"
+                    const d = new Date(raw + 'T00:00:00Z');
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+                }
+                if (/^\d{4}-\d{2}$/.test(raw)) {
+                    // Monthly format - show as "Dec 2025"
+                    const [year, month] = raw.split('-');
+                    const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+                    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                }
+                if (/^\d{4}$/.test(raw)) {
+                    // Yearly format
+                    return raw;
+                }
+                // Hourly format - parse time and convert to PKT
                 const match = raw.match(/(\d{2}):(\d{2})/);
                 if (match) {
                     let hour = parseInt(match[1]) + 5; // UTC to PKT
                     if (hour >= 24) hour -= 24;
-                    const min = match[2];
                     const ampm = hour >= 12 ? 'PM' : 'AM';
                     const displayHour = hour % 12 || 12;
-                    return `${displayHour}:${min} ${ampm}`;
+                    return `${displayHour} ${ampm}`;
                 }
                 return raw || '';
             });
             const tempValues = hourlyData.map(h => {
-                if (h.avg_temperature !== undefined && h.avg_temperature !== null) return h.avg_temperature;
-                if (h.avg_temp !== undefined && h.avg_temp !== null) return h.avg_temp;
-                if (h.avgTemp !== undefined && h.avgTemp !== null) return h.avgTemp;
-                return null;
+                let val = null;
+                if (h.avg_temperature !== undefined && h.avg_temperature !== null) val = h.avg_temperature;
+                else if (h.avg_temp !== undefined && h.avg_temp !== null) val = h.avg_temp;
+                else if (h.avgTemp !== undefined && h.avgTemp !== null) val = h.avgTemp;
+                // Format to 1 decimal place
+                return val !== null ? Number(parseFloat(val).toFixed(1)) : null;
             });
 
             // If no temperature samples, show message
@@ -2568,11 +2613,13 @@
                         label: 'Temperature °C',
                         data: tempValues,
                         borderColor: '#f59e0b',
+                        borderWidth: 2,
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 3,
+                        pointRadius: 4,
                         pointBackgroundColor: '#f59e0b',
+                        pointBorderColor: '#f59e0b',
                         spanGaps: true
                     }]
                 },
@@ -2582,7 +2629,10 @@
                     scales: {
                         y: {
                             grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { color: '#94a3b8' }
+                            ticks: { 
+                                color: '#94a3b8',
+                                callback: function(value) { return value.toFixed(1) + '°C'; }
+                            }
                         },
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -2590,7 +2640,14 @@
                         }
                     },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Temp: ' + context.parsed.y.toFixed(1) + '°C';
+                                }
+                            }
+                        }
                     }
                 }
             });
