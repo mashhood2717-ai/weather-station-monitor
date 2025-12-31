@@ -1202,7 +1202,7 @@
                                 <th onclick="sortTable('api_source')">Source ↕</th>
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
-                                <th onclick="sortTable('uptime')">Uptime ↕</th>
+                                <th onclick="sortTable('uptime')">Availability ↕</th>
                                 <th>Lat/Lng</th>
                             </tr>
                         </thead>
@@ -1248,19 +1248,19 @@
             <div class="modal-body">
                 <div class="modal-stats-grid">
                     <div class="modal-stat">
-                        <div class="modal-stat-label">24h Uptime</div>
+                        <div class="modal-stat-label" id="modalAvailLabel">Availability (24h)</div>
                         <div class="modal-stat-value" id="modalUptime">--</div>
                     </div>
                     <div class="modal-stat">
-                        <div class="modal-stat-label">Temperature</div>
+                        <div class="modal-stat-label">Current Temp</div>
                         <div class="modal-stat-value" id="modalTemperature">--</div>
                     </div>
                     <div class="modal-stat">
-                        <div class="modal-stat-label">Downtime (24h)</div>
+                        <div class="modal-stat-label" id="modalDownLabel">Offline Time</div>
                         <div class="modal-stat-value" id="modalDowntime">--</div>
                     </div>
                     <div class="modal-stat">
-                        <div class="modal-stat-label">Incidents</div>
+                        <div class="modal-stat-label">Outages</div>
                         <div class="modal-stat-value" id="modalIncidents">--</div>
                     </div>
                 </div>
@@ -1277,8 +1277,8 @@
                     <canvas id="stationTempChart"></canvas>
                 </div>
                 <div class="modal-downtime-section" id="modalDowntimeList">
-                    <h3>Recent Downtime Incidents</h3>
-                    <div id="downtimeRecords">No downtime records</div>
+                    <h3>Recent Outages</h3>
+                    <div id="downtimeRecords">No outages recorded</div>
                 </div>
             </div>
         </div>
@@ -2244,24 +2244,25 @@
             tbody.innerHTML = stations.map(station => {
                 const statusText = station.status ? station.status.toLowerCase() : 'unknown';
                 
-                // Get uptime - use real 24h uptime if available, otherwise based on current status
-                let uptime = 'N/A';
-                if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
-                    uptime = parseFloat(station.uptime_24h).toFixed(1);
+                // Get availability - use real 24h uptime if available, otherwise based on current status
+                let availability = 'N/A';
+                let hasHistoricalData = false;
+                if (station.uptime_24h !== undefined && station.uptime_24h !== null && station.checks_24h > 0) {
+                    availability = parseFloat(station.uptime_24h).toFixed(1);
+                    hasHistoricalData = true;
                 } else if (station.uptime !== undefined && station.uptime !== null) {
-                    uptime = parseFloat(station.uptime).toFixed(1);
-                } else if (station.status === 'Active') {
-                    uptime = '100.0';
-                } else {
-                    uptime = '0.0';
+                    availability = parseFloat(station.uptime).toFixed(1);
                 }
                 
-                // Color code uptime
-                let uptimeClass = '';
-                const uptimeVal = parseFloat(uptime);
-                if (uptimeVal >= 90) uptimeClass = 'style="color: var(--success)"';
-                else if (uptimeVal >= 50) uptimeClass = 'style="color: var(--warning)"';
-                else uptimeClass = 'style="color: var(--danger)"';
+                // Color code availability
+                let availClass = '';
+                const availVal = parseFloat(availability) || 0;
+                if (availVal >= 90) availClass = 'style="color: var(--success)"';
+                else if (availVal >= 50) availClass = 'style="color: var(--warning)"';
+                else availClass = 'style="color: var(--danger)"';
+                
+                // Show current status clearly if no historical data
+                let availDisplay = hasHistoricalData ? `${availability}%` : (station.status === 'Active' ? '✓ Online' : '✗ Offline');
 
                 // Format lat/lng
                 const lat = station.latitude ? station.latitude.toFixed(4) : 'N/A';
@@ -2278,7 +2279,7 @@
                         </span>
                     </td>
                     <td>${station.temperature ? station.temperature + '°C' : 'N/A'}</td>
-                    <td><strong ${uptimeClass}>${uptime}%</strong></td>
+                    <td><strong ${availClass}>${availDisplay}</strong></td>
                     <td><small>${lat}, ${lng}</small></td>
                 </tr>
             `;
@@ -2387,36 +2388,36 @@
             else if (modalPeriodHours && modalPeriodHours !== 24) periodLabel = `Last ${modalPeriodHours} Hours`;
             
             // Update chart titles
-            document.getElementById('uptimeChartTitle').textContent = `Uptime History (${periodLabel})`;
+            document.getElementById('uptimeChartTitle').textContent = `Availability History (${periodLabel})`;
             document.getElementById('tempChartTitle').textContent = `Temperature History (${periodLabel})`;
             
-            // Update uptime stat label
-            const uptimeLabelText = modalPeriodDays >= 7 ? `${modalPeriodDays}d Uptime` : `${modalPeriodHours || 24}h Uptime`;
-            const downtimeLabelText = modalPeriodDays >= 7 ? `Downtime (${modalPeriodDays}d)` : `Downtime (${modalPeriodHours || 24}h)`;
-            document.querySelector('#modalUptime').closest('.modal-stat').querySelector('.modal-stat-label').textContent = uptimeLabelText;
-            document.querySelector('#modalDowntime').closest('.modal-stat').querySelector('.modal-stat-label').textContent = downtimeLabelText;
+            // Update stat labels for selected period
+            const availLabelText = modalPeriodDays >= 7 ? `Availability (${modalPeriodDays}d)` : `Availability (${modalPeriodHours || 24}h)`;
+            const downLabelText = modalPeriodDays >= 7 ? `Offline Time (${modalPeriodDays}d)` : `Offline Time (${modalPeriodHours || 24}h)`;
+            document.getElementById('modalAvailLabel').textContent = availLabelText;
+            document.getElementById('modalDownLabel').textContent = downLabelText;
             
-            // Update uptime
+            // Update availability
             const uptimeValue = document.getElementById('modalUptime');
             if (hasHistoricalData) {
                 uptimeValue.textContent = `${data.uptime.percentage}%`;
                 uptimeValue.className = 'modal-stat-value ' + (data.uptime.percentage >= 90 ? 'good' : data.uptime.percentage >= 50 ? 'warning' : 'bad');
             } else {
-                // No historical data - show current status from local data
+                // No historical data - show current status clearly
                 const isActive = currentModalStation && currentModalStation.status === 'Active';
-                uptimeValue.textContent = isActive ? '100%' : '0%';
+                uptimeValue.textContent = isActive ? '✓ Online' : '✗ Offline';
                 uptimeValue.className = 'modal-stat-value ' + (isActive ? 'good' : 'bad');
             }
             
             // DON'T update temperature from API response - it returns wrong station
             // Keep the temperature from local station data which was set in openStationModal
             
-            // Update downtime
+            // Update offline time
             const downtimeValue = document.getElementById('modalDowntime');
             downtimeValue.textContent = data.downtime.total_minutes > 0 ? `${data.downtime.total_hours}h` : '0h';
             downtimeValue.className = 'modal-stat-value ' + (data.downtime.total_minutes === 0 ? 'good' : 'bad');
             
-            // Update incidents
+            // Update outages count
             document.getElementById('modalIncidents').textContent = data.downtime.incidents;
             
             // Tracking since
@@ -2426,7 +2427,7 @@
                 document.getElementById('modalTrackingSince').textContent = 'Just started tracking';
             }
             
-            // Downtime records
+            // Outage records
             if (data.downtime.records && data.downtime.records.length > 0) {
                 document.getElementById('downtimeRecords').innerHTML = data.downtime.records.map(d => `
                     <div class="downtime-record">
@@ -2435,7 +2436,7 @@
                     </div>
                 `).join('');
             } else {
-                document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No downtime recorded (${periodLabel.toLowerCase()})</div>`;
+                document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No outages recorded (${periodLabel.toLowerCase()})</div>`;
             }
             
             // Create uptime chart
@@ -2493,7 +2494,7 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.font = '14px Arial';
-                ctx.fillText('No uptime data available for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                ctx.fillText('No availability data for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
                 return;
             }
             
@@ -2502,7 +2503,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Uptime %',
+                        label: 'Availability %',
                         data: uptimeValues,
                         borderColor: '#10b981',
                         borderWidth: 2,
@@ -2538,7 +2539,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return 'Uptime: ' + context.parsed.y + '%';
+                                    return 'Availability: ' + context.parsed.y + '%';
                                 }
                             }
                         }
@@ -2690,12 +2691,20 @@
             
             const alertsList = alerts.recent || alerts;
             
-            panel.innerHTML = alertsList.map(alert => `
+            panel.innerHTML = alertsList.map((alert, index) => {
+                const statusClass = alert.status === 'Inactive' ? 'inactive' : 'disabled';
+                const statusIcon = alert.status === 'Inactive' ? '⚠️' : '🚫';
+                const lastSeen = alert.last_seen ? formatRelativeTime(alert.last_seen) : 'Unknown';
+                return `
                 <div class="offline-item" onclick="focusStation('${alert.station_id}')">
-                    <div class="offline-name">${alert.station_name || 'Unknown Station'}</div>
-                    <div class="offline-since">Status: ${alert.status || 'Inactive'}</div>
+                    <div class="offline-name">${statusIcon} ${alert.station_name || 'Unknown Station'}</div>
+                    <div class="offline-since">
+                        <span class="status-badge ${statusClass}" style="font-size: 10px; padding: 2px 6px;">${alert.status || 'Offline'}</span>
+                        <span style="margin-left: 8px;">Last seen: ${lastSeen}</span>
+                    </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
         
         // Sort table
@@ -2849,9 +2858,16 @@
                 renderTable();
                 updateLastUpdate();
                 
-                // Update recent offline stations panel
-                const offlineStations = allStations.filter(s => s.status !== 'Active');
-                updateRecentOffline({ recent: offlineStations.slice(0, 10) });
+                // Update recent offline stations panel - sort by last_seen (most recent first), show 20
+                const offlineStations = allStations
+                    .filter(s => s.status !== 'Active')
+                    .sort((a, b) => {
+                        // Sort by last_seen descending (most recent first)
+                        const aTime = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+                        const bTime = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+                        return bTime - aTime;
+                    });
+                updateRecentOffline({ recent: offlineStations.slice(0, 20) });
                 
                 // Initialize category chart
                 initCategoryUptimeChart();

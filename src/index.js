@@ -301,6 +301,14 @@ export default {
       } else if (path === '/api/remove-404-stations') {
         // Remove stations that return 404 errors
         return await handleRemove404Stations(env, corsHeaders);
+      } else if (path === '/api/cleanup') {
+        // Manual cleanup - delete logs older than 30 days
+        const days = parseInt(url.searchParams.get('days')) || 30;
+        const deleted = await cleanupOldLogs(env, days);
+        return new Response(JSON.stringify({ success: true, deleted, days_kept: days }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } else if (path === '/api/storage-stats') {
+        // Get storage statistics
+        return await handleStorageStats(env, corsHeaders);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -328,8 +336,88 @@ export default {
     } catch (e) {
       console.warn('Scheduled ingest failed:', e.message);
     }
+    
+    // Keep 1 year of data (365 days) - cleanup runs hourly but only deletes old data
+    try {
+      console.log('Cleaning up old logs (keeping 1 year)...');
+      await cleanupOldLogs(env, 365);
+    } catch (e) {
+      console.warn('Cleanup failed:', e.message);
+    }
   },
 };
+
+// ============================================================
+// CLEANUP OLD LOGS - Keep only N days of data
+// ============================================================
+async function cleanupOldLogs(env, daysToKeep = 30) {
+  try {
+    // Delete status_logs older than N days
+    const logsResult = await env.DB.prepare(`
+      DELETE FROM status_logs 
+      WHERE timestamp < datetime('now', '-${daysToKeep} days')
+    `).run();
+    
+    // Delete station_samples older than N days
+    const samplesResult = await env.DB.prepare(`
+      DELETE FROM station_samples 
+      WHERE sample_time < datetime('now', '-${daysToKeep} days')
+    `).run();
+    
+    // Delete downtime_records older than N days
+    const downtimeResult = await env.DB.prepare(`
+      DELETE FROM downtime_records 
+      WHERE start_time < datetime('now', '-${daysToKeep} days')
+    `).run();
+    
+    const totalDeleted = (logsResult.meta?.changes || 0) + (samplesResult.meta?.changes || 0) + (downtimeResult.meta?.changes || 0);
+    if (totalDeleted > 0) {
+      console.log(`Cleaned up ${totalDeleted} old records (logs: ${logsResult.meta?.changes || 0}, samples: ${samplesResult.meta?.changes || 0}, downtime: ${downtimeResult.meta?.changes || 0})`);
+    }
+    return totalDeleted;
+  } catch (error) {
+    console.error('Error cleaning up old logs:', error);
+    return 0;
+  }
+}
+
+// ============================================================
+// STORAGE STATS - Check database usage
+// ============================================================
+async function handleStorageStats(env, corsHeaders = {}) {
+  try {
+    const logsCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM status_logs`).first();
+    const samplesCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM station_samples`).first();
+    const stationsCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM stations`).first();
+    const downtimeCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM downtime_records`).first();
+    
+    const dateRange = await env.DB.prepare(`
+      SELECT MIN(timestamp) as oldest, MAX(timestamp) as newest FROM status_logs
+    `).first();
+    
+    // Estimate size (rough: ~150 bytes per log row)
+    const estimatedSizeMB = ((logsCount?.count || 0) * 150 + (samplesCount?.count || 0) * 100) / (1024 * 1024);
+    
+    return new Response(JSON.stringify({
+      success: true,
+      counts: {
+        status_logs: logsCount?.count || 0,
+        station_samples: samplesCount?.count || 0,
+        stations: stationsCount?.count || 0,
+        downtime_records: downtimeCount?.count || 0
+      },
+      date_range: {
+        oldest: dateRange?.oldest || null,
+        newest: dateRange?.newest || null
+      },
+      estimated_size_mb: estimatedSizeMB.toFixed(2),
+      free_tier_limit_mb: 5120,
+      usage_percent: ((estimatedSizeMB / 5120) * 100).toFixed(4)
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+}
 
 // ============================================================
 // WEATHERWALAY/HUBSERVICE API ONLY

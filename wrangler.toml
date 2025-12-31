@@ -18,9 +18,9 @@ binding = "DB"
 database_name = "weatherlink-monitor"
 database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"  # From: wrangler d1 create weatherlink-monitor
 
-# Cron Triggers (runs every 1 hour)
+# Cron Triggers (runs every 15 minutes)
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 
 # Environment Variables (non-sensitive)
 [vars]
