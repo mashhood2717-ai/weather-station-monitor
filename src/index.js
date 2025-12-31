@@ -459,21 +459,24 @@ async function syncAllStations(env, corsHeaders = {}) {
         const stationId = String(station.stationID);
         const isOnline = station.status === 'Active' ? 1 : 0;
         const stationName = station.stationName || 'Unknown';
+        const apiSource = station.apiSource || null;
         
-        // Ensure station exists in stations table (upsert)
+        // Ensure station exists in stations table (upsert) - includes api_source
         await env.DB.prepare(`
-          INSERT INTO stations (station_id, station_name, location, latitude, longitude, install_date)
-          VALUES (?, ?, ?, ?, ?, date('now'))
+          INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
+          VALUES (?, ?, ?, ?, ?, ?, date('now'))
           ON CONFLICT(station_id) DO UPDATE SET
             station_name = excluded.station_name,
             latitude = excluded.latitude,
-            longitude = excluded.longitude
+            longitude = excluded.longitude,
+            api_source = excluded.api_source
         `).bind(
           stationId,
           stationName,
           stationName,
           parseFloat(station.lat) || 0,
-          parseFloat(station.long) || 0
+          parseFloat(station.long) || 0,
+          apiSource
         ).run();
         
         // Use temperature directly from API
@@ -559,13 +562,14 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
 
     // If fallback didn't run or failed, read from local `stations` table
     if (stationMeta.length === 0) {
-      const res = await env.DB.prepare(`SELECT station_id, station_name, location, latitude, longitude FROM stations ORDER BY station_name COLLATE NOCASE ASC`).all();
+      const res = await env.DB.prepare(`SELECT station_id, station_name, location, latitude, longitude, api_source FROM stations ORDER BY station_name COLLATE NOCASE ASC`).all();
       stationMeta = (res.results || []).map(r => ({
         station_id: r.station_id,
         station_name: r.station_name,
         location: r.location,
         latitude: r.latitude,
-        longitude: r.longitude
+        longitude: r.longitude,
+        api_source: r.api_source || null
       }));
     }
 
