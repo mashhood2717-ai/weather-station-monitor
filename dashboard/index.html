@@ -1133,14 +1133,17 @@
                 </div>
             </div>
             
-            <!-- Category Uptime Summary -->
+            <!-- Category/Source Uptime Summary -->
             <div class="chart-card">
                 <div class="chart-title">
                     <span class="chart-icon">📊</span>
-                    <span id="categoryChartTitle">Category Uptime Summary</span>
+                    <span id="categoryChartTitle">Category Availability Summary</span>
                 </div>
-                <div class="chart-controls" style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center;">
-                    <div style="font-size:13px; color:var(--text-secondary);">View:</div>
+                <div class="chart-controls" style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <div style="font-size:13px; color:var(--text-secondary);">Group:</div>
+                    <button id="btnCategory" class="chart-toggle active" data-group="category">Category</button>
+                    <button id="btnSource" class="chart-toggle" data-group="source">Source</button>
+                    <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Type:</div>
                     <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
                 </div>
@@ -1179,10 +1182,10 @@
                             <span>📍</span> Reference <span class="cat-count" id="countReference">0</span>
                         </button>
                         <button class="category-tab" data-category="owner">
-                            <span>👤</span> Owner <span class="cat-count" id="countOwner">0</span>
+                            <span>👤</span> WW Installed <span class="cat-count" id="countOwner">0</span>
                         </button>
                         <button class="category-tab" data-category="wu">
-                            <span>🌐</span> WU <span class="cat-count" id="countWU">0</span>
+                            <span>🌐</span> Others <span class="cat-count" id="countWU">0</span>
                         </button>
                     </div>
                     <div class="controls">
@@ -1220,6 +1223,12 @@
                         <span>⚠️</span>
                         Recent Offline Stations
                     </h3>
+                </div>
+                <div class="offline-filters" style="padding: 8px 16px; display: flex; gap: 6px; border-bottom: 1px solid var(--border-color);">
+                    <button class="offline-filter-btn active" data-source="all" onclick="filterOfflineBySource('all')">All</button>
+                    <button class="offline-filter-btn" data-source="Davis" onclick="filterOfflineBySource('Davis')">Davis</button>
+                    <button class="offline-filter-btn" data-source="Misol" onclick="filterOfflineBySource('Misol')">Misol</button>
+                    <button class="offline-filter-btn" data-source="WU" onclick="filterOfflineBySource('WU')">WU</button>
                 </div>
                 <div class="panel-content" id="offlinePanel">
                     <!-- Populated by JS -->
@@ -1384,6 +1393,24 @@
             color: #fff;
             border-color: var(--primary-dark);
         }
+        .offline-filter-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .offline-filter-btn:hover {
+            background: var(--bg-hover);
+        }
+        .offline-filter-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary-dark);
+        }
         
         .modal-body {
             padding: 25px 30px;
@@ -1519,7 +1546,7 @@
             '169682': 'community', '169694': 'community', 'C13': 'community', '165897': 'community',
             '176678': 'community', '176749': 'community', '169767': 'community', 'C14': 'reference',
             '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
-            '163746': 'owner', '192287': 'corporate', '176854': 'corporate', '177200': 'community',
+            '163746': 'community', '192287': 'corporate', '176854': 'corporate', '177200': 'community',
             '169859': 'community', 'IPASRU1': 'wu', '161483': 'community', '207397': 'community',
             'C20': 'community', '163831': 'community', '163843': 'community', '169947': 'community',
             '172461': 'reference', '172475': 'reference', '174619': 'community', '161580': 'community',
@@ -1591,8 +1618,8 @@
         const CATEGORY_CONFIG = {
             'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
             'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
-            'owner': { name: 'Owner', color: '#f59e0b', icon: '👤' },
-            'wu': { name: 'Weather Underground', color: '#ec4899', icon: '🌐' },
+            'owner': { name: 'WW Installed', color: '#f59e0b', icon: '👤' },
+            'wu': { name: 'Others', color: '#ec4899', icon: '🌐' },
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' }
         };
         
@@ -1687,6 +1714,7 @@
         // Category Uptime Chart
         let categoryUptimeChart = null;
             let categoryChartType = 'bar';
+            let chartGroupMode = 'category'; // 'category' or 'source'
         
         function initCategoryUptimeChart() {
             const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
@@ -1697,7 +1725,7 @@
 
             // Calculate uptime for each category - prefer real 24h uptime when available
             const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'Owner', 'WU'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WW Installed', 'Others'];
             const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
@@ -1827,10 +1855,145 @@
             }
         }
 
+        // Source Uptime Chart - groups by API source (Davis, Misol, WU)
+        function initSourceUptimeChart() {
+            const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
+
+            if (categoryUptimeChart) {
+                categoryUptimeChart.destroy();
+            }
+
+            // Calculate uptime for each source type
+            const sources = ['Davis', 'Misol', 'WU'];
+            const sourceNames = ['Davis', 'Misol', 'Weather Underground'];
+            const sourceColors = ['#3b82f6', '#10b981', '#f59e0b'];
+            const uptimeData = [];
+            const activeData = [];
+            const totalData = [];
+
+            sources.forEach(src => {
+                const srcStations = allStations.filter(s => s.api_source === src);
+                const total = srcStations.length;
+                const active = srcStations.filter(s => s.status === 'Active').length;
+
+                const uptimes = srcStations
+                    .filter(s => s.checks_24h && s.checks_24h > 0)
+                    .map(s => {
+                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
+                    })
+                    .filter(v => !isNaN(v));
+
+                let avgUptime = 0;
+                if (uptimes.length > 0) {
+                    const sum = uptimes.reduce((a, b) => a + b, 0);
+                    avgUptime = sum / uptimes.length;
+                }
+
+                uptimeData.push(Number(avgUptime.toFixed(1)));
+                activeData.push(active);
+                totalData.push(total);
+            });
+
+            const chartType = categoryChartType === 'line' ? 'line' : 'bar';
+            const commonDataset = {
+                label: 'Availability %',
+                data: uptimeData
+            };
+
+            if (chartType === 'bar') {
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: sourceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            backgroundColor: sourceColors.map(c => c + '80'),
+                            borderColor: sourceColors,
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            minBarLength: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [
+                                            `Availability: ${context.parsed.y.toFixed(1)}%`,
+                                            `Active: ${activeData[idx]} / ${totalData[idx]}`
+                                        ];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            } else {
+                // line chart
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: sourceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.08)',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: sourceColors,
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [`Availability: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            }
+        }
+
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
             const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'Owner', 'WU'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WW Installed', 'Others'];
             const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
@@ -2675,29 +2838,52 @@
             }
         });
         
-        // Update recent offline panel
-        function updateRecentOffline(alerts) {
+        // Store offline alerts globally for filtering
+        let currentOfflineAlerts = [];
+        let currentOfflineSourceFilter = 'all';
+
+        // Filter offline stations by source type
+        function filterOfflineBySource(source) {
+            currentOfflineSourceFilter = source;
+            // Update button states
+            document.querySelectorAll('.offline-filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.source === source);
+            });
+            // Re-render with filter
+            renderOfflinePanel();
+        }
+
+        // Render offline panel with current filter
+        function renderOfflinePanel() {
             const panel = document.getElementById('offlinePanel');
+            let alertsList = currentOfflineAlerts;
             
-            if (!alerts || !alerts.recent || alerts.recent.length === 0) {
+            // Apply source filter
+            if (currentOfflineSourceFilter !== 'all') {
+                alertsList = alertsList.filter(a => a.api_source === currentOfflineSourceFilter);
+            }
+            
+            if (!alertsList || alertsList.length === 0) {
+                const msg = currentOfflineSourceFilter === 'all' 
+                    ? 'All stations online!' 
+                    : `No ${currentOfflineSourceFilter} stations offline!`;
                 panel.innerHTML = `
                     <div class="no-offline">
                         <div class="no-offline-icon">✓</div>
-                        <div>All stations online!</div>
+                        <div>${msg}</div>
                     </div>
                 `;
                 return;
             }
             
-            const alertsList = alerts.recent || alerts;
-            
             panel.innerHTML = alertsList.map((alert, index) => {
                 const statusClass = alert.status === 'Inactive' ? 'inactive' : 'disabled';
                 const statusIcon = alert.status === 'Inactive' ? '⚠️' : '🚫';
                 const lastSeen = alert.last_seen ? formatRelativeTime(alert.last_seen) : 'Unknown';
+                const sourceTag = alert.api_source ? `<span style="margin-left:6px;font-size:10px;color:var(--text-secondary);">[${alert.api_source}]</span>` : '';
                 return `
                 <div class="offline-item" onclick="focusStation('${alert.station_id}')">
-                    <div class="offline-name">${statusIcon} ${alert.station_name || 'Unknown Station'}</div>
+                    <div class="offline-name">${statusIcon} ${alert.station_name || 'Unknown Station'}${sourceTag}</div>
                     <div class="offline-since">
                         <span class="status-badge ${statusClass}" style="font-size: 10px; padding: 2px 6px;">${alert.status || 'Offline'}</span>
                         <span style="margin-left: 8px;">Last seen: ${lastSeen}</span>
@@ -2705,6 +2891,16 @@
                 </div>
             `;
             }).join('');
+        }
+
+        // Update recent offline panel
+        function updateRecentOffline(alerts) {
+            if (!alerts || !alerts.recent || alerts.recent.length === 0) {
+                currentOfflineAlerts = [];
+            } else {
+                currentOfflineAlerts = alerts.recent || alerts;
+            }
+            renderOfflinePanel();
         }
         
         // Sort table
@@ -2915,18 +3111,40 @@
                 });
             });
             
+            // Chart group toggles (Category / Source)
+            document.getElementById('btnCategory')?.addEventListener('click', () => {
+                chartGroupMode = 'category';
+                document.getElementById('btnCategory')?.classList.add('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('categoryChartTitle').textContent = 'Category Availability Summary';
+                if (currentCategory === 'all') initCategoryUptimeChart();
+            });
+            document.getElementById('btnSource')?.addEventListener('click', () => {
+                chartGroupMode = 'source';
+                document.getElementById('btnSource')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('categoryChartTitle').textContent = 'Source Availability Summary';
+                if (currentCategory === 'all') initSourceUptimeChart();
+            });
+
             // Chart type toggles (Bar / Line)
             document.getElementById('btnBar')?.addEventListener('click', () => {
                 categoryChartType = 'bar';
                 document.getElementById('btnBar')?.classList.add('active');
                 document.getElementById('btnLine')?.classList.remove('active');
-                if (currentCategory === 'all') initCategoryUptimeChart();
+                if (currentCategory === 'all') {
+                    if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else initCategoryUptimeChart();
+                }
             });
             document.getElementById('btnLine')?.addEventListener('click', () => {
                 categoryChartType = 'line';
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
-                if (currentCategory === 'all') initCategoryUptimeChart();
+                if (currentCategory === 'all') {
+                    if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else initCategoryUptimeChart();
+                }
             });
 
             // Modal interval buttons (24h, 7d, 30d, 1y)
