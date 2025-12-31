@@ -2879,14 +2879,15 @@
             panel.innerHTML = alertsList.map((alert, index) => {
                 const statusClass = alert.status === 'Inactive' ? 'inactive' : 'disabled';
                 const statusIcon = alert.status === 'Inactive' ? '⚠️' : '🚫';
-                const lastSeen = alert.last_seen ? formatRelativeTime(alert.last_seen) : 'Unknown';
+                // Use last_seen (when station was last online), not last_update (last check time)
+                const lastSeen = alert.last_seen ? formatRelativeTime(alert.last_seen) : 'Never seen online';
                 const sourceTag = alert.api_source ? `<span style="margin-left:6px;font-size:10px;color:var(--text-secondary);">[${alert.api_source}]</span>` : '';
                 return `
                 <div class="offline-item" onclick="focusStation('${alert.station_id}')">
                     <div class="offline-name">${statusIcon} ${alert.station_name || 'Unknown Station'}${sourceTag}</div>
                     <div class="offline-since">
                         <span class="status-badge ${statusClass}" style="font-size: 10px; padding: 2px 6px;">${alert.status || 'Offline'}</span>
-                        <span style="margin-left: 8px;">Last seen: ${lastSeen}</span>
+                        <span style="margin-left: 8px;">Last online: ${lastSeen}</span>
                     </div>
                 </div>
             `;
@@ -3035,7 +3036,8 @@
                         is_online: s.is_active === 1 ? 1 : 0,
                         status: s.status || (s.is_active === 1 ? 'Active' : 'Inactive'),
                         temperature: s.temperature !== undefined ? s.temperature : null,
-                        last_seen: s.last_update || null,
+                        last_seen: s.last_seen || null,
+                        last_update: s.last_update || null,
                         category: category,
                         uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
                         checks_24h: s.checks_24h || 0,

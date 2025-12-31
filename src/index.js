@@ -577,6 +577,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
     const ids = stationMeta.map(s => s.station_id).filter(Boolean);
     let aggMap = {};
     let latestMap = {};
+    let lastSeenOnlineMap = {};
 
     if (ids.length > 0) {
       // Process IDs in batches to avoid SQLite variable limit
@@ -618,6 +619,22 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         } catch (e) {
           console.warn('Batch latest query failed:', e.message);
         }
+
+        // Last time each station was seen ONLINE (is_online = 1)
+        const lastSeenSQL = `
+          SELECT station_id, MAX(datetime(timestamp, '+5 hours')) as last_seen_online
+          FROM status_logs
+          WHERE station_id IN (${placeholders}) AND is_online = 1
+          GROUP BY station_id
+        `;
+        try {
+          const lastSeenRes = await env.DB.prepare(lastSeenSQL).bind(...batch).all();
+          (lastSeenRes.results || []).forEach(r => {
+            lastSeenOnlineMap[String(r.station_id)] = r.last_seen_online;
+          });
+        } catch (e) {
+          console.warn('Batch last_seen query failed:', e.message);
+        }
       }
     }
 
@@ -629,6 +646,8 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       // Use status from HubService if available, otherwise from latest log
       const statusFromMeta = s.status;
       const statusFromLog = latest.is_online === 1 ? 'Active' : (latest.is_online === 0 ? 'Inactive' : null);
+      // Last seen online - when station was last active
+      const lastSeenOnline = lastSeenOnlineMap[id] || null;
       return {
         station_id: s.station_id,
         station_name: s.station_name,
@@ -640,6 +659,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         is_active: (statusFromMeta === 'Active' || latest.is_online === 1) ? 1 : 0,
         temperature: latest.temperature !== undefined ? latest.temperature : (s.temperature || null),
         last_update: latest.last_update || null,
+        last_seen: lastSeenOnline,
         checks_24h: agg.total_checks || 0,
         uptime_24h: uptime !== null ? Number(parseFloat(uptime).toFixed(2)) : null
       };
