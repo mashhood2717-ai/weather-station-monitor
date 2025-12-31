@@ -1525,12 +1525,13 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       }
     }
 
-    // Get downtime records in the range
+    // Get downtime records - last 30 days or last 10 records (whichever is more useful)
     const downtimeResult = await env.DB.prepare(`
       SELECT start_time, end_time, duration_minutes, status, reason
       FROM downtime_records
-      WHERE station_id = ? AND start_time >= datetime('now', '-${hoursToFetch} hours')
+      WHERE station_id = ? AND start_time >= datetime('now', '-30 days')
       ORDER BY start_time DESC
+      LIMIT 10
     `).bind(stationId).all();
     const downtimes = downtimeResult.results || [];
 
