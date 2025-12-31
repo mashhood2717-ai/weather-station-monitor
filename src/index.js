@@ -141,10 +141,10 @@ async function fetchAllStationsFromHubService(env) {
 
     const allStations = [];
     
-    // Fetch all pages from your API with all required fields
+    // Fetch all pages from your API with all required fields including temp for live readings
     for (let page = 1; page <= 6; page++) {
       const response = await fetch(
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={"lat":1,"long":1,"temperature":1,"status":1,"apiSource":1,"stationName":1,"stationID":1}&globalSearch=`,
+        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={}&globalSearch=`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -157,7 +157,49 @@ async function fetchAllStationsFromHubService(env) {
 
       const data = await response.json();
       if (data.record && Array.isArray(data.record)) {
-        allStations.push(...data.record);
+        // Extract temperature and rainfall from socketLastUpdate
+        const processedRecords = data.record.map(station => {
+          let temperature = null;
+          let rainfall = null;
+          
+          // Get temp from socketLastUpdate (already in Celsius)
+          if (station.socketLastUpdate && station.socketLastUpdate.temp !== undefined && station.socketLastUpdate.temp !== null && station.socketLastUpdate.temp !== 'N/A') {
+            temperature = parseFloat(station.socketLastUpdate.temp);
+            if (isNaN(temperature)) temperature = null;
+          }
+          
+          // Try to get rainfall from socketLastUpdate.servicesResponses if available
+          if (station.socketLastUpdate && station.socketLastUpdate.servicesResponses && Array.isArray(station.socketLastUpdate.servicesResponses) && station.socketLastUpdate.servicesResponses.length > 0) {
+            // Check last entry first (most recent data)
+            for (let i = station.socketLastUpdate.servicesResponses.length - 1; i >= 0 && rainfall === null; i--) {
+              const svcResp = station.socketLastUpdate.servicesResponses[i];
+              
+              // Davis format: response is an array with rainfall_daily_mm
+              if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
+                const reading = svcResp.response[0];
+                if (reading.rainfall_daily_mm !== undefined && reading.rainfall_daily_mm !== null) {
+                  rainfall = reading.rainfall_daily_mm;
+                }
+              }
+              
+              // WU format: response.observations[0].imperial.precipTotal (in inches, convert to mm)
+              if (rainfall === null && svcResp.response && svcResp.response.observations && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
+                const obs = svcResp.response.observations[0];
+                if (obs.imperial && obs.imperial.precipTotal !== undefined && obs.imperial.precipTotal !== null) {
+                  // Convert inches to mm
+                  rainfall = parseFloat((obs.imperial.precipTotal * 25.4).toFixed(1));
+                }
+              }
+            }
+          }
+          
+          return {
+            ...station,
+            temperature,
+            rainfall
+          };
+        });
+        allStations.push(...processedRecords);
       }
     }
 
@@ -193,7 +235,7 @@ async function syncNewStations(env) {
     
     const existingIds = new Set(existingStations.results.map(s => s.station_id.toString()));
     
-    // Transform HubService stations to our format (using new field names: lat, long, temperature, status, apiSource, stationName, stationID)
+    // Transform HubService stations to our format (using new field names: lat, long, temperature, rainfall, status, apiSource, stationName, stationID)
     const newStations = apiStations
       .filter(s => !existingIds.has(s.stationID.toString()))
       .map(s => ({
@@ -203,6 +245,7 @@ async function syncNewStations(env) {
         lat: s.lat,
         lng: s.long,
         temperature: s.temperature,
+        rainfall: s.rainfall,
         apiSource: s.apiSource
       }));
     
@@ -306,6 +349,44 @@ export default {
         const days = parseInt(url.searchParams.get('days')) || 30;
         const deleted = await cleanupOldLogs(env, days);
         return new Response(JSON.stringify({ success: true, deleted, days_kept: days }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } else if (path === '/api/test-hubservice') {
+        // Debug endpoint to test HubService API response
+        const stationName = url.searchParams.get('name') || 'saad';
+        let token = null;
+        if (env.HUBSERVICE_JWT) {
+          token = env.HUBSERVICE_JWT;
+        } else if (env.HUBSERVICE_BASIC_AUTH) {
+          token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
+        }
+        if (!token) {
+          return new Response(JSON.stringify({ error: 'Failed to get token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        // Request all fields including socketData
+        const apiUrl = `https://hubservice.weatherwalay.com/wms/stations?page=1&limit=5&filter={}&search={"stationName":"${stationName}"}&fields={}&globalSearch=`;
+        const resp = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+        const data = await resp.json();
+        return new Response(JSON.stringify(data, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } else if (path === '/api/test-fetch') {
+        // Test the fetchAllStationsFromHubService function
+        try {
+          const stations = await fetchAllStationsFromHubService(env);
+          // Find stations with temperature
+          const withTemp = stations.filter(s => s.temperature !== null && s.temperature !== undefined);
+          const sample = stations.slice(0, 10).map(s => ({
+            stationID: s.stationID,
+            stationName: s.stationName,
+            temp: s.temp,
+            temperature: s.temperature,
+            rainfall: s.rainfall
+          }));
+          return new Response(JSON.stringify({ 
+            total: stations.length, 
+            withTempCount: withTemp.length,
+            sample 
+          }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       } else if (path === '/api/storage-stats') {
         // Get storage statistics
         return await handleStorageStats(env, corsHeaders);
@@ -542,9 +623,20 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
 
     // If the local table is small (e.g. < 100), fall back to HubService to fetch the full list
     let stationMeta = [];
-    if (cnt < 100) {
-      try {
-        const hubStations = await fetchAllStationsFromHubService(env);
+    let hubDataMap = {}; // Store HubService data by station_id for live readings
+    
+    // Always try to fetch from HubService to get live temperature/rainfall
+    try {
+      const hubStations = await fetchAllStationsFromHubService(env);
+      hubStations.forEach(s => {
+        hubDataMap[s.stationID] = {
+          temperature: s.temperature,
+          rainfall: s.rainfall,
+          status: s.status
+        };
+      });
+      
+      if (cnt < 100) {
         stationMeta = hubStations.map(s => ({
           station_id: s.stationID,
           station_name: s.stationName,
@@ -552,25 +644,32 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
           latitude: s.lat,
           longitude: s.long,
           temperature: s.temperature,
+          rainfall: s.rainfall,
           api_source: s.apiSource,
           status: s.status
         }));
-      } catch (e) {
-        console.warn('Failed to fetch HubService stations fallback:', e.message);
       }
+    } catch (e) {
+      console.warn('Failed to fetch HubService stations:', e.message);
     }
 
     // If fallback didn't run or failed, read from local `stations` table
     if (stationMeta.length === 0) {
       const res = await env.DB.prepare(`SELECT station_id, station_name, location, latitude, longitude, api_source FROM stations ORDER BY station_name COLLATE NOCASE ASC`).all();
-      stationMeta = (res.results || []).map(r => ({
-        station_id: r.station_id,
-        station_name: r.station_name,
-        location: r.location,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        api_source: r.api_source || null
-      }));
+      stationMeta = (res.results || []).map(r => {
+        const hubData = hubDataMap[r.station_id] || {};
+        return {
+          station_id: r.station_id,
+          station_name: r.station_name,
+          location: r.location,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          api_source: r.api_source || null,
+          temperature: hubData.temperature !== undefined ? hubData.temperature : null,
+          rainfall: hubData.rainfall !== undefined ? hubData.rainfall : null,
+          status: hubData.status || null
+        };
+      });
     }
 
     // Aggregate checks for the set of station IDs (24h)
@@ -658,6 +757,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         status: statusFromMeta || statusFromLog || 'Unknown',
         is_active: (statusFromMeta === 'Active' || latest.is_online === 1) ? 1 : 0,
         temperature: latest.temperature !== undefined ? latest.temperature : (s.temperature || null),
+        rainfall: s.rainfall || null,
         last_update: latest.last_update || null,
         last_seen: lastSeenOnline,
         checks_24h: agg.total_checks || 0,

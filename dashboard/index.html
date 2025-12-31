@@ -1205,8 +1205,9 @@
                                 <th onclick="sortTable('api_source')">Source ↕</th>
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
+                                <th onclick="sortTable('rainfall')">Rain ↕</th>
                                 <th onclick="sortTable('uptime')">Availability ↕</th>
-                                <th>Lat/Lng</th>
+                                <th onclick="sortTable('location')">POI ↕</th>
                             </tr>
                         </thead>
                         <tbody id="stationsTable">
@@ -2156,15 +2157,19 @@
                     iconSize: [20, 20],
                     iconAnchor: [10, 10]
                 });
+
+                // Temperature and Rainfall display for popup
+                const tempDisplay = station.temperature !== null && station.temperature !== undefined ? station.temperature + '°C' : '-';
+                const rainDisplay = station.rainfall !== null && station.rainfall !== undefined ? station.rainfall + ' mm' : '-';
                 
                 const marker = L.marker([lat, lng], { icon })
                     .bindPopup(`
                         <div class="custom-popup">
                             <div class="popup-title">${station.station_name || 'Unknown'}</div>
                             <div class="popup-info">🆔 ID: ${station.station_id}</div>
-                            <div class="popup-info">📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+                            <div class="popup-info">📍 ${station.location || 'N/A'}</div>
                             <div class="popup-info">🔌 Source: ${station.api_source || 'N/A'}</div>
-                            <div class="popup-info">🌡️ ${station.temperature ? station.temperature + '°C' : 'N/A'}</div>
+                            <div class="popup-info">🌡️ Temp: ${tempDisplay} | 🌧️ Rain: ${rainDisplay}</div>
                             <div class="popup-uptime ${uptimeClass}">📊 Uptime: ${uptime.toFixed(1)}%</div>
                             <div class="popup-status ${markerClass}">
                                 ${station.status === 'Active' ? '● Active' : station.status === 'Inactive' ? '◐ Inactive' : '○ Disabled'}
@@ -2388,6 +2393,9 @@
                 if (sortColumn === 'temperature') {
                     aVal = parseFloat(aVal) || 0;
                     bVal = parseFloat(bVal) || 0;
+                } else if (sortColumn === 'rainfall') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
                 } else if (sortColumn === 'uptime') {
                     aVal = parseFloat(aVal) || 0;
                     bVal = parseFloat(bVal) || 0;
@@ -2427,9 +2435,12 @@
                 // Show current status clearly if no historical data
                 let availDisplay = hasHistoricalData ? `${availability}%` : (station.status === 'Active' ? '✓ Online' : '✗ Offline');
 
-                // Format lat/lng
-                const lat = station.latitude ? station.latitude.toFixed(4) : 'N/A';
-                const lng = station.longitude ? station.longitude.toFixed(4) : 'N/A';
+                // POI/Location
+                const poi = station.location || 'N/A';
+
+                // Temperature and Rainfall display
+                const tempDisplay = station.temperature !== null && station.temperature !== undefined ? station.temperature + '°C' : '-';
+                const rainDisplay = station.rainfall !== null && station.rainfall !== undefined ? station.rainfall + ' mm' : '-';
                 
                 return `
                 <tr onclick="focusStation('${station.station_id}')" data-station-id="${station.station_id}">
@@ -2441,9 +2452,10 @@
                             ${(station.status || 'UNKNOWN').toUpperCase()}
                         </span>
                     </td>
-                    <td>${station.temperature ? station.temperature + '°C' : 'N/A'}</td>
+                    <td>${tempDisplay}</td>
+                    <td>${rainDisplay}</td>
                     <td><strong ${availClass}>${availDisplay}</strong></td>
-                    <td><small>${lat}, ${lng}</small></td>
+                    <td><small>${poi}</small></td>
                 </tr>
             `;
             }).join('');
@@ -3036,6 +3048,7 @@
                         is_online: s.is_active === 1 ? 1 : 0,
                         status: s.status || (s.is_active === 1 ? 'Active' : 'Inactive'),
                         temperature: s.temperature !== undefined ? s.temperature : null,
+                        rainfall: s.rainfall !== undefined ? s.rainfall : null,
                         last_seen: s.last_seen || null,
                         last_update: s.last_update || null,
                         category: category,
