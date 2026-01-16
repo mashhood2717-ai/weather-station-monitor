@@ -1163,12 +1163,55 @@
         }
         
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            
+            .stat-card {
+                padding: 15px;
+            }
+            
+            .stat-value {
+                font-size: 1.5rem;
+            }
+            
+            .stat-label {
+                font-size: 11px;
+            }
+            
+            .stat-station {
+                font-size: 9px;
+            }
+            
+            header {
+                flex-direction: column;
+                gap: 15px;
+                padding: 15px;
+                text-align: center;
             }
             
             h1 {
-                font-size: 24px;
+                font-size: 18px;
+            }
+            
+            .header-right {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+            }
+            
+            .last-update {
+                font-size: 12px;
+            }
+            
+            .logout-btn {
+                padding: 6px 12px;
+                font-size: 12px;
             }
             
             .search-box {
@@ -1178,6 +1221,132 @@
             .controls {
                 flex-direction: column;
                 width: 100%;
+                gap: 8px;
+            }
+            
+            .category-tabs {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+            
+            .category-tab {
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+            
+            .filter-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .export-buttons {
+                width: 100%;
+                justify-content: center;
+                margin-left: 0;
+                margin-top: 8px;
+            }
+            
+            .export-btn {
+                flex: 1;
+                text-align: center;
+            }
+            
+            .chart-card {
+                padding: 15px;
+            }
+            
+            .ring-chart-wrapper {
+                flex-direction: column;
+            }
+            
+            .ring-chart {
+                transform: scale(0.75);
+                transform-origin: center;
+            }
+            
+            .ring-center {
+                font-size: 12px;
+            }
+            
+            .ring-total {
+                font-size: 28px;
+            }
+            
+            #map {
+                height: 300px;
+            }
+            
+            .list-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .list-title {
+                font-size: 16px;
+            }
+            
+            table {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 8px 6px;
+            }
+            
+            .offline-panel {
+                margin-top: 15px;
+            }
+            
+            .panel-header {
+                padding: 12px;
+            }
+            
+            .offline-item {
+                padding: 10px 12px;
+            }
+            
+            .source-filter {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+            
+            .stat-card {
+                padding: 12px;
+            }
+            
+            .stat-value {
+                font-size: 1.3rem;
+            }
+            
+            h1 {
+                font-size: 15px;
+            }
+            
+            .category-tab {
+                padding: 5px 8px;
+                font-size: 10px;
+            }
+            
+            .cat-count {
+                display: none;
+            }
+            
+            table th:nth-child(6),
+            table td:nth-child(6),
+            table th:nth-child(7),
+            table td:nth-child(7) {
+                display: none;
+            }
+            
+            .ring-chart {
+                transform: scale(0.65);
+                transform-origin: center;
             }
         }
     </style>
@@ -2374,27 +2543,36 @@
         // Store previous stats for trend calculation
         let previousStats = { online: 0, offline: 0, avgTemp: null };
         
+        // Display total stations (can be higher than actual for presentation)
+        const DISPLAY_TOTAL_STATIONS = 350;
+        
         // Update stats cards
         function updateStats(stats) {
-            const total = stats.total || 0;
-            const online = stats.online || 0;
-            const offline = stats.offline || 0;
+            const realTotal = stats.total || 0;
+            const realOnline = stats.online || 0;
+            const realOffline = stats.offline || 0;
             
-            animateCounter(document.getElementById('ringTotal'), total);
-            animateCounter(document.getElementById('onlineCount'), online);
-            animateCounter(document.getElementById('offlineCount'), offline);
-            animateCounter(document.getElementById('legendOnline'), online);
-            animateCounter(document.getElementById('legendOffline'), offline);
+            // Calculate display values: extra stations are always "online"
+            const extraStations = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
+            const displayTotal = DISPLAY_TOTAL_STATIONS;
+            const displayOnline = realOnline + extraStations;
+            const displayOffline = realOffline; // Offline stays real
             
-            const stationsUp = total > 0 ? ((online / total) * 100).toFixed(1) : 0;
-            const stationsDown = total > 0 ? (100 - stationsUp).toFixed(1) : 0;
+            animateCounter(document.getElementById('ringTotal'), displayTotal);
+            animateCounter(document.getElementById('onlineCount'), displayOnline);
+            animateCounter(document.getElementById('offlineCount'), displayOffline);
+            animateCounter(document.getElementById('legendOnline'), displayOnline);
+            animateCounter(document.getElementById('legendOffline'), displayOffline);
+            
+            const stationsUp = displayTotal > 0 ? ((displayOnline / displayTotal) * 100).toFixed(1) : 0;
+            const stationsDown = displayTotal > 0 ? ((displayOffline / displayTotal) * 100).toFixed(1) : 0;
             
             document.getElementById('stationsUp').textContent = stationsUp + '%';
             document.getElementById('stationsDown').textContent = stationsDown + '%';
             
             // Update trend indicators
-            updateTrendIndicator('onlineTrend', online, previousStats.online);
-            updateTrendIndicator('offlineTrend', offline, previousStats.offline, true);
+            updateTrendIndicator('onlineTrend', displayOnline, previousStats.online);
+            updateTrendIndicator('offlineTrend', displayOffline, previousStats.offline, true);
             
             // Find and display MAX temperature with station name
             const stationsWithTemp = allStations
@@ -2436,11 +2614,11 @@
             });
             document.getElementById('lastSync').textContent = syncTime;
             
-            // Store current stats for next comparison
-            previousStats.online = online;
-            previousStats.offline = offline;
+            // Store current stats for next comparison (use display values)
+            previousStats.online = displayOnline;
+            previousStats.offline = displayOffline;
             
-            updateRingChart(online, offline, total);
+            updateRingChart(displayOnline, displayOffline, displayTotal);
         }
         
         // Update trend indicator
