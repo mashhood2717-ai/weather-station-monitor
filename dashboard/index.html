@@ -444,8 +444,14 @@
             font-size: 1.4rem;
         }
         
-        .stat-card.data .stat-value {
-            color: #06b6d4;
+        .stat-station {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
         
         /* Charts Container */
@@ -1232,24 +1238,20 @@
             </div>
             
             <div class="stat-card temp">
-                <div class="stat-label">🌡️ Avg Temp</div>
-                <div class="stat-value" id="avgTemp">--°C</div>
-                <div class="stat-trend" id="tempTrend"></div>
+                <div class="stat-label">🌡️ Max Temp</div>
+                <div class="stat-value" id="maxTemp">--°C</div>
+                <div class="stat-station" id="maxTempStation">--</div>
             </div>
             
             <div class="stat-card rain">
-                <div class="stat-label">🌧️ Total Rain (24h)</div>
-                <div class="stat-value" id="totalRain">-- mm</div>
+                <div class="stat-label">🌧️ Max Rainfall</div>
+                <div class="stat-value" id="maxRain">-- mm</div>
+                <div class="stat-station" id="maxRainStation">--</div>
             </div>
             
             <div class="stat-card sync">
                 <div class="stat-label">🔄 Last Sync</div>
                 <div class="stat-value" id="lastSync">--</div>
-            </div>
-            
-            <div class="stat-card data">
-                <div class="stat-label">📊 Active Sensors</div>
-                <div class="stat-value" id="activeSensors">--</div>
             </div>
         </div>
 
@@ -2394,29 +2396,35 @@
             updateTrendIndicator('onlineTrend', online, previousStats.online);
             updateTrendIndicator('offlineTrend', offline, previousStats.offline, true);
             
-            // Calculate and display average temperature
-            const temps = allStations
+            // Find and display MAX temperature with station name
+            const stationsWithTemp = allStations
                 .filter(s => s.status === 'Active' && s.temperature !== null && s.temperature !== undefined)
-                .map(s => parseFloat(s.temperature))
-                .filter(t => !isNaN(t));
+                .map(s => ({ name: s.station_name || s.location || 'Unknown', temp: parseFloat(s.temperature) }))
+                .filter(s => !isNaN(s.temp));
             
-            if (temps.length > 0) {
-                const avgTemp = (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1);
-                document.getElementById('avgTemp').textContent = avgTemp + '°C';
-                updateTrendIndicator('tempTrend', parseFloat(avgTemp), previousStats.avgTemp);
-                previousStats.avgTemp = parseFloat(avgTemp);
+            if (stationsWithTemp.length > 0) {
+                const maxTempStation = stationsWithTemp.reduce((max, s) => s.temp > max.temp ? s : max, stationsWithTemp[0]);
+                document.getElementById('maxTemp').textContent = maxTempStation.temp.toFixed(1) + '°C';
+                document.getElementById('maxTempStation').textContent = maxTempStation.name;
             } else {
-                document.getElementById('avgTemp').textContent = '--°C';
+                document.getElementById('maxTemp').textContent = '--°C';
+                document.getElementById('maxTempStation').textContent = '--';
             }
             
-            // Calculate and display total rainfall
-            const rainfall = allStations
+            // Find and display MAX rainfall with station name
+            const stationsWithRain = allStations
                 .filter(s => s.rainfall !== null && s.rainfall !== undefined)
-                .map(s => parseFloat(s.rainfall))
-                .filter(r => !isNaN(r));
+                .map(s => ({ name: s.station_name || s.location || 'Unknown', rain: parseFloat(s.rainfall) }))
+                .filter(s => !isNaN(s.rain) && s.rain > 0);
             
-            const totalRain = rainfall.length > 0 ? rainfall.reduce((a, b) => a + b, 0).toFixed(1) : '--';
-            document.getElementById('totalRain').textContent = totalRain + ' mm';
+            if (stationsWithRain.length > 0) {
+                const maxRainStation = stationsWithRain.reduce((max, s) => s.rain > max.rain ? s : max, stationsWithRain[0]);
+                document.getElementById('maxRain').textContent = maxRainStation.rain.toFixed(1) + ' mm';
+                document.getElementById('maxRainStation').textContent = maxRainStation.name;
+            } else {
+                document.getElementById('maxRain').textContent = '0 mm';
+                document.getElementById('maxRainStation').textContent = 'No rainfall';
+            }
             
             // Update last sync time
             const now = new Date();
@@ -2427,14 +2435,6 @@
                 hour12: true
             });
             document.getElementById('lastSync').textContent = syncTime;
-            
-            // Count active sensors (stations with valid temp readings)
-            const activeSensors = allStations.filter(s => 
-                s.status === 'Active' && 
-                s.temperature !== null && 
-                s.temperature !== undefined
-            ).length;
-            document.getElementById('activeSensors').textContent = activeSensors + '/' + total;
             
             // Store current stats for next comparison
             previousStats.online = online;

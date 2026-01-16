@@ -406,9 +406,6 @@ export default {
       } else if (path === '/api/daily-report/excel') {
         // Download daily report as Excel/CSV
         return await handleDailyReportExcel(env, corsHeaders);
-      } else if (path === '/api/send-daily-report') {
-        // Manually trigger email report
-        return await handleSendDailyReport(env, corsHeaders);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -622,19 +619,33 @@ async function generateDailyReportData(env) {
     };
   });
   
-  // Average temperature
-  const temps = stations
+  // Find MAX temperature with station name
+  const stationsWithTemp = stations
     .filter(s => s.status === 'Active' && s.temperature !== null)
-    .map(s => parseFloat(s.temperature))
-    .filter(t => !isNaN(t));
-  const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : null;
+    .map(s => ({ name: s.station_name, temp: parseFloat(s.temperature) }))
+    .filter(s => !isNaN(s.temp));
   
-  // Total rainfall
-  const rainfalls = stations
+  let maxTemp = null;
+  let maxTempStation = null;
+  if (stationsWithTemp.length > 0) {
+    const maxTempObj = stationsWithTemp.reduce((max, s) => s.temp > max.temp ? s : max, stationsWithTemp[0]);
+    maxTemp = maxTempObj.temp.toFixed(1);
+    maxTempStation = maxTempObj.name;
+  }
+  
+  // Find MAX rainfall with station name
+  const stationsWithRain = stations
     .filter(s => s.rainfall !== null)
-    .map(s => parseFloat(s.rainfall))
-    .filter(r => !isNaN(r));
-  const totalRain = rainfalls.length > 0 ? rainfalls.reduce((a, b) => a + b, 0).toFixed(1) : '0.0';
+    .map(s => ({ name: s.station_name, rain: parseFloat(s.rainfall) }))
+    .filter(s => !isNaN(s.rain) && s.rain > 0);
+  
+  let maxRainfall = '0.0';
+  let maxRainfallStation = 'No rainfall';
+  if (stationsWithRain.length > 0) {
+    const maxRainObj = stationsWithRain.reduce((max, s) => s.rain > max.rain ? s : max, stationsWithRain[0]);
+    maxRainfall = maxRainObj.rain.toFixed(1);
+    maxRainfallStation = maxRainObj.name;
+  }
   
   // Offline stations list
   const offlineStations = stations
@@ -665,8 +676,10 @@ async function generateDailyReportData(env) {
       online: online,
       offline: offline,
       uptime_percentage: total > 0 ? ((online / total) * 100).toFixed(1) : '0.0',
-      avg_temperature: avgTemp,
-      total_rainfall_24h: totalRain
+      max_temperature: maxTemp,
+      max_temp_station: maxTempStation,
+      max_rainfall: maxRainfall,
+      max_rainfall_station: maxRainfallStation
     },
     category_breakdown: categoryStats,
     source_breakdown: sourceStats,
@@ -718,8 +731,8 @@ async function handleDailyReportExcel(env, corsHeaders) {
       [`Online: ${report.summary.online}`],
       [`Offline: ${report.summary.offline}`],
       [`Uptime: ${report.summary.uptime_percentage}%`],
-      [`Avg Temperature: ${report.summary.avg_temperature || 'N/A'}°C`],
-      [`Total Rainfall (24h): ${report.summary.total_rainfall_24h} mm`],
+      [`Max Temperature: ${report.summary.max_temperature || 'N/A'}°C at ${report.summary.max_temp_station || 'N/A'}`],
+      [`Max Rainfall: ${report.summary.max_rainfall} mm at ${report.summary.max_rainfall_station}`],
       [''],
       ['CATEGORY BREAKDOWN'],
       ['Category', 'Online', 'Offline', 'Total', 'Uptime %'],
@@ -830,12 +843,14 @@ async function sendDailyEmailReport(env) {
       <div class="value">${report.summary.uptime_percentage}%</div>
     </div>
     <div class="stat-box">
-      <h3>Avg Temp</h3>
-      <div class="value">${report.summary.avg_temperature || 'N/A'}°C</div>
+      <h3>Max Temp</h3>
+      <div class="value">${report.summary.max_temperature || 'N/A'}°C</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${report.summary.max_temp_station || ''}</div>
     </div>
     <div class="stat-box">
-      <h3>Rain (24h)</h3>
-      <div class="value">${report.summary.total_rainfall_24h}mm</div>
+      <h3>Max Rain</h3>
+      <div class="value">${report.summary.max_rainfall}mm</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${report.summary.max_rainfall_station}</div>
     </div>
   </div>
   
