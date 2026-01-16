@@ -9,7 +9,7 @@
 const tokenCache = new Map();
 
 // Get JWT token from HubService using Basic auth
-async function getHubServiceToken(basicAuthCredentials) {
+async function getHubServiceToken(userCredentials) {
   try {
     // Check if we have a valid cached token
     const cached = tokenCache.get('hubservice_jwt');
@@ -18,14 +18,22 @@ async function getHubServiceToken(basicAuthCredentials) {
       return cached.token;
     }
 
+    // Parse user credentials (format: "phone:password")
+    const [loginParam, password] = userCredentials.split(':');
+    
+    // Generate dynamic Basic Auth (as per HubService web app pattern)
+    const dynamicUsername = `we@therwalay-${Date.now()}`;
+    const dynamicPassword = 'we@therwalay_dev#7780';
+    const basicAuth = btoa(`${dynamicUsername}:${dynamicPassword}`);
+
     console.log('🔐 Requesting new JWT token from HubService...');
     const response = await fetch('https://hubservice.weatherwalay.com/ww-Hub/login', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${basicAuthCredentials}`,
+        'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({ loginParam, password })
     });
 
     if (!response.ok) {
@@ -120,19 +128,20 @@ async function fetchAllStationsFromHubService(env) {
   try {
     let token = null;
     
-    // First, try to use cached token
+    // First, try to use cached token (if not expired)
     const cached = tokenCache.get('hubservice_jwt');
     if (cached && cached.expiresAt > Date.now()) {
       token = cached.token;
       console.log('🔑 Using cached JWT token');
+    } else if (env.HUBSERVICE_BASIC_AUTH) {
+      // Prefer basic auth - it auto-refreshes tokens
+      console.log('🔐 Refreshing JWT token via Basic Auth...');
+      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
     } else if (env.HUBSERVICE_JWT) {
-      // Try to use provided JWT token
-      console.log('Using provided JWT token');
+      // Fall back to static JWT token (won't auto-refresh!)
+      console.log('⚠️ Using static JWT token (may be expired)');
       useProvidedJWTToken(env.HUBSERVICE_JWT);
       token = env.HUBSERVICE_JWT;
-    } else if (env.HUBSERVICE_BASIC_AUTH) {
-      // Fall back to login with basic auth
-      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
     }
     
     if (!token) {
@@ -353,10 +362,11 @@ export default {
         // Debug endpoint to test HubService API response
         const stationName = url.searchParams.get('name') || 'saad';
         let token = null;
-        if (env.HUBSERVICE_JWT) {
-          token = env.HUBSERVICE_JWT;
-        } else if (env.HUBSERVICE_BASIC_AUTH) {
+        if (env.HUBSERVICE_BASIC_AUTH) {
+          // Prefer basic auth - it auto-refreshes tokens
           token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
+        } else if (env.HUBSERVICE_JWT) {
+          token = env.HUBSERVICE_JWT;
         }
         if (!token) {
           return new Response(JSON.stringify({ error: 'Failed to get token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -418,10 +428,10 @@ export default {
       console.warn('Scheduled ingest failed:', e.message);
     }
     
-    // Keep 1 year of data (365 days) - cleanup runs hourly but only deletes old data
+    // Keep 15 months of data (456 days) - cleanup runs with each cron
     try {
-      console.log('Cleaning up old logs (keeping 1 year)...');
-      await cleanupOldLogs(env, 365);
+      console.log('Cleaning up old logs (keeping 15 months)...');
+      await cleanupOldLogs(env, 456);
     } catch (e) {
       console.warn('Cleanup failed:', e.message);
     }
@@ -780,17 +790,17 @@ async function syncSingleStation(env, stationId) {
   try {
     let token = null;
     
-    // First, try to use cached token
+    // First, try to use cached token (if not expired)
     const cached = tokenCache.get('hubservice_jwt');
     if (cached && cached.expiresAt > Date.now()) {
       token = cached.token;
+    } else if (env.HUBSERVICE_BASIC_AUTH) {
+      // Prefer basic auth - it auto-refreshes tokens
+      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
     } else if (env.HUBSERVICE_JWT) {
-      // Try to use provided JWT token
+      // Fall back to static JWT token (won't auto-refresh!)
       useProvidedJWTToken(env.HUBSERVICE_JWT);
       token = env.HUBSERVICE_JWT;
-    } else if (env.HUBSERVICE_BASIC_AUTH) {
-      // Fall back to login with basic auth
-      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
     }
     
     if (!token) {
@@ -1185,19 +1195,20 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
     try {
       let token = null;
       
-      // First, try to use cached token
+      // First, try to use cached token (if not expired)
       const cached = tokenCache.get('hubservice_jwt');
       if (cached && cached.expiresAt > Date.now()) {
         token = cached.token;
         console.log('🔑 Using cached JWT token');
+      } else if (env.HUBSERVICE_BASIC_AUTH) {
+        // Prefer basic auth - it auto-refreshes tokens
+        console.log('🔐 Refreshing JWT token via Basic Auth...');
+        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
       } else if (env.HUBSERVICE_JWT) {
-        // Try to use provided JWT token
-        console.log('Using provided JWT token');
+        // Fall back to static JWT token (won't auto-refresh!)
+        console.log('⚠️ Using static JWT token (may be expired)');
         useProvidedJWTToken(env.HUBSERVICE_JWT);
         token = env.HUBSERVICE_JWT;
-      } else if (env.HUBSERVICE_BASIC_AUTH) {
-        // Fall back to login with basic auth
-        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
       }
       
       if (!token) {
@@ -1341,11 +1352,13 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       const cached = tokenCache.get('hubservice_jwt');
       if (cached && cached.expiresAt > Date.now()) {
         token = cached.token;
+      } else if (env.HUBSERVICE_BASIC_AUTH) {
+        // Prefer basic auth - it auto-refreshes tokens
+        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
       } else if (env.HUBSERVICE_JWT) {
+        // Fall back to static JWT token (won't auto-refresh!)
         useProvidedJWTToken(env.HUBSERVICE_JWT);
         token = env.HUBSERVICE_JWT;
-      } else if (env.HUBSERVICE_BASIC_AUTH) {
-        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
       }
 
       if (token) {
