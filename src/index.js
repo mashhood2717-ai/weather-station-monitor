@@ -400,6 +400,15 @@ export default {
       } else if (path === '/api/storage-stats') {
         // Get storage statistics
         return await handleStorageStats(env, corsHeaders);
+      } else if (path === '/api/daily-report') {
+        // Generate daily report JSON
+        return await handleDailyReportRequest(env, corsHeaders);
+      } else if (path === '/api/daily-report/excel') {
+        // Download daily report as Excel/CSV
+        return await handleDailyReportExcel(env, corsHeaders);
+      } else if (path === '/api/send-daily-report') {
+        // Manually trigger email report
+        return await handleSendDailyReport(env, corsHeaders);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -412,10 +421,23 @@ export default {
     }
   },
 
-  // Cron trigger - runs every 1 hour
+  // Cron trigger - runs every 15 minutes + daily report at 8 AM PKT
   async scheduled(event, env, ctx) {
     const now = new Date();
     console.log('Cron triggered:', now.toISOString());
+    
+    // Check if it's time for daily report (8 AM PKT = 3:00 UTC)
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    if (utcHour === 3 && utcMinute < 15) {
+      console.log('Sending daily email report...');
+      try {
+        await sendDailyEmailReport(env);
+        console.log('Daily email report sent successfully');
+      } catch (e) {
+        console.error('Failed to send daily email report:', e.message);
+      }
+    }
     
     // Sync stations
     await syncAllStations(env);
@@ -508,6 +530,407 @@ async function handleStorageStats(env, corsHeaders = {}) {
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
+}
+
+// ============================================================
+// DAILY REPORT - Generate comprehensive station report
+// ============================================================
+
+// Station category mapping (same as dashboard)
+const STATION_CATEGORIES = {
+  'KCAISLA5': 'corporate', 'IPNIAR1': 'corporate', 'I40aboroad': 'corporate',
+  'KMISOL72': 'corporate', 'KWWISLA2': 'owner', 'KLHRPAK12': 'owner',
+  'KPMD1': 'reference', 'KPMD2': 'reference', 'KPMD4': 'reference'
+  // Add more mappings as needed
+};
+
+async function generateDailyReportData(env) {
+  // Fetch all stations with current status
+  const hubStations = await fetchAllStationsFromHubService(env);
+  
+  // Get 24h uptime data from database
+  const uptimeQuery = await env.DB.prepare(`
+    SELECT 
+      station_id,
+      COUNT(*) as total_checks,
+      SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
+      AVG(temperature) as avg_temp
+    FROM status_logs 
+    WHERE timestamp > datetime('now', '-24 hours')
+    GROUP BY station_id
+  `).all();
+  
+  const uptimeMap = {};
+  (uptimeQuery.results || []).forEach(row => {
+    uptimeMap[row.station_id] = {
+      uptime: row.total_checks > 0 ? ((row.online_checks / row.total_checks) * 100) : 0,
+      checks: row.total_checks,
+      avgTemp: row.avg_temp
+    };
+  });
+  
+  // Process stations
+  const stations = hubStations.map(s => {
+    const upData = uptimeMap[s.stationID] || { uptime: 0, checks: 0, avgTemp: null };
+    const category = STATION_CATEGORIES[s.stationID] || 'community';
+    return {
+      station_id: s.stationID,
+      station_name: s.stationName,
+      status: s.status,
+      category: category,
+      api_source: s.apiSource || 'N/A',
+      temperature: s.temperature,
+      rainfall: s.rainfall,
+      latitude: s.lat,
+      longitude: s.long,
+      uptime_24h: upData.uptime.toFixed(1),
+      checks_24h: upData.checks,
+      last_seen: s.lastUpdated || null
+    };
+  });
+  
+  // Calculate summary stats
+  const online = stations.filter(s => s.status === 'Active').length;
+  const offline = stations.filter(s => s.status !== 'Active').length;
+  const total = stations.length;
+  
+  // Category breakdown
+  const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
+  const categoryStats = {};
+  categories.forEach(cat => {
+    const catStations = stations.filter(s => s.category === cat);
+    const catOnline = catStations.filter(s => s.status === 'Active').length;
+    categoryStats[cat] = {
+      total: catStations.length,
+      online: catOnline,
+      offline: catStations.length - catOnline,
+      uptime_pct: catStations.length > 0 ? ((catOnline / catStations.length) * 100).toFixed(1) : '0.0'
+    };
+  });
+  
+  // Source breakdown
+  const sources = ['Davis', 'Misol', 'WU'];
+  const sourceStats = {};
+  sources.forEach(src => {
+    const srcStations = stations.filter(s => s.api_source === src);
+    const srcOnline = srcStations.filter(s => s.status === 'Active').length;
+    sourceStats[src] = {
+      total: srcStations.length,
+      online: srcOnline,
+      offline: srcStations.length - srcOnline,
+      uptime_pct: srcStations.length > 0 ? ((srcOnline / srcStations.length) * 100).toFixed(1) : '0.0'
+    };
+  });
+  
+  // Average temperature
+  const temps = stations
+    .filter(s => s.status === 'Active' && s.temperature !== null)
+    .map(s => parseFloat(s.temperature))
+    .filter(t => !isNaN(t));
+  const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : null;
+  
+  // Total rainfall
+  const rainfalls = stations
+    .filter(s => s.rainfall !== null)
+    .map(s => parseFloat(s.rainfall))
+    .filter(r => !isNaN(r));
+  const totalRain = rainfalls.length > 0 ? rainfalls.reduce((a, b) => a + b, 0).toFixed(1) : '0.0';
+  
+  // Offline stations list
+  const offlineStations = stations
+    .filter(s => s.status !== 'Active')
+    .map(s => ({
+      station_id: s.station_id,
+      station_name: s.station_name,
+      api_source: s.api_source,
+      category: s.category,
+      last_seen: s.last_seen
+    }));
+  
+  const now = new Date();
+  const reportDate = now.toLocaleString('en-US', {
+    timeZone: 'Asia/Karachi',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  
+  return {
+    report_date: reportDate,
+    generated_at: now.toISOString(),
+    summary: {
+      total_stations: total,
+      online: online,
+      offline: offline,
+      uptime_percentage: total > 0 ? ((online / total) * 100).toFixed(1) : '0.0',
+      avg_temperature: avgTemp,
+      total_rainfall_24h: totalRain
+    },
+    category_breakdown: categoryStats,
+    source_breakdown: sourceStats,
+    offline_stations: offlineStations,
+    all_stations: stations
+  };
+}
+
+async function handleDailyReportRequest(env, corsHeaders) {
+  try {
+    const report = await generateDailyReportData(env);
+    return new Response(JSON.stringify(report, null, 2), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleDailyReportExcel(env, corsHeaders) {
+  try {
+    const report = await generateDailyReportData(env);
+    
+    // Generate CSV content (Excel compatible)
+    const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Uptime 24h (%)', 'Last Seen'];
+    
+    const rows = report.all_stations.map(s => [
+      s.station_id,
+      `"${(s.station_name || '').replace(/"/g, '""')}"`,
+      s.api_source,
+      s.status,
+      s.category,
+      s.temperature !== null ? s.temperature : '',
+      s.rainfall !== null ? s.rainfall : '',
+      s.uptime_24h,
+      s.last_seen || ''
+    ]);
+    
+    // Add summary section at top
+    const summary = [
+      ['WEATHER STATION DAILY REPORT'],
+      [`Generated: ${report.report_date}`],
+      [''],
+      ['SUMMARY'],
+      [`Total Stations: ${report.summary.total_stations}`],
+      [`Online: ${report.summary.online}`],
+      [`Offline: ${report.summary.offline}`],
+      [`Uptime: ${report.summary.uptime_percentage}%`],
+      [`Avg Temperature: ${report.summary.avg_temperature || 'N/A'}°C`],
+      [`Total Rainfall (24h): ${report.summary.total_rainfall_24h} mm`],
+      [''],
+      ['CATEGORY BREAKDOWN'],
+      ['Category', 'Online', 'Offline', 'Total', 'Uptime %'],
+      ...Object.entries(report.category_breakdown).map(([cat, stats]) => 
+        [cat.charAt(0).toUpperCase() + cat.slice(1), stats.online, stats.offline, stats.total, stats.uptime_pct + '%']
+      ),
+      [''],
+      ['SOURCE BREAKDOWN'],
+      ['Source', 'Online', 'Offline', 'Total', 'Uptime %'],
+      ...Object.entries(report.source_breakdown).map(([src, stats]) => 
+        [src, stats.online, stats.offline, stats.total, stats.uptime_pct + '%']
+      ),
+      [''],
+      ['STATION DETAILS'],
+      headers,
+      ...rows
+    ];
+    
+    const csvContent = summary.map(row => row.join(',')).join('\n');
+    
+    const now = new Date();
+    const filename = `weather_report_${now.toISOString().split('T')[0]}.csv`;
+    
+    return new Response(csvContent, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleSendDailyReport(env, corsHeaders) {
+  try {
+    const result = await sendDailyEmailReport(env);
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function sendDailyEmailReport(env) {
+  // Check if Resend API key is configured
+  if (!env.RESEND_API_KEY) {
+    console.log('RESEND_API_KEY not configured, skipping email');
+    return { success: false, error: 'Email not configured' };
+  }
+  
+  // Get email recipients from env (comma-separated)
+  const recipients = (env.REPORT_EMAILS || '').split(',').map(e => e.trim()).filter(e => e);
+  if (recipients.length === 0) {
+    console.log('No REPORT_EMAILS configured');
+    return { success: false, error: 'No recipients configured' };
+  }
+  
+  // Generate report data
+  const report = await generateDailyReportData(env);
+  
+  // Build HTML email
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; color: #1e293b; max-width: 700px; margin: 0 auto; }
+    h1 { color: #0284c7; border-bottom: 2px solid #0284c7; padding-bottom: 10px; }
+    .summary { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
+    .stat-box { background: #f1f5f9; padding: 15px 20px; border-radius: 8px; text-align: center; min-width: 120px; }
+    .stat-box h3 { margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; }
+    .stat-box .value { font-size: 28px; font-weight: bold; margin: 8px 0 0; }
+    .online { color: #10b981; }
+    .offline { color: #ef4444; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .footer { margin-top: 30px; color: #64748b; font-size: 12px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+    .alert { background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 15px; margin: 15px 0; }
+    .alert h3 { color: #ef4444; margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <h1>🌤️ Weather Station Daily Report</h1>
+  <p><strong>Generated:</strong> ${report.report_date} PKT</p>
+  
+  <div class="summary">
+    <div class="stat-box">
+      <h3>Online</h3>
+      <div class="value online">${report.summary.online}</div>
+    </div>
+    <div class="stat-box">
+      <h3>Offline</h3>
+      <div class="value offline">${report.summary.offline}</div>
+    </div>
+    <div class="stat-box">
+      <h3>Uptime</h3>
+      <div class="value">${report.summary.uptime_percentage}%</div>
+    </div>
+    <div class="stat-box">
+      <h3>Avg Temp</h3>
+      <div class="value">${report.summary.avg_temperature || 'N/A'}°C</div>
+    </div>
+    <div class="stat-box">
+      <h3>Rain (24h)</h3>
+      <div class="value">${report.summary.total_rainfall_24h}mm</div>
+    </div>
+  </div>
+  
+  <h2>📊 Category Breakdown</h2>
+  <table>
+    <thead>
+      <tr><th>Category</th><th>Online</th><th>Offline</th><th>Total</th><th>Uptime</th></tr>
+    </thead>
+    <tbody>
+      ${Object.entries(report.category_breakdown).map(([cat, stats]) => `
+        <tr>
+          <td>${cat.charAt(0).toUpperCase() + cat.slice(1)}</td>
+          <td class="online">${stats.online}</td>
+          <td class="offline">${stats.offline}</td>
+          <td>${stats.total}</td>
+          <td>${stats.uptime_pct}%</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  
+  <h2>🔌 Source Breakdown</h2>
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Online</th><th>Offline</th><th>Total</th><th>Uptime</th></tr>
+    </thead>
+    <tbody>
+      ${Object.entries(report.source_breakdown).map(([src, stats]) => `
+        <tr>
+          <td>${src}</td>
+          <td class="online">${stats.online}</td>
+          <td class="offline">${stats.offline}</td>
+          <td>${stats.total}</td>
+          <td>${stats.uptime_pct}%</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  
+  ${report.offline_stations.length > 0 ? `
+  <div class="alert">
+    <h3>⚠️ Offline Stations (${report.offline_stations.length})</h3>
+    <table>
+      <thead>
+        <tr><th>Station</th><th>Source</th><th>Category</th></tr>
+      </thead>
+      <tbody>
+        ${report.offline_stations.slice(0, 20).map(s => `
+          <tr>
+            <td>${s.station_name || s.station_id}</td>
+            <td>${s.api_source}</td>
+            <td>${s.category}</td>
+          </tr>
+        `).join('')}
+        ${report.offline_stations.length > 20 ? `<tr><td colspan="3">... and ${report.offline_stations.length - 20} more</td></tr>` : ''}
+      </tbody>
+    </table>
+  </div>
+  ` : '<p style="color: #10b981;">✅ All stations are online!</p>'}
+  
+  <div class="footer">
+    <p>© Weatherwalay - Weather Station Monitoring System</p>
+    <p>Total Stations: ${report.summary.total_stations} | Report generated automatically at 8:00 AM PKT</p>
+  </div>
+</body>
+</html>
+  `;
+  
+  // Send via Resend API
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: env.REPORT_FROM_EMAIL || 'Weather Monitor <onboarding@resend.dev>',
+      to: recipients,
+      subject: `🌤️ Weather Station Report - ${dateStr} | ${report.summary.online}/${report.summary.total_stations} Online`,
+      html: html
+    })
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Resend API error:', errorText);
+    return { success: false, error: errorText };
+  }
+  
+  const result = await response.json();
+  console.log('Email sent successfully:', result);
+  return { success: true, messageId: result.id, recipients: recipients };
 }
 
 // ============================================================

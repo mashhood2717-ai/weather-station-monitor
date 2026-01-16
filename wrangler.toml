@@ -18,7 +18,9 @@ binding = "DB"
 database_name = "weatherlink-monitor"
 database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"  # From: wrangler d1 create weatherlink-monitor
 
-# Cron Triggers (runs every 15 minutes)
+# Cron Triggers
+# - Every 15 minutes: sync stations
+# - 3:00 UTC (8:00 AM PKT): send daily email report
 [triggers]
 crons = ["*/15 * * * *"]
 
@@ -29,6 +31,9 @@ ENVIRONMENT = "production"
 # Secrets (set via: wrangler secret put SECRET_NAME)
 # WEATHERLINK_API_KEY
 # WEATHERLINK_API_SECRET
+# RESEND_API_KEY         - Get from https://resend.com (free tier: 100 emails/day)
+# REPORT_EMAILS          - Comma-separated list of email recipients
+# REPORT_FROM_EMAIL      - Sender email address (optional, needs domain verification)
 
 # Routes (optional - for custom domain)
 # [[routes]]
