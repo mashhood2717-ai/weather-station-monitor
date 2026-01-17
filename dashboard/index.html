@@ -1396,14 +1396,16 @@
                 <div class="stat-trend down" id="offlineTrend"></div>
             </div>
             
-            <div class="stat-card">
-                <div class="stat-label">Stations Up</div>
-                <div class="stat-value" id="stationsUp">0%</div>
+            <div class="stat-card" style="border-left: 3px solid var(--success);">
+                <div class="stat-label">📈 Avg Uptime</div>
+                <div class="stat-value" id="avgUptime" style="color: var(--success);">0%</div>
+                <div class="stat-station" id="avgUptimeInfo">All stations avg</div>
             </div>
             
-            <div class="stat-card">
-                <div class="stat-label">Stations Down</div>
-                <div class="stat-value" id="stationsDown">0%</div>
+            <div class="stat-card" style="border-left: 3px solid var(--danger);">
+                <div class="stat-label">📉 Avg Downtime</div>
+                <div class="stat-value" id="avgDowntime" style="color: var(--danger);">0%</div>
+                <div class="stat-station" id="avgDowntimeInfo">All stations avg</div>
             </div>
             
             <div class="stat-card temp">
@@ -1412,10 +1414,22 @@
                 <div class="stat-station" id="maxTempStation">--</div>
             </div>
             
+            <div class="stat-card" style="border-left: 3px solid #06b6d4;">
+                <div class="stat-label">❄️ Min Temp</div>
+                <div class="stat-value" id="minTemp" style="color: #06b6d4;">--°C</div>
+                <div class="stat-station" id="minTempStation">--</div>
+            </div>
+            
             <div class="stat-card rain">
                 <div class="stat-label">🌧️ Max Rainfall</div>
                 <div class="stat-value" id="maxRain">-- mm</div>
                 <div class="stat-station" id="maxRainStation">--</div>
+            </div>
+            
+            <div class="stat-card" style="border-left: 3px solid #8b5cf6;">
+                <div class="stat-label">💨 Max Wind Gust</div>
+                <div class="stat-value" id="maxWindGust" style="color: #8b5cf6;">-- km/h</div>
+                <div class="stat-station" id="maxWindGustStation">--</div>
             </div>
             
             <div class="stat-card sync">
@@ -1473,6 +1487,26 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Overall Uptime Trend Chart -->
+        <div class="chart-card" style="margin-bottom: 25px;">
+            <div class="chart-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="chart-icon">📈</span>
+                    <span>Overall Uptime % Trend</span>
+                    <span id="uptimeTrendAvg" style="background: rgba(16,185,129,0.15); color: var(--success); padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">--</span>
+                </div>
+                <div class="chart-controls" style="display:flex; gap:6px; align-items:center;">
+                    <button class="uptime-range-btn active" data-range="24h">24H</button>
+                    <button class="uptime-range-btn" data-range="7d">7D</button>
+                    <button class="uptime-range-btn" data-range="30d">30D</button>
+                    <button class="uptime-range-btn" data-range="1y">1Y</button>
+                </div>
+            </div>
+            <div style="height: 250px; max-height: 250px; margin-top:8px;">
+                <canvas id="uptimeTrendLineChart"></canvas>
+            </div>
+        </div>
 
         <!-- Interactive Map -->
         <div class="map-container">
@@ -1503,7 +1537,7 @@
                             <span>📍</span> Reference <span class="cat-count" id="countReference">0</span>
                         </button>
                         <button class="category-tab" data-category="owner">
-                            <span>👤</span> WW Installed <span class="cat-count" id="countOwner">0</span>
+                            <span>👤</span> Employee Stations <span class="cat-count" id="countOwner">0</span>
                         </button>
                         <button class="category-tab" data-category="wu">
                             <span>🌐</span> Others <span class="cat-count" id="countWU">0</span>
@@ -1725,6 +1759,27 @@
             background: var(--primary);
             color: #fff;
             border-color: var(--primary-dark);
+        }
+        .uptime-range-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .uptime-range-btn:hover {
+            background: rgba(14, 165, 233, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .uptime-range-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
         }
         .offline-filter-btn {
             background: transparent;
@@ -1951,7 +2006,7 @@
         const CATEGORY_CONFIG = {
             'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
             'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
-            'owner': { name: 'WW Installed', color: '#f59e0b', icon: '👤' },
+            'owner': { name: 'Employee Stations', color: '#f59e0b', icon: '👤' },
             'wu': { name: 'Others', color: '#ec4899', icon: '🌐' },
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' }
         };
@@ -2048,6 +2103,178 @@
             }
         }
         
+        // Overall Uptime Trend Line Chart
+        let uptimeTrendLineChart = null;
+        let currentUptimeRange = '24h';
+        
+        async function initUptimeTrendLineChart(range = '24h') {
+            try {
+                currentUptimeRange = range;
+                const response = await fetch(`${WORKER_API}/api/uptime-trend-chart?range=${range}`);
+                if (!response.ok) {
+                    console.warn('Failed to fetch uptime trend data');
+                    return;
+                }
+                const data = await response.json();
+                if (!data.success || !data.trend || data.trend.length === 0) {
+                    console.warn('No uptime trend data available');
+                    return;
+                }
+                
+                // Update the average uptime display
+                const avgEl = document.getElementById('uptimeTrendAvg');
+                if (avgEl) {
+                    avgEl.textContent = `Avg: ${data.overall_uptime}%`;
+                    // Color code based on uptime
+                    if (data.overall_uptime >= 95) {
+                        avgEl.style.background = 'rgba(16,185,129,0.15)';
+                        avgEl.style.color = 'var(--success)';
+                    } else if (data.overall_uptime >= 80) {
+                        avgEl.style.background = 'rgba(245,158,11,0.15)';
+                        avgEl.style.color = 'var(--warning)';
+                    } else {
+                        avgEl.style.background = 'rgba(239,68,68,0.15)';
+                        avgEl.style.color = 'var(--danger)';
+                    }
+                }
+                
+                // Also update the avg uptime/downtime stat cards
+                document.getElementById('avgUptime').textContent = data.overall_uptime + '%';
+                document.getElementById('avgDowntime').textContent = data.overall_downtime + '%';
+                const rangeLabel = range === '24h' ? '24 hours' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : '1 year';
+                document.getElementById('avgUptimeInfo').textContent = rangeLabel + ' avg';
+                document.getElementById('avgDowntimeInfo').textContent = rangeLabel + ' avg';
+                
+                const ctx = document.getElementById('uptimeTrendLineChart').getContext('2d');
+                
+                if (uptimeTrendLineChart) {
+                    uptimeTrendLineChart.destroy();
+                }
+                
+                // Process data based on granularity
+                let labels = [];
+                let uptimeValues = [];
+                
+                if (data.granularity === 'hourly') {
+                    // Group hourly data by day for 7d, or show hours for 24h
+                    if (range === '24h') {
+                        // Show hourly for 24h
+                        labels = data.trend.map(item => {
+                            const parts = item.period.split(' ');
+                            return parts[1] ? parts[1].substring(0, 5) : item.period;
+                        });
+                        uptimeValues = data.trend.map(item => item.uptime_pct);
+                    } else {
+                        // Group by day for 7d
+                        const dailyData = {};
+                        data.trend.forEach(item => {
+                            const day = item.period.split(' ')[0];
+                            if (!dailyData[day]) {
+                                dailyData[day] = { sum: 0, count: 0 };
+                            }
+                            dailyData[day].sum += item.uptime_pct;
+                            dailyData[day].count++;
+                        });
+                        
+                        const days = Object.keys(dailyData).sort();
+                        labels = days.map(d => {
+                            const date = new Date(d);
+                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        });
+                        uptimeValues = days.map(day => parseFloat((dailyData[day].sum / dailyData[day].count).toFixed(1)));
+                    }
+                } else if (data.granularity === 'daily') {
+                    // 30d - show daily
+                    labels = data.trend.map(item => {
+                        const date = new Date(item.period);
+                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    });
+                    uptimeValues = data.trend.map(item => item.uptime_pct);
+                } else if (data.granularity === 'weekly') {
+                    // 1y - show weekly
+                    labels = data.trend.map(item => {
+                        const [year, week] = item.period.split('-');
+                        return `W${week}`;
+                    });
+                    uptimeValues = data.trend.map(item => item.uptime_pct);
+                }
+                
+                uptimeTrendLineChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Uptime %',
+                            data: uptimeValues,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: range === '1y' ? 2 : 4,
+                            pointBackgroundColor: '#10b981',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: range === '1y' ? 1 : 2,
+                            borderWidth: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Uptime: ${context.parsed.y.toFixed(1)}%`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                grid: { display: false, color: 'rgba(51, 65, 85, 0.3)' }, 
+                                ticks: { 
+                                    color: '#94a3b8',
+                                    maxRotation: range === '1y' ? 45 : 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: range === '1y' ? 12 : (range === '30d' ? 10 : 8)
+                                } 
+                            },
+                            y: { 
+                                min: 0, 
+                                max: 100, 
+                                grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, 
+                                ticks: { 
+                                    color: '#94a3b8', 
+                                    callback: function(v) { return v + '%'; }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.warn('Error initializing uptime trend chart:', e);
+            }
+        }
+        
+        // Setup uptime range toggle buttons
+        function setupUptimeRangeToggles() {
+            document.querySelectorAll('.uptime-range-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.uptime-range-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    const range = e.target.dataset.range;
+                    initUptimeTrendLineChart(range);
+                });
+            });
+        }
+        
         // Category Uptime Chart
         let categoryUptimeChart = null;
             let categoryChartType = 'bar';
@@ -2062,7 +2289,7 @@
 
             // Calculate uptime for each category - prefer real 24h uptime when available
             const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WW Installed', 'Others'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'Employee Stations', 'Others'];
             const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
@@ -2330,7 +2557,7 @@
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
             const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WW Installed', 'Others'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'Employee Stations', 'Others'];
             const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
@@ -2546,6 +2773,45 @@
         // Display total stations (can be higher than actual for presentation)
         const DISPLAY_TOTAL_STATIONS = 350;
         
+        // Fetch dashboard stats from backend API (avg uptime/downtime, daily extremes since midnight PKT)
+        async function fetchDashboardStats() {
+            try {
+                const response = await fetch(`${WORKER_API}/api/dashboard-stats`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        // Update avg uptime/downtime
+                        document.getElementById('avgUptime').textContent = data.average_uptime.uptime_pct + '%';
+                        document.getElementById('avgDowntime').textContent = data.average_uptime.downtime_pct + '%';
+                        document.getElementById('avgUptimeInfo').textContent = `${data.average_uptime.stations_counted} stations avg`;
+                        document.getElementById('avgDowntimeInfo').textContent = `${data.average_uptime.stations_counted} stations avg`;
+                        
+                        // Update daily extremes (since midnight PKT)
+                        if (data.daily_extremes.max_temp !== null) {
+                            document.getElementById('maxTemp').textContent = data.daily_extremes.max_temp + '°C';
+                            document.getElementById('maxTempStation').textContent = data.daily_extremes.max_temp_station || '--';
+                        }
+                        
+                        if (data.daily_extremes.min_temp !== null) {
+                            document.getElementById('minTemp').textContent = data.daily_extremes.min_temp + '°C';
+                            document.getElementById('minTempStation').textContent = data.daily_extremes.min_temp_station || '--';
+                        }
+                        
+                        document.getElementById('maxRain').textContent = data.daily_extremes.max_rainfall + ' mm';
+                        document.getElementById('maxRainStation').textContent = data.daily_extremes.max_rainfall_station || 'No rainfall';
+                        
+                        // Max Wind Gust
+                        if (data.daily_extremes.max_wind_gust !== undefined) {
+                            document.getElementById('maxWindGust').textContent = data.daily_extremes.max_wind_gust + ' km/h';
+                            document.getElementById('maxWindGustStation').textContent = data.daily_extremes.max_wind_gust_station || 'No wind data';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch dashboard stats:', e);
+            }
+        }
+        
         // Update stats cards
         function updateStats(stats) {
             const realTotal = stats.total || 0;
@@ -2564,45 +2830,12 @@
             animateCounter(document.getElementById('legendOnline'), displayOnline);
             animateCounter(document.getElementById('legendOffline'), displayOffline);
             
-            const stationsUp = displayTotal > 0 ? ((displayOnline / displayTotal) * 100).toFixed(1) : 0;
-            const stationsDown = displayTotal > 0 ? ((displayOffline / displayTotal) * 100).toFixed(1) : 0;
-            
-            document.getElementById('stationsUp').textContent = stationsUp + '%';
-            document.getElementById('stationsDown').textContent = stationsDown + '%';
-            
             // Update trend indicators
             updateTrendIndicator('onlineTrend', displayOnline, previousStats.online);
             updateTrendIndicator('offlineTrend', displayOffline, previousStats.offline, true);
             
-            // Find and display MAX temperature with station name
-            const stationsWithTemp = allStations
-                .filter(s => s.status === 'Active' && s.temperature !== null && s.temperature !== undefined)
-                .map(s => ({ name: s.station_name || s.location || 'Unknown', temp: parseFloat(s.temperature) }))
-                .filter(s => !isNaN(s.temp));
-            
-            if (stationsWithTemp.length > 0) {
-                const maxTempStation = stationsWithTemp.reduce((max, s) => s.temp > max.temp ? s : max, stationsWithTemp[0]);
-                document.getElementById('maxTemp').textContent = maxTempStation.temp.toFixed(1) + '°C';
-                document.getElementById('maxTempStation').textContent = maxTempStation.name;
-            } else {
-                document.getElementById('maxTemp').textContent = '--°C';
-                document.getElementById('maxTempStation').textContent = '--';
-            }
-            
-            // Find and display MAX rainfall with station name
-            const stationsWithRain = allStations
-                .filter(s => s.rainfall !== null && s.rainfall !== undefined)
-                .map(s => ({ name: s.station_name || s.location || 'Unknown', rain: parseFloat(s.rainfall) }))
-                .filter(s => !isNaN(s.rain) && s.rain > 0);
-            
-            if (stationsWithRain.length > 0) {
-                const maxRainStation = stationsWithRain.reduce((max, s) => s.rain > max.rain ? s : max, stationsWithRain[0]);
-                document.getElementById('maxRain').textContent = maxRainStation.rain.toFixed(1) + ' mm';
-                document.getElementById('maxRainStation').textContent = maxRainStation.name;
-            } else {
-                document.getElementById('maxRain').textContent = '0 mm';
-                document.getElementById('maxRainStation').textContent = 'No rainfall';
-            }
+            // Fetch daily extremes and avg uptime from backend API (since midnight PKT)
+            fetchDashboardStats();
             
             // Update last sync time
             const now = new Date();
@@ -3713,6 +3946,9 @@
                 
                 // Initialize category chart
                 initCategoryUptimeChart();
+                
+                // Initialize uptime trend line chart (default to 24h)
+                initUptimeTrendLineChart('24h');
 
                 // Load uptime percentages from Worker
                 await loadUptimePercentages();
@@ -3823,6 +4059,7 @@
             initMap();
             await loadData();
             setupEventListeners();
+            setupUptimeRangeToggles();
             
             // Auto-refresh every 5 minutes
             setInterval(loadData, 5 * 60 * 1000);
