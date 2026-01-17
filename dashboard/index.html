@@ -611,11 +611,6 @@
         .map-header {
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
         }
         
         .map-title {
@@ -628,7 +623,6 @@
         #map {
             height: 500px;
             width: 100%;
-            position: relative;
         }
         
         /* Station List */
@@ -1518,27 +1512,8 @@
         <div class="map-container">
             <div class="map-header">
                 <h2 class="map-title">📍 Station Locations</h2>
-                <div class="heatmap-controls">
-                    <span style="font-size: 13px; color: var(--text-secondary); margin-right: 8px;">Heat Map:</span>
-                    <button class="heatmap-btn active" data-layer="none">None</button>
-                    <button class="heatmap-btn" data-layer="temperature">🌡️ Temperature</button>
-                    <button class="heatmap-btn" data-layer="rainfall">🌧️ Rainfall</button>
-                </div>
             </div>
-            <div id="map">
-                <!-- Heat map legend -->
-                <div id="heatmapLegend" class="heatmap-legend" style="display: none;">
-                    <div class="legend-title">Temperature (°C)</div>
-                    <div class="legend-gradient"></div>
-                    <div class="legend-labels">
-                        <span>-10°</span>
-                        <span>10°</span>
-                        <span>25°</span>
-                        <span>40°</span>
-                        <span>50°+</span>
-                    </div>
-                </div>
-            </div>
+            <div id="map"></div>
         </div>
 
         <!-- Station List and Offline Panel -->
@@ -1806,84 +1781,6 @@
             color: #fff;
             border-color: var(--primary);
         }
-        
-        /* Heat Map Controls */
-        .heatmap-controls {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-        .heatmap-btn {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        .heatmap-btn:hover {
-            background: rgba(14, 165, 233, 0.1);
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        .heatmap-btn.active {
-            background: var(--primary);
-            color: #fff;
-            border-color: var(--primary);
-        }
-        .heatmap-btn[data-layer="temperature"].active {
-            background: linear-gradient(90deg, #3b82f6, #f59e0b, #ef4444);
-        }
-        .heatmap-btn[data-layer="rainfall"].active {
-            background: linear-gradient(90deg, #93c5fd, #1d4ed8);
-        }
-        
-        /* Heat Map Legend */
-        .heatmap-legend {
-            position: absolute;
-            bottom: 30px;
-            right: 10px;
-            background: rgba(30, 41, 59, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            z-index: 1000;
-            min-width: 140px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-        [data-theme="light"] .heatmap-legend {
-            background: rgba(255, 255, 255, 0.95);
-        }
-        .legend-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-            text-align: center;
-        }
-        .legend-gradient {
-            height: 12px;
-            border-radius: 4px;
-            margin-bottom: 6px;
-        }
-        .legend-gradient.temperature {
-            background: linear-gradient(90deg, #3b82f6, #22c55e, #eab308, #f97316, #ef4444);
-        }
-        .legend-gradient.rainfall {
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), #3b82f6, #1d4ed8, #1e3a8a);
-        }
-        .legend-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            color: var(--text-secondary);
-        }
-        
         .offline-filter-btn {
             background: transparent;
             border: 1px solid var(--border);
@@ -2203,252 +2100,6 @@
                     attribution: '© OpenStreetMap, © CartoDB',
                     maxZoom: 18
                 }).addTo(map);
-            }
-        }
-        
-        // ============================================================
-        // IDW Heat Map Layer for Temperature and Rainfall
-        // ============================================================
-        let heatmapLayer = null;
-        let currentHeatmapType = 'none';
-        
-        // IDW (Inverse Distance Weighting) Canvas Layer
-        L.CanvasLayer = L.Layer.extend({
-            options: {
-                opacity: 0.6,
-                resolution: 4, // Lower = more detailed but slower
-            },
-            
-            initialize: function(options) {
-                L.setOptions(this, options);
-                this._data = [];
-                this._type = 'temperature';
-            },
-            
-            onAdd: function(map) {
-                this._map = map;
-                this._canvas = L.DomUtil.create('canvas', 'leaflet-heatmap-layer');
-                const size = map.getSize();
-                this._canvas.width = size.x;
-                this._canvas.height = size.y;
-                this._canvas.style.opacity = this.options.opacity;
-                this._canvas.style.position = 'absolute';
-                this._canvas.style.pointerEvents = 'none';
-                map.getPanes().overlayPane.appendChild(this._canvas);
-                map.on('moveend', this._redraw, this);
-                map.on('zoomend', this._redraw, this);
-                map.on('resize', this._resize, this);
-                this._redraw();
-            },
-            
-            onRemove: function(map) {
-                L.DomUtil.remove(this._canvas);
-                map.off('moveend', this._redraw, this);
-                map.off('zoomend', this._redraw, this);
-                map.off('resize', this._resize, this);
-            },
-            
-            setData: function(data, type) {
-                this._data = data;
-                this._type = type || 'temperature';
-                if (this._map) this._redraw();
-            },
-            
-            _resize: function() {
-                const size = this._map.getSize();
-                this._canvas.width = size.x;
-                this._canvas.height = size.y;
-                this._redraw();
-            },
-            
-            _redraw: function() {
-                if (!this._map || !this._canvas) return;
-                
-                const ctx = this._canvas.getContext('2d');
-                const size = this._map.getSize();
-                const bounds = this._map.getBounds();
-                const topLeft = this._map.containerPointToLayerPoint([0, 0]);
-                L.DomUtil.setPosition(this._canvas, topLeft);
-                
-                ctx.clearRect(0, 0, size.x, size.y);
-                
-                if (this._data.length < 3) return; // Need at least 3 points
-                
-                const resolution = this.options.resolution;
-                const imageData = ctx.createImageData(size.x, size.y);
-                
-                // Pre-calculate screen positions for all data points
-                const points = this._data.map(d => {
-                    const point = this._map.latLngToContainerPoint([d.lat, d.lng]);
-                    return { x: point.x, y: point.y, value: d.value };
-                }).filter(p => !isNaN(p.value) && p.value !== null);
-                
-                if (points.length < 3) return;
-                
-                // IDW interpolation for each pixel (sampled by resolution)
-                for (let x = 0; x < size.x; x += resolution) {
-                    for (let y = 0; y < size.y; y += resolution) {
-                        const value = this._idw(x, y, points);
-                        const color = this._getColor(value, this._type);
-                        
-                        // Fill resolution x resolution block
-                        for (let dx = 0; dx < resolution && x + dx < size.x; dx++) {
-                            for (let dy = 0; dy < resolution && y + dy < size.y; dy++) {
-                                const idx = ((y + dy) * size.x + (x + dx)) * 4;
-                                imageData.data[idx] = color.r;
-                                imageData.data[idx + 1] = color.g;
-                                imageData.data[idx + 2] = color.b;
-                                imageData.data[idx + 3] = color.a;
-                            }
-                        }
-                    }
-                }
-                
-                ctx.putImageData(imageData, 0, 0);
-            },
-            
-            _idw: function(x, y, points, power = 2) {
-                let weightSum = 0;
-                let valueSum = 0;
-                
-                for (const p of points) {
-                    const dist = Math.sqrt(Math.pow(x - p.x, 2) + Math.pow(y - p.y, 2));
-                    if (dist < 1) {
-                        return p.value; // Very close to a data point
-                    }
-                    const weight = 1 / Math.pow(dist, power);
-                    weightSum += weight;
-                    valueSum += weight * p.value;
-                }
-                
-                return weightSum > 0 ? valueSum / weightSum : 0;
-            },
-            
-            _getColor: function(value, type) {
-                if (type === 'temperature') {
-                    // Temperature: -10 to 50°C
-                    // Blue (-10) -> Green (10) -> Yellow (25) -> Orange (35) -> Red (50)
-                    const normalized = Math.max(0, Math.min(1, (value + 10) / 60));
-                    
-                    let r, g, b;
-                    if (normalized < 0.25) {
-                        // Blue to Green
-                        const t = normalized / 0.25;
-                        r = Math.round(59 + (34 - 59) * t);
-                        g = Math.round(130 + (197 - 130) * t);
-                        b = Math.round(246 + (94 - 246) * t);
-                    } else if (normalized < 0.5) {
-                        // Green to Yellow
-                        const t = (normalized - 0.25) / 0.25;
-                        r = Math.round(34 + (234 - 34) * t);
-                        g = Math.round(197 + (179 - 197) * t);
-                        b = Math.round(94 + (8 - 94) * t);
-                    } else if (normalized < 0.75) {
-                        // Yellow to Orange
-                        const t = (normalized - 0.5) / 0.25;
-                        r = Math.round(234 + (249 - 234) * t);
-                        g = Math.round(179 + (115 - 179) * t);
-                        b = Math.round(8 + (22 - 8) * t);
-                    } else {
-                        // Orange to Red
-                        const t = (normalized - 0.75) / 0.25;
-                        r = Math.round(249 + (239 - 249) * t);
-                        g = Math.round(115 + (68 - 115) * t);
-                        b = Math.round(22 + (68 - 22) * t);
-                    }
-                    
-                    return { r, g, b, a: 160 };
-                } else {
-                    // Rainfall: 0 to 100mm
-                    // Transparent (0) -> Light blue (10) -> Blue (50) -> Dark blue (100)
-                    const normalized = Math.max(0, Math.min(1, value / 100));
-                    
-                    if (normalized < 0.01) {
-                        return { r: 0, g: 0, b: 0, a: 0 }; // No rain = transparent
-                    }
-                    
-                    const intensity = Math.pow(normalized, 0.5); // Non-linear for better visualization
-                    const r = Math.round(59 + (30 - 59) * intensity);
-                    const g = Math.round(130 + (58 - 130) * intensity);
-                    const b = Math.round(246 + (138 - 246) * intensity);
-                    const a = Math.round(80 + 120 * intensity);
-                    
-                    return { r, g, b, a };
-                }
-            }
-        });
-        
-        // Toggle heat map layer
-        function toggleHeatmap(type) {
-            currentHeatmapType = type;
-            const legend = document.getElementById('heatmapLegend');
-            
-            // Remove existing layer
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-                heatmapLayer = null;
-            }
-            
-            if (type === 'none') {
-                legend.style.display = 'none';
-                return;
-            }
-            
-            // Prepare data for heat map (only online stations with valid data)
-            const data = allStations
-                .filter(s => s.status === 'Active' && s.latitude && s.longitude)
-                .map(s => ({
-                    lat: parseFloat(s.latitude),
-                    lng: parseFloat(s.longitude),
-                    value: type === 'temperature' 
-                        ? (s.temperature !== null ? parseFloat(s.temperature) : null)
-                        : (s.rainfall !== null ? parseFloat(s.rainfall) : 0)
-                }))
-                .filter(d => d.value !== null && !isNaN(d.value));
-            
-            if (data.length < 3) {
-                showNotification('Not enough station data for heat map interpolation', 'error');
-                legend.style.display = 'none';
-                return;
-            }
-            
-            // Create and add layer
-            heatmapLayer = new L.CanvasLayer({ opacity: 0.55, resolution: 5 });
-            heatmapLayer.addTo(map);
-            heatmapLayer.setData(data, type);
-            
-            // Update legend
-            legend.style.display = 'block';
-            const legendTitle = legend.querySelector('.legend-title');
-            const legendGradient = legend.querySelector('.legend-gradient');
-            const legendLabels = legend.querySelector('.legend-labels');
-            
-            if (type === 'temperature') {
-                legendTitle.textContent = 'Temperature (°C)';
-                legendGradient.className = 'legend-gradient temperature';
-                legendLabels.innerHTML = '<span>-10°</span><span>10°</span><span>25°</span><span>40°</span><span>50°+</span>';
-            } else {
-                legendTitle.textContent = 'Rainfall (mm)';
-                legendGradient.className = 'legend-gradient rainfall';
-                legendLabels.innerHTML = '<span>0</span><span>10</span><span>25</span><span>50</span><span>100+</span>';
-            }
-        }
-        
-        // Setup heat map toggle buttons
-        function setupHeatmapToggles() {
-            document.querySelectorAll('.heatmap-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.heatmap-btn').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                    toggleHeatmap(e.target.dataset.layer);
-                });
-            });
-        }
-        
-        // Refresh heat map when data updates
-        function refreshHeatmap() {
-            if (currentHeatmapType !== 'none' && heatmapLayer) {
-                toggleHeatmap(currentHeatmapType);
             }
         }
         
@@ -4304,9 +3955,6 @@
 
                 // Rebuild category chart after realtime uptimes applied
                 try { initCategoryUptimeChart(); } catch(e) { console.warn('Could not re-init category chart:', e.message); }
-                
-                // Refresh heat map if active
-                refreshHeatmap();
             } catch (error) {
                 console.error('Error loading data:', error);
             }
@@ -4412,7 +4060,6 @@
             await loadData();
             setupEventListeners();
             setupUptimeRangeToggles();
-            setupHeatmapToggles();
             
             // Auto-refresh every 5 minutes
             setInterval(loadData, 5 * 60 * 1000);
@@ -4422,5 +4069,4 @@
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
-</html>< ! - -   D e p l o y e d :   2 0 2 6 - 0 1 - 1 7   0 8 : 0 6 : 0 1   - - >  
- 
+</html>
