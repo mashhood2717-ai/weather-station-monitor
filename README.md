@@ -1,462 +1,512 @@
-# 📊 Weather Station Dashboard - Complete Solution
+# 🌤️ Weather Station Monitoring System
 
-## ✨ What You Now Have
-
-A **production-ready weather station monitoring dashboard** with:
-
-### Core Features ✅
-- 🗺️ **Interactive Leaflet Map** - All stations with color-coded markers
-- 📊 **Uptime/Downtime %** - 24-hour calculation for each station
-- 🌡️ **Real-time Temperature** - Latest reading, auto-converted to Celsius
-- 📈 **Historical Charts** - 24-hour uptime trends
-- 📋 **Station List Table** - Searchable, sortable, filterable
-- ⚡ **Live Statistics** - Online/offline counts and percentages
-- 🎨 **Dark/Light Theme** - Toggle with preference saving
-- 📱 **Responsive Design** - Works on all devices
-- 🔄 **Auto-Refresh** - Updates every 30 minutes
-- 🔐 **Secure** - Token-based authentication
+A real-time weather station monitoring dashboard that tracks 300+ weather stations across Pakistan. Built with Cloudflare Workers, D1 Database, and a modern web dashboard.
 
 ---
 
-## 📁 Documentation Files
+## 📋 Table of Contents
 
-Read in this order:
-
-### 1. **GETTING_STARTED.md** ← Start Here! 🚀
-   - 5-minute setup instructions
-   - One critical change needed (Worker URL)
-   - Quick features tour
-   - Troubleshooting guide
-
-### 2. **DASHBOARD_SETUP.md**
-   - Comprehensive feature breakdown
-   - API endpoints reference
-   - Database schema
-   - Configuration guide
-   - Performance notes
-
-### 3. **QUICK_START.md**
-   - Quick reference guide
-   - Data flow diagrams
-   - Configuration customization
-   - Visual element descriptions
-
-### 4. **CODE_CHANGES.md**
-   - Exact code modifications
-   - Line-by-line explanations
-   - SQL query details
-   - Integration flow
-   - Testing instructions
-
-### 5. **IMPLEMENTATION_SUMMARY.md**
-   - Visual feature overview
-   - Technical implementation
-   - Deployment checklist
-   - Performance metrics
-   - Usage guide
+1. [What Is This Project?](#what-is-this-project)
+2. [How It Works](#how-it-works)
+3. [Project Structure](#project-structure)
+4. [API Endpoints](#api-endpoints)
+5. [Database Schema](#database-schema)
+6. [Dashboard Features](#dashboard-features)
+7. [How To Deploy](#how-to-deploy)
+8. [Common Questions](#common-questions)
 
 ---
 
-## 🎯 What Was Added
+## 🎯 What Is This Project?
 
-### Backend (src/index.js)
-```
-NEW:
-- /api/uptime-percentages endpoint
-- handleUptimePercentagesRequest() function
-- SQL query for 24-hour uptime calculation
+This system monitors weather stations installed across Pakistan. It:
 
-RESULT:
-- Backend calculates uptime % for all stations
-- Returns JSON with station_id and uptime_percent
-```
+- **Tracks station status** - Which stations are online/offline
+- **Records weather data** - Temperature, rainfall, wind speed
+- **Calculates uptime** - How reliable each station is (24h, 7d, 30d, 1 year)
+- **Shows on a map** - Interactive map with all station locations
+- **Sends daily reports** - Email summary of all stations every morning
 
-### Frontend (dashboard/index.html)
-```
-NEW:
-- WORKER_API configuration constant
-- loadUptimePercentages() function
-- CSS classes for uptime color-coding
-
-ENHANCED:
-- updateMapMarkers() now shows uptime in popups
-- renderTable() now shows uptime in table column
-- Map popups have color-coded uptime display
-
-RESULT:
-- Dashboard fetches uptime from Worker API
-- Displays uptime in map popups and table
-- Color-coded: green (≥95%), yellow (80-94%), red (<80%)
-```
+### Who Uses It?
+- Weatherwalay operations team
+- Station maintenance teams
+- Management for reporting
 
 ---
 
-## 🚀 Getting Your Dashboard Live
+## ⚙️ How It Works
 
-### 3 Simple Steps:
-
-#### Step 1: Update Worker URL
-Open `dashboard/index.html`, find line ~1480:
-```javascript
-const WORKER_API = 'https://weatherlink-monitor.workers.dev';
 ```
-Change to your actual Cloudflare Worker URL.
-
-#### Step 2: Deploy Worker
-```bash
-cd d:\weather-monitor
-wrangler publish
+┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│   HubService    │ ───► │ Cloudflare Worker│ ───► │   D1 Database   │
+│  (Source API)   │      │  (Our Backend)   │      │  (Data Storage) │
+└─────────────────┘      └──────────────────┘      └─────────────────┘
+                                  │
+                                  ▼
+                         ┌─────────────────┐
+                         │    Dashboard    │
+                         │   (Frontend)    │
+                         └─────────────────┘
 ```
 
-#### Step 3: Access Dashboard
-```
-https://yourdomain.com/dashboard/index.html
-```
+### The Flow:
 
-**Done!** Your dashboard is now live. 🎉
+1. **Every 15 minutes** (automatic cron job):
+   - Worker fetches all stations from HubService API
+   - Checks which are online/offline
+   - Stores temperature, rainfall, wind speed
+   - Saves to D1 database
+
+2. **When you open the dashboard**:
+   - Dashboard calls our Worker API
+   - Worker queries database for uptime stats
+   - Returns combined data (live status + historical uptime)
+   - Dashboard displays everything
+
+3. **Every morning at 8 AM PKT**:
+   - Worker generates daily report
+   - Sends email to configured recipients
 
 ---
 
-## 📊 Key Features Explained
-
-### Uptime Percentage Calculation
-```
-How it works:
-1. Worker syncs every 30 minutes → stores is_online flag in database
-2. Dashboard calculates: (online readings / total readings) × 100
-3. Shows as: "97.9%" in table and map popup
-4. Color coded: green (good) → yellow (okay) → red (poor)
-
-Where you see it:
-- Station table, "Uptime" column
-- Map popup when you click a marker
-- Color indicates health: 🟢 ≥95% | 🟡 80-94% | 🔴 <80%
-```
-
-### Temperature Display
-```
-How it works:
-1. Latest reading from status_logs table
-2. Auto-converted: Fahrenheit → Celsius
-3. Displayed as: "28°C" or "N/A" if unavailable
-
-Where you see it:
-- Station table, "Temp" column
-- Map popup
-- Sortable by clicking column header
-```
-
-### Map Markers
-```
-Marker colors:
-- 🟢 Green = Station is online
-- 🔴 Red = Station is offline
-
-Click a marker to see:
-- Station name
-- Location
-- Current temperature
-- **24-hour uptime %**
-- Status (Online/Offline)
-- API source
-
-Cluster behavior:
-- Zoom out → Stations group into clusters
-- Zoom in → Individual markers appear
-- Click cluster → Expand to see all stations in that area
-```
-
----
-
-## 📋 File Structure
+## 📁 Project Structure
 
 ```
-d:\weather-monitor\
+weather-monitor/
+│
 ├── src/
-│   └── index.js                    ← Updated with new endpoint
+│   └── index.js          # ⭐ Main backend code (Cloudflare Worker)
+│                         #    - All API endpoints
+│                         #    - Database queries
+│                         #    - Cron sync logic
+│
 ├── dashboard/
-│   ├── index.html                  ← Updated with uptime features
-│   └── login.html
-├── GETTING_STARTED.md              ← 👈 Start here!
-├── DASHBOARD_SETUP.md
-├── QUICK_START.md
-├── CODE_CHANGES.md
-├── IMPLEMENTATION_SUMMARY.md
-├── wrangler.toml
-├── schema.sql
-├── package.json
-└── [other files...]
+│   ├── index.html        # ⭐ Main dashboard (all-in-one HTML file)
+│   │                     #    - Stats cards
+│   │                     #    - Charts
+│   │                     #    - Map
+│   │                     #    - Station table
+│   │
+│   └── login.html        # Login page (token-based auth)
+│
+├── schema.sql            # Database table definitions
+├── wrangler.toml         # Cloudflare Worker configuration
+├── package.json          # Project dependencies
+│
+└── .github/
+    └── copilot-instructions.md  # AI coding instructions
+```
+
+### Key Files Explained:
+
+| File | Purpose |
+|------|---------|
+| `src/index.js` | The "brain" - handles all API requests, syncs data, calculates uptime |
+| `dashboard/index.html` | The visual interface - charts, maps, tables |
+| `schema.sql` | Database structure definition |
+| `wrangler.toml` | Tells Cloudflare how to deploy the Worker |
+
+---
+
+## 🔌 API Endpoints
+
+**Base URL:** `https://weatherlink-monitor.mashhood2717.workers.dev`
+
+### 1. Get All Stations with Uptime
+```
+GET /api/stations-with-uptime
+```
+**What it returns:** All stations with their current status, temperature, rainfall, and 24-hour uptime percentage.
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "total": 284,
+  "stations": [
+    {
+      "station_id": "163674",
+      "station_name": "Abbottabad City",
+      "status": "Active",
+      "temperature": 5.6,
+      "rainfall": 0,
+      "uptime_24h": 100,
+      "latitude": 34.16853,
+      "longitude": 73.22342,
+      "api_source": "Davis"
+    }
+  ]
+}
+```
+
+**How to test (in browser or Postman):**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/stations-with-uptime
 ```
 
 ---
 
-## 🔍 How Data Flows
-
+### 2. Get Dashboard Stats
 ```
-Every 30 Minutes (Cron Trigger):
-┌─────────────────────────────────────┐
-│ Cloudflare Worker                   │
-├─────────────────────────────────────┤
-│ 1. Check each station via API       │
-│ 2. Record: online=1 or offline=0    │
-│ 3. Store temperature reading        │
-│ 4. Save to D1 Database              │
-│    - Table: status_logs             │
-│    - Fields: station_id, is_online, │
-│      temperature, timestamp         │
-└─────────────────────────────────────┘
+GET /api/dashboard-stats
+```
+**What it returns:** Average uptime/downtime across all stations, and daily extremes (max/min temp, max rainfall, max wind) since midnight PKT.
 
-User Opens Dashboard:
-┌─────────────────────────────────────┐
-│ Browser                             │
-├─────────────────────────────────────┤
-│ 1. Load stations from main API      │
-│    → GET /wms/stations              │
-│ 2. Load uptime data from Worker     │
-│    → GET /api/uptime-percentages    │
-│ 3. Merge by station_id              │
-│ 4. Render:                          │
-│    - Map with markers               │
-│    - Statistics cards               │
-│    - Station list table             │
-│    - Trend charts                   │
-└─────────────────────────────────────┘
+**Example Response:**
+```json
+{
+  "success": true,
+  "daily_extremes": {
+    "max_temp": 22,
+    "max_temp_station": "PIB Colony Karachi",
+    "min_temp": -2.1,
+    "min_temp_station": "Shimshal Valley",
+    "max_rainfall": 0.4,
+    "max_rainfall_station": "Lahore DHA Phase 6",
+    "max_wind_gust": 24.1,
+    "max_wind_gust_station": "Terrace Grill, Murree"
+  },
+  "average_uptime": {
+    "uptime_pct": 63.3,
+    "downtime_pct": 36.7,
+    "stations_counted": 284
+  }
+}
 ```
 
----
-
-## 🎨 Visual Overview
-
-### Dashboard Sections
-
+**How to test:**
 ```
-┌─────────────────────────────────────────────┐
-│ Header: WEATHER STATION MONITOR             │
-│ [Theme Toggle] [Live Status] [Time]         │
-├─────────────────────────────────────────────┤
-│ [Online: 45] [Offline: 3] [94.2%] [5.8%]    │ ← Statistics
-├─────────────────────────────────────────────┤
-│ ┌──────────────┐  ┌─────────────────────┐   │
-│ │ Ring Chart   │  │ 24h Uptime Trend    │   │ ← Charts
-│ │ 94% | 6%     │  │ (line graph)        │   │
-│ └──────────────┘  └─────────────────────┘   │
-├─────────────────────────────────────────────┤
-│ 🗺️ MAP WITH STATION MARKERS                │
-│ (Interactive Leaflet map)                   │
-├─────────────────────────────────────────────┤
-│ ┌───────────────────┐  ┌──────────────────┐ │
-│ │ Station List      │  │ Offline Alert    │ │
-│ │ (searchable table)│  │ (recent issues)  │ │
-│ │                   │  │                  │ │
-│ │ Station | Uptime  │  │ Station A        │ │
-│ │ A       | 97.9%   │  │ Offline 2h ago   │ │
-│ │ B       | 45.2%   │  │                  │ │
-│ │ C       | 100.0%  │  │ Station B        │ │
-│ │         |         │  │ Offline 45m ago  │ │
-│ └───────────────────┘  └──────────────────┘ │
-└─────────────────────────────────────────────┘
+https://weatherlink-monitor.mashhood2717.workers.dev/api/dashboard-stats
 ```
 
 ---
 
-## 🔐 Security
-
-✅ **Token-based Authentication**
-- Token stored in localStorage
-- Checked on page load
-- Redirects to login if missing
-
-✅ **CORS Headers**
-- Worker returns proper CORS headers
-- Prevents unauthorized cross-origin requests
-
-✅ **Secure Data Handling**
-- API keys stored in Worker environment
-- Dashboard only shows public data
-- No sensitive data exposed
-
----
-
-## 📈 Performance
-
-✅ **Optimized for Scale**
-- Tested with 300+ stations
-- Marker clustering prevents lag
-- Database queries optimized
-- Efficient data merging
-
-⚡ **Load Times**
-- Dashboard loads: ~1-2 seconds
-- Data refresh: ~500ms
-- Map render: <100ms
-- Database query: <50ms
-
-📊 **Concurrent Users**
-- Cloudflare Workers: Serverless scale
-- D1 Database: SQLite with good concurrency
-- Dashboard: Pure client-side rendering
-- No server bottlenecks
-
----
-
-## ✅ Verification Checklist
-
-Before claiming "done":
-
+### 3. Get Uptime Trend Chart Data
 ```
-Backend:
-☐ Worker deployed with `wrangler publish`
-☐ /api/uptime-percentages endpoint working
-☐ Returns JSON with uptime_percent field
-☐ Database has status_logs table
-☐ status_logs has recent data (within 24h)
+GET /api/uptime-trend-chart?range=24h
+```
+**Parameters:**
+- `range`: `24h`, `7d`, `30d`, or `1y`
 
-Frontend:
-☐ Dashboard loads without errors
-☐ Map displays with markers
-☐ Stations have color-coded markers
-☐ Temperature shows in table
-☐ Uptime % shows in table
-☐ Map popups show uptime %
-☐ Color coding works (green/yellow/red)
+**What it returns:** Time-series uptime data for charts.
 
-Integration:
-☐ Search functionality works
-☐ Filter buttons work (All/Online/Offline)
-☐ Table is sortable
-☐ Theme toggle works
-☐ Auto-refresh happens every 30 mins
-☐ Works on mobile
+**Example Response:**
+```json
+{
+  "success": true,
+  "range": "24h",
+  "granularity": "hourly",
+  "trend": [
+    { "period": "2026-01-17 00:00:00", "uptime_pct": 62.5 },
+    { "period": "2026-01-17 01:00:00", "uptime_pct": 63.1 }
+  ],
+  "overall_uptime": 63.3,
+  "overall_downtime": 36.7
+}
+```
 
-Final:
-☐ Confirmed Worker URL is correct
-☐ All documentation files present
-☐ No console errors
-☐ Dashboard is production-ready
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/uptime-trend-chart?range=7d
 ```
 
 ---
 
-## 🎓 Usage Tips
-
-### For Best Results
-1. **First Time Setup**: Give system 24+ hours to collect data for accurate uptime percentages
-2. **Mobile**: Use landscape mode for better table view
-3. **Search**: Can search by station name, location, or ID number
-4. **Sorting**: Click column headers to sort, click again to reverse order
-5. **Map**: Zoom out to see clusters, zoom in for individual stations
-
-### Common Workflows
+### 4. Get Uptime Percentages (for all stations)
 ```
-Monitor Overall Health:
-1. Open dashboard
-2. Check statistics at top (% uptime)
-3. Look at offline panel on right
+GET /api/uptime-percentages
+```
+**What it returns:** 24-hour uptime percentage for each station.
 
-Find Problem Station:
-1. Click "Offline" filter button
-2. See list of offline stations
-3. Click station to zoom on map
-4. Check uptime trend
-
-Track Specific Station:
-1. Search by name in search box
-2. Click row in table
-3. Map zooms to marker
-4. View popup with all data
-5. Check historical uptime %
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/uptime-percentages
 ```
 
 ---
 
-## 🚨 Troubleshooting
+### 5. Get Station History
+```
+GET /api/station-history/{station_id}?hours=24
+```
+**Parameters:**
+- `hours`: Number of hours of history (default: 24)
+- `days`: Number of days (alternative to hours)
 
-### Issue: Dashboard shows no stations
-**Solution:**
-- Check main API URL is correct
-- Verify token in localStorage: `localStorage.getItem('ww_token')`
-- Check Network tab for failed requests
+**What it returns:** Detailed history for a specific station including hourly data and downtime records.
 
-### Issue: Uptime shows 0% or N/A
-**Solution:**
-- Need 24+ hours of data for accurate calculation
-- Check database: `SELECT COUNT(*) FROM status_logs`
-- If count is low, wait for more sync cycles (every 30 mins)
-
-### Issue: Map not showing
-**Solution:**
-- Check browser console for errors
-- Verify Leaflet libraries load
-- Check stations have lat/lng coordinates
-
-### Issue: Temperature always shows N/A
-**Solution:**
-- Station may not have temperature sensor
-- Check: `SELECT temperature FROM status_logs WHERE station_id='X' LIMIT 1`
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/station-history/163674?hours=48
+```
 
 ---
 
-## 📚 Next Steps
+### 6. Trigger Manual Sync
+```
+GET /api/sync
+```
+**What it does:** Manually triggers a sync of all stations from HubService.
 
-### Immediate (Today)
-1. ✅ Read GETTING_STARTED.md
-2. ✅ Update Worker URL
-3. ✅ Deploy Worker
-4. ✅ Test dashboard
+**When to use:** If you want fresh data immediately instead of waiting for the 15-minute cron.
 
-### Short Term (This Week)
-1. Monitor dashboard for correct data
-2. Adjust thresholds if needed
-3. Train team to use dashboard
-4. Set up bookmarks for quick access
-
-### Long Term (Future)
-1. Add email alerts for downtime
-2. Create daily/weekly reports
-3. Add more visualizations
-4. Integrate with other systems
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/sync
+```
 
 ---
 
-## 🎉 Success!
+### 7. Get Daily Report (JSON)
+```
+GET /api/daily-report
+```
+**What it returns:** Complete daily report with all stations, category breakdown, and offline list.
 
-You now have a **professional, production-ready weather station monitoring dashboard** that:
-
-✅ Shows all stations on an interactive map
-✅ Displays real-time status (online/offline)
-✅ Shows current temperature for each station
-✅ Calculates 24-hour uptime/downtime percentages
-✅ Color-codes health status (green/yellow/red)
-✅ Provides searchable, sortable station list
-✅ Shows 24-hour trend charts
-✅ Auto-updates every 30 minutes
-✅ Works on all devices
-✅ Is fully responsive
-✅ Includes recent offline alerts
-✅ Has dark/light theme
-
-**Everything is ready to go live!** 🚀
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/daily-report
+```
 
 ---
 
-## 📞 Quick Support
+### 8. Download Daily Report (Excel/CSV)
+```
+GET /api/daily-report/excel
+```
+**What it does:** Downloads a CSV file with the daily report.
 
-**Need help?**
-
-1. Check the appropriate documentation file
-2. Open browser DevTools (F12) and check Console for errors
-3. Verify Worker URL is correct
-4. Confirm database has recent data
-5. Test API endpoints directly
-
-**Files available:**
-- GETTING_STARTED.md - Setup guide
-- DASHBOARD_SETUP.md - Feature details
-- CODE_CHANGES.md - What changed
-- QUICK_START.md - Quick reference
+**How to test:** Open in browser - it will download a file.
 
 ---
 
-**Congratulations! Your dashboard is ready!** 🌟
+### 9. Get Storage Stats
+```
+GET /api/storage-stats
+```
+**What it returns:** Database usage statistics (how much storage is used).
 
-Now go monitor those weather stations! 📊🌦️
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/storage-stats
+```
+
+---
+
+### 10. Test HubService Connection
+```
+GET /api/test-hubservice?name=lahore
+```
+**What it does:** Tests the connection to HubService API and returns raw station data.
+
+**How to test:**
+```
+https://weatherlink-monitor.mashhood2717.workers.dev/api/test-hubservice?name=islamabad
+```
+
+---
+
+## 🗄️ Database Schema
+
+We use Cloudflare D1 (SQLite) with these tables:
+
+### `stations` - Master list of all stations
+| Column | Type | Description |
+|--------|------|-------------|
+| station_id | TEXT | Unique identifier (e.g., "163674") |
+| station_name | TEXT | Display name (POI or station name) |
+| location | TEXT | Technical station name |
+| latitude | REAL | GPS latitude |
+| longitude | REAL | GPS longitude |
+| api_source | TEXT | "Davis", "Misol", or "WU" |
+| install_date | DATE | When station was added |
+
+### `status_logs` - Historical status records
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-increment ID |
+| station_id | TEXT | Which station |
+| timestamp | DATETIME | When the check happened |
+| is_online | INTEGER | 1 = online, 0 = offline |
+| temperature | REAL | Temperature in Celsius |
+| rainfall | REAL | Rainfall in mm |
+| wind_speed | REAL | Wind gust in km/h |
+| response_time_ms | INTEGER | API response time |
+
+### `downtime_records` - Tracks offline periods
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-increment ID |
+| station_id | TEXT | Which station |
+| start_time | DATETIME | When it went offline |
+| end_time | DATETIME | When it came back online |
+| duration_minutes | INTEGER | How long it was down |
+| status | TEXT | "active" or "resolved" |
+
+---
+
+## 📊 Dashboard Features
+
+### Stat Cards (Top Row)
+| Card | Description |
+|------|-------------|
+| 🟢 Online | Number of currently active stations |
+| 🔴 Offline | Number of currently down stations |
+| 📈 Avg Uptime % | Average uptime across all stations (24h) |
+| 📉 Avg Downtime % | Average downtime across all stations (24h) |
+| 🌡️ Max Temp | Highest temperature today (since midnight PKT) |
+| ❄️ Min Temp | Lowest temperature today |
+| 🌧️ Max Rainfall | Highest rainfall today |
+| 💨 Max Wind Gust | Highest wind speed today |
+| 🔄 Last Sync | When data was last updated |
+
+### Charts
+1. **Ring Chart** - Visual breakdown of online vs offline
+2. **Category Chart** - Uptime by category (Corporate, Community, Reference, Employee Stations, Others)
+3. **Uptime Trend** - Line chart with toggles for 24H/7D/30D/1Y
+
+### Map
+- Interactive map of Pakistan
+- Green markers = Online stations
+- Red markers = Offline stations
+- Yellow markers = Inactive stations
+- Click any marker for details (temp, rainfall, uptime)
+
+### Station Table
+- Searchable and sortable
+- Filter by category or status
+- Click a row to see detailed history modal
+
+---
+
+## 🚀 How To Deploy
+
+### 1. Deploy the Worker (Backend)
+```bash
+cd weather-monitor
+wrangler deploy
+```
+This uploads `src/index.js` to Cloudflare Workers.
+
+### 2. Deploy the Dashboard (Frontend)
+The dashboard is hosted on Cloudflare Pages. It auto-deploys when you push to GitHub:
+```bash
+git add .
+git commit -m "your changes"
+git push
+```
+
+### URLs After Deployment:
+- **Worker API:** https://weatherlink-monitor.mashhood2717.workers.dev
+- **Dashboard:** https://weatherwalay-dashboard.pages.dev
+
+---
+
+## ❓ Common Questions
+
+### Q: How often does data sync?
+**A:** Every 15 minutes automatically via cron job.
+
+### Q: Where does the data come from?
+**A:** HubService API (`hubservice.weatherwalay.com`) - this is Weatherwalay's internal station management system.
+
+### Q: How is uptime calculated?
+**A:** 
+```
+Uptime % = (Online Checks / Total Checks) × 100
+```
+For example, if a station was checked 96 times in 24 hours (every 15 min) and was online 90 times:
+```
+Uptime = 90/96 × 100 = 93.75%
+```
+
+### Q: What are the station categories?
+| Category | Description |
+|----------|-------------|
+| Corporate | Installed at corporate offices |
+| Community | Shared community stations |
+| Reference | Official reference stations (PMD) |
+| Employee Stations | Installed at employee homes |
+| Others | Other/uncategorized stations |
+
+### Q: How is temperature data handled?
+**A:** 
+- HubService provides temperature in Celsius
+- WU (Weather Underground) stations provide in Fahrenheit, which we convert to Celsius
+- Only **online stations** are included in daily extremes
+
+### Q: What's the difference between POI and Station Name?
+**A:** 
+- **Station Name** = Technical identifier (e.g., "ILAHOR14")
+- **POI** (Point of Interest) = User-friendly name (e.g., "Lahore DHA Phase 6")
+- Dashboard shows POI when available
+
+### Q: How long is data kept?
+**A:** 15 months (456 days). Older data is automatically deleted to stay within database limits.
+
+### Q: What if a station shows 0% uptime but I know it's online?
+**A:** The uptime is calculated from historical checks in our database. If we just started tracking a station, it may need 24 hours of data before uptime is accurate.
+
+### Q: How do I add a new station?
+**A:** Stations are automatically synced from HubService. If you add a station in HubService, it will appear in our system within 15 minutes.
+
+---
+
+## 🔧 Environment Variables
+
+Set these in Cloudflare Worker settings:
+
+| Variable | Description |
+|----------|-------------|
+| `HUBSERVICE_BASIC_AUTH` | Login credentials for HubService (`phone:password`) |
+| `RESEND_API_KEY` | API key for sending emails (optional) |
+| `REPORT_EMAILS` | Comma-separated email addresses for daily reports |
+| `REPORT_FROM_EMAIL` | Sender email address |
+
+---
+
+## 🛠️ Troubleshooting
+
+### Dashboard shows "Loading..."
+1. Check browser console for errors (F12 → Console)
+2. Try `/api/sync` to force data refresh
+3. Check if Worker is running: visit the API URL directly
+
+### Stations show 0% uptime
+- Wait 24 hours for enough data to accumulate
+- Check if the station exists in HubService
+
+### Temperature shows "--"
+- Station may be offline
+- Temperature sensor may not be reporting
+
+### Map doesn't load
+- Check internet connection
+- Try refreshing the page
+- Check if Leaflet CDN is accessible
+
+---
+
+## 📞 Support
+
+For issues or questions:
+1. Check the Cloudflare dashboard for Worker logs
+2. Check browser console for frontend errors
+3. Try `/api/sync` to force a fresh data sync
+
+---
+
+## 📜 Version History
+
+| Date | Changes |
+|------|---------|
+| Jan 17, 2026 | Added uptime trend chart with 24H/7D/30D/1Y toggles |
+| Jan 17, 2026 | Added avg uptime/downtime stat cards |
+| Jan 17, 2026 | Added min temp and max wind gust tiles |
+| Jan 17, 2026 | POI names shown instead of technical station names |
+| Jan 17, 2026 | Daily extremes reset at midnight PKT |
+| Jan 17, 2026 | Wind speed data extraction from Davis and WU stations |
+
+---
+
+**Built with ❤️ for Weatherwalay Operations Team**
