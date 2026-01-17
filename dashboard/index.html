@@ -1433,8 +1433,12 @@
             </div>
             
             <div class="stat-card sync">
-                <div class="stat-label">🔄 Last Sync</div>
-                <div class="stat-value" id="lastSync">--</div>
+                <div class="stat-label">🔄 Last API Sync</div>
+                <div class="stat-value" id="lastApiSync" style="font-size: 1rem;">--</div>
+                <div class="stat-station" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <span style="color: #888; font-size: 0.7rem;">📱 Page Loaded:</span>
+                    <span id="pageLoaded" style="color: #10b981; font-size: 0.75rem;">--</span>
+                </div>
             </div>
         </div>
 
@@ -2812,6 +2816,35 @@
             }
         }
         
+        // Fetch last API sync time from storage stats
+        async function fetchLastApiSyncTime() {
+            try {
+                const response = await fetch(`${WORKER_API}/api/storage-stats`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.date_range && data.date_range.newest) {
+                        // Parse the UTC timestamp from database
+                        const syncDate = new Date(data.date_range.newest + 'Z'); // Add Z to indicate UTC
+                        const syncTime = syncDate.toLocaleString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Asia/Karachi',
+                            hour12: true
+                        });
+                        const syncDateStr = syncDate.toLocaleDateString('en-US', {
+                            day: 'numeric',
+                            month: 'short',
+                            timeZone: 'Asia/Karachi'
+                        });
+                        document.getElementById('lastApiSync').textContent = `${syncTime}`;
+                        document.getElementById('lastApiSync').title = `Last synced: ${syncDateStr} at ${syncTime} PKT`;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch last sync time:', e);
+            }
+        }
+        
         // Update stats cards
         function updateStats(stats) {
             const realTotal = stats.total || 0;
@@ -2837,15 +2870,18 @@
             // Fetch daily extremes and avg uptime from backend API (since midnight PKT)
             fetchDashboardStats();
             
-            // Update last sync time
+            // Update page loaded time (when user refreshed)
             const now = new Date();
-            const syncTime = now.toLocaleTimeString('en-US', {
+            const pageLoadTime = now.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
                 timeZone: 'Asia/Karachi',
                 hour12: true
             });
-            document.getElementById('lastSync').textContent = syncTime;
+            document.getElementById('pageLoaded').textContent = pageLoadTime;
+            
+            // Fetch last API sync time from database
+            fetchLastApiSyncTime();
             
             // Store current stats for next comparison (use display values)
             previousStats.online = displayOnline;
