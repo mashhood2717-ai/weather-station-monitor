@@ -3615,17 +3615,9 @@
             renderTable();
         }
         
-        // Update last update time
+        // Update last update time (no longer displayed in header, kept for compatibility)
         function updateLastUpdate() {
-            const now = new Date();
-            const options = { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                timeZone: 'Asia/Karachi',
-                hour12: true
-            };
-            document.getElementById('lastUpdate').textContent = 
-                now.toLocaleTimeString('en-US', options) + ' PKT';
+            // Removed from header - no action needed
         }
         
         // Export stations to CSV
