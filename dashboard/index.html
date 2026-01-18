@@ -3793,8 +3793,10 @@
             try {
                 showNotification('Generating report...', 'info');
                 
-                // Fetch the Excel/CSV report from the API
-                const response = await fetch(`${WORKER_API}/api/daily-report/excel`);
+                // Fetch the Excel/CSV report from the API (with cache-buster)
+                const response = await fetch(`${WORKER_API}/api/daily-report/excel?t=${Date.now()}`, {
+                    cache: 'no-store'
+                });
                 
                 if (!response.ok) {
                     throw new Error('Failed to generate report');

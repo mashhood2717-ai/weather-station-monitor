@@ -778,7 +778,9 @@ async function handleDailyReportExcel(env, corsHeaders) {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache'
       }
     });
   } catch (error) {
