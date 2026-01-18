@@ -1,7 +1,13 @@
 # Cloudflare Workers Configuration
 # weatherlink-monitor/wrangler.toml
 
-name = "weatherlink-monitor"
+# ============================================================
+# STAGING ENVIRONMENT (Default)
+# Deploy: npx wrangler deploy
+# URL: weatherlink-monitor-staging.mashhood2717.workers.dev
+# ============================================================
+
+name = "weatherlink-monitor-staging"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
@@ -12,20 +18,39 @@ account_id = "6c8e757f437498dc32b4a9d311b92af7"
 # Workers Settings
 workers_dev = true
 
-# D1 Database Binding
+# D1 Database Binding (Staging)
 [[d1_databases]]
 binding = "DB"
-database_name = "weatherlink-monitor"
-database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"  # From: wrangler d1 create weatherlink-monitor
+database_name = "weatherlink-monitor-staging"
+database_id = "c86a9395-05a8-4dee-9d6e-acf000bd11ea"
 
-# Cron Triggers
-# - Every 15 minutes: sync stations
-# - 3:00 UTC (8:00 AM PKT): send daily email report
+# Cron Triggers - DISABLED for staging (manual testing only)
 [triggers]
-crons = ["*/15 * * * *"]
+crons = []
 
-# Environment Variables (non-sensitive)
+# Environment Variables
 [vars]
+ENVIRONMENT = "staging"
+
+# ============================================================
+# PRODUCTION ENVIRONMENT
+# Deploy: npx wrangler deploy --env production
+# URL: weatherlink-monitor.mashhood2717.workers.dev
+# ============================================================
+
+[env.production]
+name = "weatherlink-monitor"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "weatherlink-monitor"
+database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"
+
+[env.production.triggers]
+# Disabled - cron-job.org handles :00, :15, :30, :45
+crons = []
+
+[env.production.vars]
 ENVIRONMENT = "production"
 
 # Secrets (set via: wrangler secret put SECRET_NAME)

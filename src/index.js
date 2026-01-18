@@ -553,10 +553,77 @@ async function handleStorageStats(env, corsHeaders = {}) {
 
 // Station category mapping (same as dashboard)
 const STATION_CATEGORIES = {
-  'KCAISLA5': 'corporate', 'IPNIAR1': 'corporate', 'I40aboroad': 'corporate',
-  'KMISOL72': 'corporate', 'KWWISLA2': 'owner', 'KLHRPAK12': 'owner',
-  'KPMD1': 'reference', 'KPMD2': 'reference', 'KPMD4': 'reference'
-  // Add more mappings as needed
+  '217041': 'community', '160484': 'corporate', '224681': 'owner', '160497': 'community',
+  '169631': 'community', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
+  '169682': 'community', '169694': 'community', 'C13': 'community', '165897': 'community',
+  '176678': 'community', '176749': 'community', '169767': 'community', 'C14': 'reference',
+  '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
+  '163746': 'community', '192287': 'corporate', '176854': 'corporate', '177200': 'community',
+  '169859': 'community', 'IPASRU1': 'wu', '161483': 'community', '207397': 'community',
+  'C20': 'community', '163831': 'community', '163843': 'community', '169947': 'community',
+  '172461': 'reference', '172475': 'reference', '174619': 'community', '161580': 'community',
+  '188331': 'corporate', '188337': 'corporate', '177303': 'reference', '177310': 'reference',
+  '198090': 'corporate', '177389': 'community', '172577': 'community', '177408': 'corporate',
+  'C11': 'community', 'C15': 'community', '186109': 'corporate', '1294980': 'corporate',
+  '159738': 'corporate', '163601': 'corporate', '163333': 'community', '158829': 'corporate',
+  'C21': 'community', '164176': 'corporate', '169205': 'corporate', 'C16': 'community',
+  'C17': 'reference', '160691': 'reference', '160700': 'community', '170332': 'community',
+  '175132': 'corporate', '147761': 'community', '147492': 'community', '162057': 'community',
+  '162130': 'community', '164315': 'community', '164179': 'corporate', '164181': 'corporate',
+  '170382': 'community', '175222': 'corporate', 'C12': 'community', '188822': 'corporate',
+  '188834': 'corporate', '177683': 'reference', '170426': 'community', '170433': 'community',
+  '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
+  '177740': 'reference', '177802': 'community', '170462': 'community', '170469': 'community',
+  '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
+  '170556': 'corporate', '162416': 'community', '162474': 'reference', 'C23': 'reference',
+  '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
+  '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
+  '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
+  '164690': 'community', '191766': 'corporate', '168734': 'community', '170712': 'community',
+  '175682': 'community', '166840': 'corporate', '166842': 'community', '168851': 'community',
+  '178269': 'corporate', '170725': 'community', '170765': 'community', '175830': 'corporate',
+  '174057': 'community', '162588': 'community', '166865': 'community', '166868': 'community',
+  '168865': 'community', '175970': 'corporate', '166904': 'community', '166907': 'community',
+  '169020': 'community', '178395': 'community', '178386': 'community', '166990': 'community',
+  '167006': 'community', '192289': 'corporate', '202668': 'corporate', '160726': 'community',
+  '160777': 'corporate', 'C7': 'reference', '178475': 'reference', '178480': 'community',
+  'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
+  'C26': 'owner', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
+  '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
+  '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
+  '169407': 'community', '169438': 'community', '169455': 'community', 'C6': 'corporate',
+  '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'community',
+  '169500': 'community', '174130': 'community', '163360': 'community', '163347': 'community',
+  '169639': 'community', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
+  'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
+  '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'reference',
+  '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
+  'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
+  'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
+  'IPUNJABR2': 'wu', 'IRAWAL18': 'wu', 'IRAWAL29': 'wu', 'IRAWAL16': 'wu',
+  'INUSHK12': 'wu', 'IFEDERAL8': 'wu', 'IKMILPUR2': 'wu', 'IKHYBERP3': 'wu',
+  'IKHYBE2': 'wu', 'ILAHOR14': 'wu', 'I90582126': 'wu', 'I90582706': 'wu',
+  'ISINDH20': 'wu', 'ISINDH23': 'wu', 'ISINDH25': 'wu', 'IMURID1': 'wu',
+  'ITURBA4': 'wu', 'IKARAC33': 'wu', 'IKARAC12': 'wu', 'IKARAC25': 'wu',
+  'IKARAC24': 'wu', 'IKARAC17': 'wu', 'ITANDO3': 'wu', 'IKARAC38': 'wu',
+  'IJATI2': 'wu', '101361': 'corporate', '104536': 'corporate', '117090': 'corporate',
+  '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'owner',
+  '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'owner',
+  '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
+  '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'owner',
+  '131643': 'reference', '131893': 'reference', '220024': 'corporate', '132393': 'community',
+  '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
+  '133035': 'corporate', '133150': 'owner', '133253': 'community', '133425': 'community',
+  '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
+  '201736': 'community', '129498': 'community', '134268': 'community', '134297': 'community',
+  'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
+  'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
+  'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
+  '150367': 'reference', '150967': 'corporate', '131812': 'reference', '129090': 'community',
+  '129952': 'community', '142628': 'corporate', '139347': 'community', '133500': 'community',
+  '217831': 'community', '216612': 'corporate', '221544': 'corporate', '221563': 'corporate',
+  '221555': 'corporate', '221695': 'corporate', '221726': 'corporate', '221703': 'corporate',
+  '221746': 'corporate', '221873': 'corporate', '221910': 'corporate', '221938': 'corporate'
 };
 
 async function generateDailyReportData(env) {
@@ -637,9 +704,9 @@ async function generateDailyReportData(env) {
     };
   });
   
-  // Find MAX temperature with station name
+  // Find MAX temperature with station name (only from stations online in last 24h)
   const stationsWithTemp = stations
-    .filter(s => s.status === 'Active' && s.temperature !== null)
+    .filter(s => s.status === 'Active' && s.temperature !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
     .map(s => ({ name: s.station_name, temp: parseFloat(s.temperature) }))
     .filter(s => !isNaN(s.temp));
   
@@ -651,9 +718,9 @@ async function generateDailyReportData(env) {
     maxTempStation = maxTempObj.name;
   }
   
-  // Find MAX rainfall with station name
+  // Find MAX rainfall with station name (only from stations that had at least 1 online check in last 24h)
   const stationsWithRain = stations
-    .filter(s => s.rainfall !== null)
+    .filter(s => s.rainfall !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
     .map(s => ({ name: s.station_name, rain: parseFloat(s.rainfall) }))
     .filter(s => !isNaN(s.rain) && s.rain > 0);
   
@@ -724,60 +791,176 @@ async function handleDailyReportExcel(env, corsHeaders) {
   try {
     const report = await generateDailyReportData(env);
     
-    // Generate CSV content (Excel compatible)
-    const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Uptime 24h (%)', 'Last Seen'];
+    // Category colors for styling
+    const categoryColors = {
+      'Corporate': { bg: '#dbeafe', text: '#1e40af' },
+      'Community': { bg: '#dcfce7', text: '#166534' },
+      'Reference': { bg: '#fef3c7', text: '#92400e' },
+      'Owner': { bg: '#f3e8ff', text: '#7c3aed' },
+      'WU': { bg: '#ffe4e6', text: '#be123c' },
+      'Unknown': { bg: '#f1f5f9', text: '#475569' }
+    };
     
-    const rows = report.all_stations.map(s => [
-      s.station_id,
-      `"${(s.station_name || '').replace(/"/g, '""')}"`,
-      s.api_source,
-      s.status,
-      s.category,
-      s.temperature !== null ? s.temperature : '',
-      s.rainfall !== null ? s.rainfall : '',
-      s.uptime_24h,
-      s.last_seen || ''
-    ]);
+    // Get status color
+    const getStatusStyle = (status) => {
+      return status === 'Active' 
+        ? 'background-color:#dcfce7; color:#166534; font-weight:bold;'
+        : 'background-color:#fee2e2; color:#dc2626; font-weight:bold;';
+    };
     
-    // Add summary section at top
-    const summary = [
-      ['WEATHER STATION DAILY REPORT'],
-      [`Generated: ${report.report_date}`],
-      [''],
-      ['SUMMARY'],
-      [`Total Stations: ${report.summary.total_stations}`],
-      [`Online: ${report.summary.online}`],
-      [`Offline: ${report.summary.offline}`],
-      [`Uptime: ${report.summary.uptime_percentage}%`],
-      [`Max Temperature: ${report.summary.max_temperature || 'N/A'}°C at ${report.summary.max_temp_station || 'N/A'}`],
-      [`Max Rainfall: ${report.summary.max_rainfall} mm at ${report.summary.max_rainfall_station}`],
-      [''],
-      ['CATEGORY BREAKDOWN'],
-      ['Category', 'Online', 'Offline', 'Total', 'Uptime %'],
-      ...Object.entries(report.category_breakdown).map(([cat, stats]) => 
-        [cat.charAt(0).toUpperCase() + cat.slice(1), stats.online, stats.offline, stats.total, stats.uptime_pct + '%']
-      ),
-      [''],
-      ['SOURCE BREAKDOWN'],
-      ['Source', 'Online', 'Offline', 'Total', 'Uptime %'],
-      ...Object.entries(report.source_breakdown).map(([src, stats]) => 
-        [src, stats.online, stats.offline, stats.total, stats.uptime_pct + '%']
-      ),
-      [''],
-      ['STATION DETAILS'],
-      headers,
-      ...rows
-    ];
+    // Get category style
+    const getCategoryStyle = (category) => {
+      const cat = categoryColors[category] || categoryColors['Unknown'];
+      return `background-color:${cat.bg}; color:${cat.text}; font-weight:500;`;
+    };
     
-    const csvContent = summary.map(row => row.join(',')).join('\n');
+    // Get uptime color
+    const getUptimeStyle = (uptime) => {
+      const val = parseFloat(uptime) || 0;
+      if (val >= 95) return 'background-color:#dcfce7; color:#166534;';
+      if (val >= 80) return 'background-color:#fef3c7; color:#92400e;';
+      return 'background-color:#fee2e2; color:#dc2626;';
+    };
+    
+    // Build HTML Excel file
+    const html = `
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head>
+  <meta charset="UTF-8">
+  <meta name="ProgId" content="Excel.Sheet">
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
+    th { background-color: #0284c7; color: white; font-weight: bold; }
+    .title { font-size: 24px; font-weight: bold; color: #0284c7; border: none; padding: 15px 0; }
+    .subtitle { font-size: 14px; color: #64748b; border: none; padding: 5px 0; }
+    .section-header { font-size: 16px; font-weight: bold; background-color: #f1f5f9; color: #1e293b; padding: 10px; margin-top: 20px; }
+    .summary-table td { border: 1px solid #e2e8f0; }
+    .summary-label { background-color: #f8fafc; font-weight: 600; width: 200px; }
+    .summary-value { font-weight: bold; }
+    .online { color: #16a34a; font-weight: bold; }
+    .offline { color: #dc2626; font-weight: bold; }
+    .zebra-even { background-color: #f8fafc; }
+    .stat-box { text-align: center; padding: 15px; }
+    .stat-value { font-size: 28px; font-weight: bold; }
+    .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <!-- Report Header -->
+  <table>
+    <tr><td class="title" colspan="9">🌤️ Weather Station Daily Report</td></tr>
+    <tr><td class="subtitle" colspan="9">Generated: ${report.report_date} PKT</td></tr>
+    <tr><td colspan="9" style="border:none; height:20px;"></td></tr>
+  </table>
+  
+  <!-- Summary Stats -->
+  <table class="summary-table" style="width:auto; margin-bottom:20px;">
+    <tr style="background-color:#0284c7; color:white;">
+      <th style="text-align:center; width:120px;">Total</th>
+      <th style="text-align:center; width:120px;">Online</th>
+      <th style="text-align:center; width:120px;">Offline</th>
+      <th style="text-align:center; width:120px;">Uptime</th>
+      <th style="text-align:center; width:150px;">Max Temp</th>
+      <th style="text-align:center; width:150px;">Max Rainfall</th>
+    </tr>
+    <tr>
+      <td style="text-align:center; font-size:20px; font-weight:bold;">${report.summary.total_stations}</td>
+      <td style="text-align:center; font-size:20px; font-weight:bold; color:#16a34a;">${report.summary.online}</td>
+      <td style="text-align:center; font-size:20px; font-weight:bold; color:#dc2626;">${report.summary.offline}</td>
+      <td style="text-align:center; font-size:20px; font-weight:bold;">${report.summary.uptime_percentage}%</td>
+      <td style="text-align:center; font-size:16px; font-weight:bold;">${report.summary.max_temperature || 'N/A'}°C<br><span style="font-size:11px; color:#64748b;">${report.summary.max_temp_station || ''}</span></td>
+      <td style="text-align:center; font-size:16px; font-weight:bold;">${report.summary.max_rainfall} mm<br><span style="font-size:11px; color:#64748b;">${report.summary.max_rainfall_station}</span></td>
+    </tr>
+  </table>
+  
+  <!-- Category Breakdown -->
+  <table style="width:auto; margin-bottom:20px;">
+    <tr><td colspan="5" class="section-header">📊 Category Breakdown</td></tr>
+    <tr style="background-color:#0284c7; color:white;">
+      <th style="width:150px;">Category</th>
+      <th style="width:80px; text-align:center;">Online</th>
+      <th style="width:80px; text-align:center;">Offline</th>
+      <th style="width:80px; text-align:center;">Total</th>
+      <th style="width:100px; text-align:center;">Uptime %</th>
+    </tr>
+    ${Object.entries(report.category_breakdown).map(([cat, stats], idx) => `
+    <tr${idx % 2 === 1 ? ' class="zebra-even"' : ''}>
+      <td style="${getCategoryStyle(cat.charAt(0).toUpperCase() + cat.slice(1))}">${cat.charAt(0).toUpperCase() + cat.slice(1)}</td>
+      <td style="text-align:center;" class="online">${stats.online}</td>
+      <td style="text-align:center;" class="offline">${stats.offline}</td>
+      <td style="text-align:center; font-weight:bold;">${stats.total}</td>
+      <td style="text-align:center; ${getUptimeStyle(stats.uptime_pct)}">${stats.uptime_pct}%</td>
+    </tr>`).join('')}
+  </table>
+  
+  <!-- Source Breakdown -->
+  <table style="width:auto; margin-bottom:20px;">
+    <tr><td colspan="5" class="section-header">🔌 Source Breakdown</td></tr>
+    <tr style="background-color:#0284c7; color:white;">
+      <th style="width:150px;">Source</th>
+      <th style="width:80px; text-align:center;">Online</th>
+      <th style="width:80px; text-align:center;">Offline</th>
+      <th style="width:80px; text-align:center;">Total</th>
+      <th style="width:100px; text-align:center;">Uptime %</th>
+    </tr>
+    ${Object.entries(report.source_breakdown).map(([src, stats], idx) => `
+    <tr${idx % 2 === 1 ? ' class="zebra-even"' : ''}>
+      <td style="font-weight:500;">${src}</td>
+      <td style="text-align:center;" class="online">${stats.online}</td>
+      <td style="text-align:center;" class="offline">${stats.offline}</td>
+      <td style="text-align:center; font-weight:bold;">${stats.total}</td>
+      <td style="text-align:center; ${getUptimeStyle(stats.uptime_pct)}">${stats.uptime_pct}%</td>
+    </tr>`).join('')}
+  </table>
+  
+  <!-- Station Details -->
+  <table>
+    <tr><td colspan="9" class="section-header">📋 Station Details (${report.all_stations.length} stations)</td></tr>
+    <tr style="background-color:#0284c7; color:white;">
+      <th>Station ID</th>
+      <th>Station Name</th>
+      <th>Source</th>
+      <th style="text-align:center;">Status</th>
+      <th>Category</th>
+      <th style="text-align:center;">Temp (°C)</th>
+      <th style="text-align:center;">Rain (mm)</th>
+      <th style="text-align:center;">Uptime 24h</th>
+      <th>Last Seen</th>
+    </tr>
+    ${report.all_stations.map((s, idx) => `
+    <tr${idx % 2 === 1 ? ' class="zebra-even"' : ''}>
+      <td>${s.station_id}</td>
+      <td style="font-weight:500;">${s.station_name || ''}</td>
+      <td>${s.api_source || ''}</td>
+      <td style="text-align:center; ${getStatusStyle(s.status)}">${s.status === 'Active' ? '● Online' : '● Offline'}</td>
+      <td style="${getCategoryStyle(s.category)}">${s.category || 'Unknown'}</td>
+      <td style="text-align:center;">${s.temperature !== null ? s.temperature : '-'}</td>
+      <td style="text-align:center;">${s.rainfall !== null ? s.rainfall : '-'}</td>
+      <td style="text-align:center; ${getUptimeStyle(s.uptime_24h)}">${s.uptime_24h}%</td>
+      <td style="font-size:11px; color:#64748b;">${s.last_seen || '-'}</td>
+    </tr>`).join('')}
+  </table>
+  
+  <!-- Footer -->
+  <table>
+    <tr><td colspan="9" style="border:none; height:20px;"></td></tr>
+    <tr><td colspan="9" style="border:none; text-align:center; color:#64748b; font-size:11px;">
+      Generated by WeatherWalay Dashboard • ${report.report_date}
+    </td></tr>
+  </table>
+</body>
+</html>`;
     
     const now = new Date();
-    const filename = `weather_report_${now.toISOString().split('T')[0]}.csv`;
+    const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
     
-    return new Response(csvContent, {
+    return new Response(html, {
       headers: {
         ...corsHeaders,
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.ms-excel; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         'Pragma': 'no-cache'
@@ -1649,6 +1832,26 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
   try {
     let stationIds = [];
     
+    // Get time range from query parameter
+    const url = new URL(request.url);
+    const range = url.searchParams.get('range') || '24h';
+    const startDate = url.searchParams.get('start'); // For custom range
+    const endDate = url.searchParams.get('end'); // For custom range
+    
+    // Calculate time filter based on range
+    let timeFilter = "datetime('now', '-24 hours')";
+    if (range === 'daily') {
+      timeFilter = "date('now', 'start of day')";
+    } else if (range === '7d') {
+      timeFilter = "datetime('now', '-7 days')";
+    } else if (range === '30d') {
+      timeFilter = "datetime('now', '-30 days')";
+    } else if (range === '1y') {
+      timeFilter = "datetime('now', '-1 year')";
+    } else if (range === 'custom' && startDate && endDate) {
+      timeFilter = `'${startDate}'`;
+    }
+    
     // Check if this is a POST request with station IDs
     if (request.method === 'POST') {
       try {
@@ -1713,17 +1916,33 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
         result = allStations;
       }
 
-      // Get uptime data from database for all stations (last 24 hours)
-      const uptimeQuery = await env.DB.prepare(`
+      // Get uptime data from database for all stations based on time range
+      let uptimeSQL = `
         SELECT 
           station_id,
           COUNT(*) as total_checks,
           SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
           MIN(timestamp) as first_check
         FROM status_logs 
-        WHERE timestamp >= datetime('now', '-24 hours')
+        WHERE timestamp >= ${timeFilter}
         GROUP BY station_id
-      `).all();
+      `;
+      
+      // For custom range, add end date filter
+      if (range === 'custom' && startDate && endDate) {
+        uptimeSQL = `
+          SELECT 
+            station_id,
+            COUNT(*) as total_checks,
+            SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
+            MIN(timestamp) as first_check
+          FROM status_logs 
+          WHERE timestamp >= '${startDate}' AND timestamp <= '${endDate}'
+          GROUP BY station_id
+        `;
+      }
+      
+      const uptimeQuery = await env.DB.prepare(uptimeSQL).all();
       
       const uptimeMap = {};
       for (const row of (uptimeQuery.results || [])) {

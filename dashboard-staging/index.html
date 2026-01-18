@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weatherwalay Stations Monitoring Dashboard</title>
+    <title>[STAGING] Weatherwalay Dashboard</title>
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
@@ -649,9 +649,8 @@
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
             display: flex;
-            flex-wrap: wrap;
+            justify-content: space-between;
             align-items: center;
-            gap: 12px;
         }
         
         .list-title {
@@ -883,104 +882,53 @@
             box-shadow: 0 0 6px #9ca3af;
         }
         
-        /* Category Dropdown */
-        .category-dropdown {
-            padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            min-width: 180px;
-        }
-        
-        .category-dropdown:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-        }
-        
-        /* Time Range Toggle */
-        .time-range-toggle {
+        /* Category Tabs */
+        .category-tabs {
             display: flex;
-            gap: 4px;
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 4px;
-        }
-        
-        .time-range-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .time-range-btn:hover {
-            background: rgba(14, 165, 233, 0.1);
-            color: var(--text-primary);
-        }
-        
-        .time-range-btn.active {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .date-input {
-            padding: 6px 10px;
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 12px;
-            cursor: pointer;
-        }
-        
-        .date-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        .apply-btn {
-            padding: 6px 14px;
-            background: var(--success);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .apply-btn:hover {
-            background: #059669;
-        }
-        
-        .list-filters {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+            gap: 8px;
+            flex-wrap: wrap;
             margin-bottom: 15px;
             padding-bottom: 15px;
             border-bottom: 1px solid var(--border);
-            flex-wrap: wrap;
         }
         
-        .filter-label {
-            font-size: 12px;
+        .category-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: transparent;
             color: var(--text-secondary);
-            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
         }
-
+        
+        .category-tab:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+        
+        .category-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .cat-count {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .category-tab.active .cat-count {
+            background: rgba(255,255,255,0.3);
+        }
+        
         /* Category Badges */
         .category-badge {
             display: inline-flex;
@@ -1291,10 +1239,6 @@
                 gap: 8px;
             }
             
-            .category-dropdown {
-                width: 100%;
-            }
-            
             .category-tabs {
                 flex-wrap: wrap;
                 gap: 5px;
@@ -1308,25 +1252,6 @@
             .filter-btn {
                 padding: 8px 12px;
                 font-size: 12px;
-            }
-            
-            /* Custom date picker mobile styles */
-            #customDateRange {
-                flex-direction: column;
-                align-items: stretch !important;
-                gap: 10px !important;
-            }
-            
-            #customDateRange .date-input {
-                width: 100%;
-                padding: 12px;
-                font-size: 14px;
-            }
-            
-            #customDateRange .apply-btn {
-                width: 100%;
-                padding: 12px;
-                font-size: 14px;
             }
             
             .export-buttons {
@@ -1376,34 +1301,11 @@
             }
             
             table {
-                font-size: 11px;
-                min-width: 500px;
+                font-size: 12px;
             }
             
             th, td {
-                padding: 6px 4px;
-            }
-            
-            /* Hide Source (2nd) and POI (7th) columns on mobile */
-            th:nth-child(2), td:nth-child(2),
-            th:nth-child(7), td:nth-child(7) {
-                display: none;
-            }
-            
-            /* Hide station ID on mobile to save space */
-            td:first-child small {
-                display: none;
-            }
-            
-            /* Compact status badge on mobile */
-            .status-badge {
-                padding: 3px 6px;
-                font-size: 9px;
-            }
-            
-            .table-container {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
+                padding: 8px 6px;
             }
             
             .offline-panel {
@@ -1635,54 +1537,45 @@
             <!-- Station List -->
             <div class="station-list">
                 <div class="list-header">
-                    <h2 class="list-title" style="margin: 0;">All Stations:</h2>
-                    
-                    <!-- Controls Row -->
-                    <div class="controls" style="gap: 8px;">
-                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 120px;">
-                        <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)" style="min-width: 120px;">
-                            <option value="all">📊 All Categories</option>
-                            <option value="corporate">🏢 Corporate</option>
-                            <option value="community">👥 Community</option>
-                            <option value="reference">📍 Reference</option>
-                            <option value="owner">👤 Employee</option>
-                            <option value="wu">🌐 Others</option>
-                        </select>
-                        <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
+                    <h2 class="list-title">All Stations</h2>
+                    <!-- Category Tabs -->
+                    <div class="category-tabs">
+                        <button class="category-tab active" data-category="all">
+                            <span>📊</span> All <span class="cat-count" id="countAll">0</span>
+                        </button>
+                        <button class="category-tab" data-category="corporate">
+                            <span>🏢</span> Corporate <span class="cat-count" id="countCorporate">0</span>
+                        </button>
+                        <button class="category-tab" data-category="community">
+                            <span>👥</span> Community <span class="cat-count" id="countCommunity">0</span>
+                        </button>
+                        <button class="category-tab" data-category="reference">
+                            <span>📍</span> Reference <span class="cat-count" id="countReference">0</span>
+                        </button>
+                        <button class="category-tab" data-category="owner">
+                            <span>👤</span> Employee Stations <span class="cat-count" id="countOwner">0</span>
+                        </button>
+                        <button class="category-tab" data-category="wu">
+                            <span>🌐</span> Others <span class="cat-count" id="countWU">0</span>
+                        </button>
+                    </div>
+                    <div class="controls">
+                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search stations...">
+                        <select id="sourceFilter" class="source-filter">
                             <option value="all">All Sources</option>
                             <option value="Davis">Davis</option>
                             <option value="Misol">Misol</option>
                             <option value="WU">WU</option>
                         </select>
-                        <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)" style="min-width: 110px;">
-                            <option value="all">🔘 All Status</option>
-                            <option value="active">🟢 Active</option>
-                            <option value="inactive">🔴 Inactive</option>
-                            <option value="disabled">⚫ Disabled</option>
-                        </select>
-                        <select id="exportDropdown" class="source-filter" onchange="handleExport(this.value)" style="min-width: 100px;">
-                            <option value="">📤 Export</option>
-                            <option value="csv">📥 CSV</option>
-                            <option value="excel">📊 Excel</option>
-                            <option value="print">🖨️ Print</option>
-                        </select>
-                        <select id="uptimePeriod" class="source-filter" onchange="handleUptimePeriod(this.value)" style="min-width: 120px;">
-                            <option value="24h">⏱️ 24h</option>
-                            <option value="daily">⏱️ Today</option>
-                            <option value="7d">⏱️ 7D</option>
-                            <option value="30d">⏱️ 30D</option>
-                            <option value="1y">⏱️ 1Y</option>
-                            <option value="custom">⏱️ Custom</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Custom Date Range Row (hidden by default) -->
-                    <div id="customDateRange" style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
-                        <span style="color: var(--text-secondary); font-size: 13px;">Custom Range:</span>
-                        <input type="date" id="startDate" class="date-input" title="Start Date">
-                        <span style="color: var(--text-secondary);">to</span>
-                        <input type="date" id="endDate" class="date-input" title="End Date">
-                        <button class="apply-btn" onclick="applyCustomRange()">Apply</button>
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="active">Active</button>
+                        <button class="filter-btn" data-filter="inactive">Inactive</button>
+                        <button class="filter-btn" data-filter="disabled">Disabled</button>
+                        <div class="export-buttons">
+                            <button class="export-btn" onclick="exportToCSV()" title="Export to CSV">📥 CSV</button>
+                            <button class="export-btn excel" onclick="downloadDailyReport()" title="Download Full Report">📊 Excel</button>
+                            <button class="export-btn" onclick="exportToPDF()" title="Print Report">🖨️ Print</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -2046,9 +1939,9 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // Configuration
+        // Configuration - STAGING ENVIRONMENT
         const API_BASE = 'https://hubservice.weatherwalay.com';
-        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Your Cloudflare Worker URL
+        const WORKER_API = 'https://weatherlink-monitor-staging.mashhood2717.workers.dev'; // STAGING Worker URL
         
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
@@ -3160,133 +3053,6 @@
             return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
         }
         
-        // Current time range for filtering
-        let currentTimeRange = '24h';
-        
-        // Filter by category dropdown
-        function filterByCategory(category) {
-            currentCategory = category;
-            renderTable();
-            updateMapMarkers();
-            updateCategoryChart();
-            
-            // Update count display
-            const counts = {
-                all: allStations.length,
-                corporate: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'corporate').length,
-                community: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'community').length,
-                reference: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'reference').length,
-                owner: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'owner').length,
-                wu: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu').length
-            };
-            const count = counts[category] || counts.all;
-            document.getElementById('countAll').textContent = count;
-        }
-        
-        // Set time range for uptime display
-        function setTimeRange(range) {
-            currentTimeRange = range;
-            
-            // Update active button
-            document.querySelectorAll('.time-range-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.range === range);
-            });
-            
-            // Hide custom date picker if not custom
-            if (range !== 'custom') {
-                document.getElementById('customDateRange').style.display = 'none';
-                // Refresh data with new time range
-                loadUptimeData(range);
-            }
-        }
-        
-        // Show custom date picker
-        function showCustomDatePicker() {
-            currentTimeRange = 'custom';
-            
-            // Update active button
-            document.querySelectorAll('.time-range-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.range === 'custom');
-            });
-            
-            // Show date pickers
-            const customDiv = document.getElementById('customDateRange');
-            customDiv.style.display = 'flex';
-            
-            // Set default dates (last 7 days)
-            const today = new Date();
-            const weekAgo = new Date(today);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            
-            document.getElementById('endDate').value = today.toISOString().split('T')[0];
-            document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
-        }
-        
-        // Apply custom date range
-        function applyCustomRange() {
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            
-            if (!startDate || !endDate) {
-                showNotification('Please select both start and end dates', 'error');
-                return;
-            }
-            
-            if (new Date(startDate) > new Date(endDate)) {
-                showNotification('Start date must be before end date', 'error');
-                return;
-            }
-            
-            loadUptimeData('custom', startDate, endDate);
-        }
-        
-        // Load uptime data for selected time range
-        async function loadUptimeData(range, startDate = null, endDate = null) {
-            try {
-                showNotification('Loading uptime data...', 'info');
-                
-                let url = `${WORKER_API}/api/uptime-percentages?range=${range}`;
-                if (range === 'custom' && startDate && endDate) {
-                    url += `&start=${startDate}&end=${endDate}`;
-                }
-                
-                const response = await fetch(url);
-                if (!response.ok) {
-                    showNotification('Failed to load uptime data', 'error');
-                    return;
-                }
-                
-                const data = await response.json();
-                if (!data.uptime_data) {
-                    showNotification('No uptime data returned', 'error');
-                    return;
-                }
-                
-                // Update station uptime values
-                const uptimeMap = {};
-                data.uptime_data.forEach(u => {
-                    uptimeMap[u.station_id] = u.uptime_24h;
-                });
-                
-                // Update allStations with new uptime
-                let updatedCount = 0;
-                allStations = allStations.map(s => {
-                    const newUptime = uptimeMap[s.station_id];
-                    if (newUptime !== undefined) {
-                        updatedCount++;
-                        return { ...s, uptime_24h: newUptime };
-                    }
-                    return s;
-                });
-                
-                renderTable();
-                showNotification(`Uptime updated for ${updatedCount} stations (${range})`, 'success');
-            } catch (e) {
-                console.warn('Failed to load uptime data for range:', range, e);
-                showNotification('Error loading uptime: ' + e.message, 'error');
-            }
-        }
-        
         // Render table
         function renderTable() {
             let stations = [...allStations];
@@ -3324,26 +3090,21 @@
             
             // Sort
             stations.sort((a, b) => {
-                let aVal, bVal;
+                let aVal = a[sortColumn];
+                let bVal = b[sortColumn];
                 
                 if (sortColumn === 'temperature') {
-                    aVal = parseFloat(a.temperature) || -999;
-                    bVal = parseFloat(b.temperature) || -999;
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
                 } else if (sortColumn === 'rainfall') {
-                    aVal = parseFloat(a.rainfall) || 0;
-                    bVal = parseFloat(b.rainfall) || 0;
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
                 } else if (sortColumn === 'uptime') {
-                    aVal = parseFloat(a.uptime_24h) || 0;
-                    bVal = parseFloat(b.uptime_24h) || 0;
-                } else if (sortColumn === 'name') {
-                    aVal = String(a.station_name || '').toLowerCase();
-                    bVal = String(b.station_name || '').toLowerCase();
-                } else if (sortColumn === 'status') {
-                    aVal = String(a.status || '').toLowerCase();
-                    bVal = String(b.status || '').toLowerCase();
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
                 } else {
-                    aVal = String(a[sortColumn] || '').toLowerCase();
-                    bVal = String(b[sortColumn] || '').toLowerCase();
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
                 }
                 
                 if (sortDirection === 'asc') {
@@ -3874,44 +3635,6 @@
             // Removed from header - no action needed
         }
         
-        // Handle export dropdown
-        function handleExport(value) {
-            if (!value) return;
-            
-            switch(value) {
-                case 'csv':
-                    exportToCSV();
-                    break;
-                case 'excel':
-                    downloadDailyReport();
-                    break;
-                case 'print':
-                    exportToPDF();
-                    break;
-            }
-            
-            // Reset dropdown to default
-            document.getElementById('exportDropdown').value = '';
-        }
-        
-        // Filter by status dropdown
-        function filterByStatus(status) {
-            currentFilter = status;
-            renderTable();
-        }
-        
-        // Handle uptime period dropdown
-        function handleUptimePeriod(value) {
-            currentTimeRange = value;
-            if (value === 'custom') {
-                showCustomDatePicker();
-            } else {
-                document.getElementById('customDateRange').style.display = 'none';
-                loadUptimeData(value);
-                showNotification(`Uptime period changed to ${value}`, 'info');
-            }
-        }
-        
         // Export stations to CSV
         function exportToCSV() {
             const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Availability (%)', 'Location', 'Latitude', 'Longitude', 'Last Update'];
@@ -4086,7 +3809,7 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const now = new Date();
-                const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
+                const filename = `weather_report_${now.toISOString().split('T')[0]}.csv`;
                 
                 link.setAttribute('href', url);
                 link.setAttribute('download', filename);
@@ -4307,7 +4030,17 @@
                 });
             });
             
-            // Category dropdown - handled via onchange in HTML
+            // Category tabs
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentCategory = tab.dataset.category;
+                    renderTable();
+                    updateMapMarkers();
+                    updateCategoryChart();
+                });
+            });
             
             // Chart group toggles (Category / Source)
             document.getElementById('btnCategory')?.addEventListener('click', () => {
