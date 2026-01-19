@@ -611,7 +611,7 @@ const STATION_CATEGORIES = {
   '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'owner',
   '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
   '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'owner',
-  '131643': 'reference', '131893': 'reference', '220024': 'corporate', '132393': 'community',
+  '131643': 'owner', '131893': 'owner', '220024': 'corporate', '132393': 'community',
   '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
   '133035': 'corporate', '133150': 'owner', '133253': 'community', '133425': 'community',
   '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
@@ -1278,151 +1278,83 @@ async function syncAllStations(env, corsHeaders = {}) {
 // New endpoint: return stations joined with 24h uptime in a single query
 async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
   try {
-    // Check how many stations we have in our local `stations` table.
-    const cntRes = await env.DB.prepare(`SELECT COUNT(*) as cnt FROM stations`).first();
-    const cnt = (cntRes && cntRes.cnt) ? parseInt(cntRes.cnt) : 0;
-
-    // If the local table is small (e.g. < 100), fall back to HubService to fetch the full list
-    let stationMeta = [];
-    let hubDataMap = {}; // Store HubService data by station_id for live readings
+    // Simplified query - just fetch from HubService and add basic uptime from a single query
+    let stations = [];
     
-    // Always try to fetch from HubService to get live temperature/rainfall
+    // Fetch live data from HubService
     try {
       const hubStations = await fetchAllStationsFromHubService(env);
-      hubStations.forEach(s => {
-        hubDataMap[s.stationID] = {
-          temperature: s.temperature,
-          rainfall: s.rainfall,
-          status: s.status
-        };
-      });
-      
-      if (cnt < 100) {
-        stationMeta = hubStations.map(s => ({
-          station_id: s.stationID,
-          station_name: s.stationName,
-          location: s.stationName,
-          latitude: s.lat,
-          longitude: s.long,
-          temperature: s.temperature,
-          rainfall: s.rainfall,
-          api_source: s.apiSource,
-          status: s.status
-        }));
-      }
+      stations = hubStations.map(s => ({
+        station_id: s.stationID,
+        station_name: s.stationName,
+        location: s.stationName,
+        latitude: s.lat,
+        longitude: s.long,
+        temperature: s.temperature,
+        rainfall: s.rainfall,
+        api_source: s.apiSource,
+        status: s.status,
+        is_active: s.status === 'Active' ? 1 : 0,
+        last_update: null,
+        last_seen: null,
+        checks_24h: 0,
+        uptime_24h: null
+      }));
     } catch (e) {
-      console.warn('Failed to fetch HubService stations:', e.message);
+      console.warn('Failed to fetch HubService:', e.message);
+      // Fallback to local DB
+      const res = await env.DB.prepare(`SELECT * FROM stations ORDER BY station_name`).all();
+      stations = (res.results || []).map(r => ({
+        station_id: r.station_id,
+        station_name: r.station_name,
+        location: r.location,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        api_source: r.api_source,
+        status: 'Unknown',
+        is_active: 0,
+        temperature: null,
+        rainfall: null,
+        last_update: null,
+        last_seen: null,
+        checks_24h: 0,
+        uptime_24h: null
+      }));
     }
 
-    // If fallback didn't run or failed, read from local `stations` table
-    if (stationMeta.length === 0) {
-      const res = await env.DB.prepare(`SELECT station_id, station_name, location, latitude, longitude, api_source FROM stations ORDER BY station_name COLLATE NOCASE ASC`).all();
-      stationMeta = (res.results || []).map(r => {
-        const hubData = hubDataMap[r.station_id] || {};
-        return {
-          station_id: r.station_id,
-          station_name: r.station_name,
-          location: r.location,
-          latitude: r.latitude,
-          longitude: r.longitude,
-          api_source: r.api_source || null,
-          temperature: hubData.temperature !== undefined ? hubData.temperature : null,
-          rainfall: hubData.rainfall !== undefined ? hubData.rainfall : null,
-          status: hubData.status || null
+    // Single optimized query for all uptime data
+    const uptimeSQL = `
+      SELECT station_id, 
+             COUNT(*) as checks_24h, 
+             SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as uptime_24h,
+             MAX(CASE WHEN is_online = 1 THEN datetime(timestamp, '+5 hours') END) as last_seen
+      FROM status_logs
+      WHERE timestamp >= datetime('now', '-24 hours')
+      GROUP BY station_id
+    `;
+    
+    const uptimeMap = {};
+    try {
+      const uptimeRes = await env.DB.prepare(uptimeSQL).all();
+      (uptimeRes.results || []).forEach(r => {
+        uptimeMap[String(r.station_id)] = {
+          checks_24h: r.checks_24h || 0,
+          uptime_24h: r.uptime_24h !== null ? Number(parseFloat(r.uptime_24h).toFixed(2)) : null,
+          last_seen: r.last_seen
         };
       });
+    } catch (e) {
+      console.warn('Uptime query failed:', e.message);
     }
 
-    // Aggregate checks for the set of station IDs (24h)
-    const ids = stationMeta.map(s => s.station_id).filter(Boolean);
-    let aggMap = {};
-    let latestMap = {};
-    let lastSeenOnlineMap = {};
-
-    if (ids.length > 0) {
-      // Process IDs in batches to avoid SQLite variable limit
-      const batchSize = 80;
-      for (let i = 0; i < ids.length; i += batchSize) {
-        const batch = ids.slice(i, i + batchSize);
-        const placeholders = batch.map(() => '?').join(',');
-
-        // Aggregated uptime in last 24h for this batch
-        const aggSQL = `
-          SELECT station_id, COUNT(*) as total_checks, SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks
-          FROM status_logs
-          WHERE timestamp >= datetime('now', '-24 hours') AND station_id IN (${placeholders})
-          GROUP BY station_id
-        `;
-        try {
-          const aggRes = await env.DB.prepare(aggSQL).bind(...batch).all();
-          (aggRes.results || []).forEach(r => {
-            aggMap[String(r.station_id)] = { total_checks: r.total_checks || 0, online_checks: r.online_checks || 0 };
-          });
-        } catch (e) {
-          console.warn('Batch agg query failed:', e.message);
-        }
-
-        // Latest status per station for this batch
-        const latestSQL = `
-          SELECT t1.station_id, t1.is_online, t1.temperature, t1.timestamp
-          FROM status_logs t1
-          WHERE t1.station_id IN (${placeholders})
-          AND t1.timestamp = (
-            SELECT MAX(t2.timestamp) FROM status_logs t2 WHERE t2.station_id = t1.station_id
-          )
-        `;
-        try {
-          const latestRes = await env.DB.prepare(latestSQL).bind(...batch).all();
-          (latestRes.results || []).forEach(r => {
-            latestMap[String(r.station_id)] = { is_online: r.is_online, temperature: r.temperature, last_update: r.timestamp };
-          });
-        } catch (e) {
-          console.warn('Batch latest query failed:', e.message);
-        }
-
-        // Last time each station was seen ONLINE (is_online = 1)
-        const lastSeenSQL = `
-          SELECT station_id, MAX(datetime(timestamp, '+5 hours')) as last_seen_online
-          FROM status_logs
-          WHERE station_id IN (${placeholders}) AND is_online = 1
-          GROUP BY station_id
-        `;
-        try {
-          const lastSeenRes = await env.DB.prepare(lastSeenSQL).bind(...batch).all();
-          (lastSeenRes.results || []).forEach(r => {
-            lastSeenOnlineMap[String(r.station_id)] = r.last_seen_online;
-          });
-        } catch (e) {
-          console.warn('Batch last_seen query failed:', e.message);
-        }
-      }
-    }
-
-    const stations = stationMeta.map(s => {
-      const id = String(s.station_id);
-      const agg = aggMap[id] || { total_checks: 0, online_checks: 0 };
-      const latest = latestMap[id] || {};
-      const uptime = agg.total_checks > 0 ? (agg.online_checks * 100.0 / agg.total_checks) : null;
-      // Use status from HubService if available, otherwise from latest log
-      const statusFromMeta = s.status;
-      const statusFromLog = latest.is_online === 1 ? 'Active' : (latest.is_online === 0 ? 'Inactive' : null);
-      // Last seen online - when station was last active
-      const lastSeenOnline = lastSeenOnlineMap[id] || null;
+    // Merge uptime data
+    stations = stations.map(s => {
+      const up = uptimeMap[String(s.station_id)] || {};
       return {
-        station_id: s.station_id,
-        station_name: s.station_name,
-        location: s.location,
-        latitude: s.latitude,
-        longitude: s.longitude,
-        api_source: s.api_source || null,
-        status: statusFromMeta || statusFromLog || 'Unknown',
-        is_active: (statusFromMeta === 'Active' || latest.is_online === 1) ? 1 : 0,
-        temperature: latest.temperature !== undefined ? latest.temperature : (s.temperature || null),
-        rainfall: s.rainfall || null,
-        last_update: latest.last_update || null,
-        last_seen: lastSeenOnline,
-        checks_24h: agg.total_checks || 0,
-        uptime_24h: uptime !== null ? Number(parseFloat(uptime).toFixed(2)) : null
+        ...s,
+        checks_24h: up.checks_24h || 0,
+        uptime_24h: up.uptime_24h !== undefined ? up.uptime_24h : null,
+        last_seen: up.last_seen || null
       };
     });
 
