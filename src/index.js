@@ -658,6 +658,7 @@ async function generateDailyReportData(env) {
     return {
       station_id: s.stationID,
       station_name: s.stationName,
+      poi: s.poi,
       status: s.status,
       category: category,
       api_source: s.apiSource || 'N/A',
@@ -707,7 +708,7 @@ async function generateDailyReportData(env) {
   // Find MAX temperature with station name (only from stations online in last 24h)
   const stationsWithTemp = stations
     .filter(s => s.status === 'Active' && s.temperature !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
-    .map(s => ({ name: s.station_name, temp: parseFloat(s.temperature) }))
+    .map(s => ({ name: s.poi || s.station_name, temp: parseFloat(s.temperature) }))
     .filter(s => !isNaN(s.temp));
   
   let maxTemp = null;
@@ -721,7 +722,7 @@ async function generateDailyReportData(env) {
   // Find MAX rainfall with station name (only from stations that had at least 1 online check in last 24h)
   const stationsWithRain = stations
     .filter(s => s.rainfall !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
-    .map(s => ({ name: s.station_name, rain: parseFloat(s.rainfall) }))
+    .map(s => ({ name: s.poi || s.station_name, rain: parseFloat(s.rainfall) }))
     .filter(s => !isNaN(s.rain) && s.rain > 0);
   
   let maxRainfall = '0.0';
@@ -737,7 +738,7 @@ async function generateDailyReportData(env) {
     .filter(s => s.status !== 'Active')
     .map(s => ({
       station_id: s.station_id,
-      station_name: s.station_name,
+      station_name: s.poi || s.station_name,
       api_source: s.api_source,
       category: s.category,
       last_seen: s.last_seen

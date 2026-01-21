@@ -4211,7 +4211,7 @@
                     const category = STATION_CATEGORIES[s.station_id] || 'community';
                     return {
                         station_id: s.station_id,
-                        station_name: s.station_name || s.location || `Station ${s.station_id}`,
+                        station_name: s.location || s.station_name || `Station ${s.station_id}`,
                         location: s.location || s.station_name || '',
                         latitude: parseFloat(s.latitude) || 0,
                         longitude: parseFloat(s.longitude) || 0,
