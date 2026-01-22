@@ -2678,8 +2678,8 @@
                 categoryUptimeChart.destroy();
             }
 
-            // Calculate uptime for each province
-            const provinces = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
+            // Calculate uptime for each province (API returns lowercase)
+            const provinces = ['islamabad', 'punjab', 'ajk', 'balochistan', 'gb', 'kpk', 'sindh'];
             const provinceNames = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
             const provinceColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
             const uptimeData = [];
@@ -2687,7 +2687,7 @@
             const totalData = [];
 
             provinces.forEach(prov => {
-                const provStations = allStations.filter(s => s.province === prov);
+                const provStations = allStations.filter(s => (s.province || '').toLowerCase() === prov);
                 const total = provStations.length;
                 const active = provStations.filter(s => s.status === 'Active').length;
 
@@ -4364,6 +4364,7 @@
                         last_seen: s.last_seen || null,
                         last_update: s.last_update || null,
                         category: category,
+                        province: s.province || '',
                         uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
                         checks_24h: s.checks_24h || 0,
                         uptime: s.uptime_24h !== undefined && s.uptime_24h !== null ? s.uptime_24h : (s.is_active === 1 ? 100.0 : 0.0)
