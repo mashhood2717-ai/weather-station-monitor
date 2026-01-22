@@ -1586,6 +1586,7 @@
                     <div style="font-size:13px; color:var(--text-secondary);">Group:</div>
                     <button id="btnCategory" class="chart-toggle active" data-group="category">Category</button>
                     <button id="btnSource" class="chart-toggle" data-group="source">Source</button>
+                    <button id="btnProvince" class="chart-toggle" data-group="province">Province</button>
                     <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Type:</div>
                     <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
@@ -2041,7 +2042,7 @@
     <script>
         // Configuration
         const API_BASE = 'https://hubservice.weatherwalay.com';
-        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Your Cloudflare Worker URL
+        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
         
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
@@ -2392,8 +2393,8 @@
         
         // Category Uptime Chart
         let categoryUptimeChart = null;
-            let categoryChartType = 'bar';
-            let chartGroupMode = 'category'; // 'category' or 'source'
+        let categoryChartType = 'bar';
+        let chartGroupMode = 'category'; // 'category', 'source', or 'province'
         
         function initCategoryUptimeChart() {
             const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
@@ -2656,6 +2657,146 @@
                                     label: function(context) {
                                         const idx = context.dataIndex;
                                         return [`Availability: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Province Uptime Chart - groups by province
+        function initProvinceUptimeChart() {
+            const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
+
+            if (categoryUptimeChart) {
+                categoryUptimeChart.destroy();
+            }
+
+            // Calculate uptime for each province
+            const provinces = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
+            const provinceNames = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
+            const provinceColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
+            const uptimeData = [];
+            const activeData = [];
+            const totalData = [];
+
+            provinces.forEach(prov => {
+                const provStations = allStations.filter(s => s.province === prov);
+                const total = provStations.length;
+                const active = provStations.filter(s => s.status === 'Active').length;
+
+                // Compute average uptime using stations that have real checks (checks_24h > 0).
+                // Prefer `uptime_24h` when present, otherwise fall back to `uptime` which may be supplied by realtime API.
+                const uptimes = provStations
+                    .filter(s => s.checks_24h && s.checks_24h > 0)
+                    .map(s => {
+                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
+                    })
+                    .filter(v => !isNaN(v));
+
+                let avgUptime = 0;
+                if (uptimes.length > 0) {
+                    const sum = uptimes.reduce((a, b) => a + b, 0);
+                    avgUptime = sum / uptimes.length;
+                } else {
+                    // No recorded checks for this province — show 0 rather than deriving from current state
+                    avgUptime = 0;
+                }
+
+                uptimeData.push(Number(avgUptime.toFixed(1)));
+                activeData.push(active);
+                totalData.push(total);
+            });
+
+            const chartType = categoryChartType === 'line' ? 'line' : 'bar';
+            const commonDataset = {
+                label: 'Uptime %',
+                data: uptimeData
+            };
+
+            if (chartType === 'bar') {
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: provinceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            backgroundColor: provinceColors.map(c => c + '80'),
+                            borderColor: provinceColors,
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            minBarLength: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [
+                                            `Uptime: ${context.parsed.y.toFixed(1)}%`,
+                                            `Active: ${activeData[idx]} / ${totalData[idx]}`
+                                        ];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            } else {
+                // line chart
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: provinceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.08)',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: provinceColors,
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
@@ -4251,8 +4392,10 @@
                     });
                 updateRecentOffline({ recent: offlineStations.slice(0, 20) });
                 
-                // Initialize category chart
-                initCategoryUptimeChart();
+                // Initialize chart based on saved mode
+                if (chartGroupMode === 'source') initSourceUptimeChart();
+                else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                else initCategoryUptimeChart();
                 
                 // Initialize uptime trend line chart (default to 24h)
                 initUptimeTrendLineChart('24h');
@@ -4260,8 +4403,12 @@
                 // Load uptime percentages from Worker
                 await loadUptimePercentages();
 
-                // Rebuild category chart after realtime uptimes applied
-                try { initCategoryUptimeChart(); } catch(e) { console.warn('Could not re-init category chart:', e.message); }
+                // Rebuild chart after realtime uptimes applied based on saved mode
+                try {
+                    if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                    else initCategoryUptimeChart();
+                } catch(e) { console.warn('Could not re-init chart:', e.message); }
             } catch (error) {
                 console.error('Error loading data:', error);
             }
@@ -4300,35 +4447,53 @@
             // Chart group toggles (Category / Source)
             document.getElementById('btnCategory')?.addEventListener('click', () => {
                 chartGroupMode = 'category';
+                localStorage.setItem('chartGroupMode', 'category');
                 document.getElementById('btnCategory')?.classList.add('active');
                 document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
                 document.getElementById('categoryChartTitle').textContent = 'Category Availability Summary';
                 if (currentCategory === 'all') initCategoryUptimeChart();
             });
             document.getElementById('btnSource')?.addEventListener('click', () => {
                 chartGroupMode = 'source';
+                localStorage.setItem('chartGroupMode', 'source');
                 document.getElementById('btnSource')?.classList.add('active');
                 document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
                 document.getElementById('categoryChartTitle').textContent = 'Source Availability Summary';
                 if (currentCategory === 'all') initSourceUptimeChart();
+            });
+            document.getElementById('btnProvince')?.addEventListener('click', () => {
+                chartGroupMode = 'province';
+                localStorage.setItem('chartGroupMode', 'province');
+                document.getElementById('btnProvince')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('categoryChartTitle').textContent = 'Province Availability Summary';
+                if (currentCategory === 'all') initProvinceUptimeChart();
             });
 
             // Chart type toggles (Bar / Line)
             document.getElementById('btnBar')?.addEventListener('click', () => {
                 categoryChartType = 'bar';
+                localStorage.setItem('categoryChartType', 'bar');
                 document.getElementById('btnBar')?.classList.add('active');
                 document.getElementById('btnLine')?.classList.remove('active');
                 if (currentCategory === 'all') {
                     if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
                     else initCategoryUptimeChart();
                 }
             });
+            
             document.getElementById('btnLine')?.addEventListener('click', () => {
                 categoryChartType = 'line';
+                localStorage.setItem('categoryChartType', 'line');
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
                 if (currentCategory === 'all') {
                     if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
                     else initCategoryUptimeChart();
                 }
             });
@@ -4354,6 +4519,34 @@
         async function init() {
             initTheme();
             initMap();
+            
+            // Load saved preferences
+            chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
+            categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
+            
+            // Set active classes based on saved preferences
+            if (chartGroupMode === 'category') {
+                document.getElementById('btnCategory')?.classList.add('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
+            } else if (chartGroupMode === 'source') {
+                document.getElementById('btnSource')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
+            } else if (chartGroupMode === 'province') {
+                document.getElementById('btnProvince')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+            }
+            
+            if (categoryChartType === 'bar') {
+                document.getElementById('btnBar')?.classList.add('active');
+                document.getElementById('btnLine')?.classList.remove('active');
+            } else {
+                document.getElementById('btnLine')?.classList.add('active');
+                document.getElementById('btnBar')?.classList.remove('active');
+            }
+            
             await loadData();
             setupEventListeners();
             setupUptimeRangeToggles();
