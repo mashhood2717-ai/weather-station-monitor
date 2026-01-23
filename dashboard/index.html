@@ -1590,6 +1590,14 @@
                     <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Type:</div>
                     <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
+                    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                        <div style="font-size:13px; color:var(--text-secondary);">Network:</div>
+                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)" style="min-width: 140px;">
+                            <option value="all">🌐 All Networks</option>
+                            <option value="ww">🏠 WeatherWalay</option>
+                            <option value="wu">🌐 Weather Underground</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="height: 200px; max-height: 200px; margin-top:8px;">
                     <canvas id="categoryUptimeChart"></canvas>
@@ -1647,11 +1655,6 @@
                             <option value="Davis">Davis</option>
                             <option value="Misol">Misol</option>
                             <option value="WU">WU</option>
-                        </select>
-                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)" style="min-width: 110px;">
-                            <option value="all">🌐 All Networks</option>
-                            <option value="ww">🏠 WeatherWalay</option>
-                            <option value="wu">🌐 Weather Underground</option>
                         </select>
                         <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)" style="min-width: 110px;">
                             <option value="all">🔘 All Status</option>
