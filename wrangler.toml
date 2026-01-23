@@ -47,10 +47,9 @@ database_name = "weatherlink-monitor"
 database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"
 
 [env.production.triggers]
-# Cloudflare cron as FALLBACK - runs 7 min after cron-job.org
-# cron-job.org: :00, :15, :30, :45 (times out at 30s)
-# Cloudflare:   :07, :22, :37, :52 (no timeout, catches missed updates)
-crons = ["7,22,37,52 * * * *"]
+# Cloudflare cron as PRIMARY - runs every 15 minutes (no timeout limit)
+# This replaces cron-job.org which has 30-second timeout issues
+crons = ["*/15 * * * *"]
 
 [env.production.vars]
 ENVIRONMENT = "production"
