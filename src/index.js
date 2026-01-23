@@ -1159,7 +1159,7 @@ async function sendDailyEmailReport(env) {
 // SYNC ALL STATIONS - With Batch Processing
 // ============================================================
 
-const BATCH_SIZE = 50; // Process 50 stations per batch to avoid timeout
+const BATCH_SIZE = 29; // Process 29 stations per batch for optimal performance
 
 // Helper function to process a single station
 async function syncSingleStation(env, station) {
