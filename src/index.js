@@ -2479,22 +2479,35 @@ async function handleDashboardStats(env, corsHeaders) {
     const midnightUTC = new Date(midnightPKT.getTime() - (5 * 60 * 60 * 1000)); // Convert back to UTC
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
     
-    // First, identify stations with constant/stale temperature readings (same value for 1+ hour)
-    // These are likely frozen sensors and should be excluded from extremes
+    // Improved stale sensor detection:
+    // A station is considered stale/frozen if:
+    // 1. It has 2+ readings BEFORE midnight AND 2+ readings AFTER midnight
+    // 2. The temperature value is the same (within 0.1°C) across all these readings
+    // This catches sensors that appear "online" but have frozen values
     const staleStationsQuery = await env.DB.prepare(`
-      SELECT DISTINCT station_id
+      SELECT station_id
       FROM (
         SELECT 
           station_id,
+          -- Count readings before midnight (last 6 hours of previous day)
+          SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) as readings_before_midnight,
+          -- Count readings after midnight (today)
+          SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) as readings_after_midnight,
+          -- Check if all temperatures are the same (within 0.1°C)
           COUNT(DISTINCT ROUND(temperature, 1)) as unique_temps,
           COUNT(*) as total_readings
         FROM status_logs
-        WHERE timestamp >= datetime('now', '-1 hour')
+        WHERE timestamp >= datetime(?, '-6 hours')
           AND temperature IS NOT NULL
+          AND is_online = 1
         GROUP BY station_id
-        HAVING unique_temps = 1 AND total_readings >= 2
+        HAVING 
+          readings_before_midnight >= 2 
+          AND readings_after_midnight >= 2
+          AND unique_temps = 1
+          AND total_readings >= 4
       )
-    `).all();
+    `).bind(midnightStr, midnightStr, midnightStr).all();
     
     const staleStationIds = (staleStationsQuery.results || []).map(r => r.station_id);
     const staleExcludeClause = staleStationIds.length > 0 
@@ -2502,8 +2515,10 @@ async function handleDashboardStats(env, corsHeaders) {
       : '';
     
     // Get daily extremes since midnight PKT from status_logs
-    // Added temperature range filter (-50 to 60°C) to exclude glitched sensor data
-    // Also exclude stations with constant values (stale/frozen sensor)
+    // Filters applied:
+    // 1. is_online = 1 (station must be marked active)
+    // 2. Temperature range -50 to 60°C (exclude glitched sensor data)
+    // 3. Exclude stale/frozen sensors (same value before & after midnight)
     const extremesQuery = await env.DB.prepare(`
       SELECT 
         'max_temp' as metric,
