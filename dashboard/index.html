@@ -1648,6 +1648,11 @@
                             <option value="Misol">Misol</option>
                             <option value="WU">WU</option>
                         </select>
+                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)" style="min-width: 110px;">
+                            <option value="all">🌐 All Networks</option>
+                            <option value="ww">🏠 WeatherWalay</option>
+                            <option value="wu">🌐 Weather Underground</option>
+                        </select>
                         <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)" style="min-width: 110px;">
                             <option value="all">🔘 All Status</option>
                             <option value="active">🟢 Active</option>
@@ -2172,6 +2177,7 @@
         let allStations = [];
         let currentFilter = 'all';
         let currentSourceFilter = 'all';
+        let currentNetworkFilter = 'all';
         let sortColumn = 'name';
         let sortDirection = 'asc';
         let map = null;
@@ -2403,6 +2409,14 @@
                 categoryUptimeChart.destroy();
             }
 
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
             // Calculate uptime for each category - prefer real 24h uptime when available
             const categories = ['corporate', 'community', 'reference', 'wu'];
             const categoryNames = ['Corporate', 'Community', 'Reference', 'External'];
@@ -2412,7 +2426,7 @@
             const totalData = [];
 
             categories.forEach(cat => {
-                const catStations = allStations.filter(s => s.category === cat);
+                const catStations = filteredStations.filter(s => s.category === cat);
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
 
@@ -2543,6 +2557,14 @@
                 categoryUptimeChart.destroy();
             }
 
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
             // Calculate uptime for each source type
             const sources = ['Davis', 'Misol', 'WU'];
             const sourceNames = ['Davis', 'Misol', 'Weather Underground'];
@@ -2552,7 +2574,7 @@
             const totalData = [];
 
             sources.forEach(src => {
-                const srcStations = allStations.filter(s => s.api_source === src);
+                const srcStations = filteredStations.filter(s => s.api_source === src);
                 const total = srcStations.length;
                 const active = srcStations.filter(s => s.status === 'Active').length;
 
@@ -2678,6 +2700,14 @@
                 categoryUptimeChart.destroy();
             }
 
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
             // Calculate uptime for each province
             const provinces = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
             const provinceNames = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
@@ -2687,7 +2717,7 @@
             const totalData = [];
 
             provinces.forEach(prov => {
-                const provStations = allStations.filter(s => s.province === prov);
+                const provStations = filteredStations.filter(s => s.province === prov);
                 const total = provStations.length;
                 const active = provStations.filter(s => s.status === 'Active').length;
 
@@ -2946,6 +2976,15 @@
             // Filter by category
             if (currentCategory !== 'all') {
                 stations = stations.filter(s => s.category === currentCategory);
+            }
+            
+            // Filter by network (WW, WU)
+            if (currentNetworkFilter !== 'all') {
+                if (currentNetworkFilter === 'ww') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+                } else if (currentNetworkFilter === 'wu') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+                }
             }
             
             stations.forEach(station => {
@@ -3316,6 +3355,23 @@
             document.getElementById('countAll').textContent = count;
         }
         
+        function filterByNetwork(network) {
+            currentNetworkFilter = network;
+            localStorage.setItem('networkFilter', network);
+            renderTable();
+            updateMapMarkers();
+            updateCategoryChart();
+            
+            // Update count display based on network filter
+            let filteredStations = allStations;
+            if (network === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (network === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+            document.getElementById('countAll').textContent = filteredStations.length;
+        }
+        
         // Set time range for uptime display
         function setTimeRange(range) {
             currentTimeRange = range;
@@ -3442,6 +3498,15 @@
             // Filter by source (Davis, Misol, WU)
             if (currentSourceFilter !== 'all') {
                 stations = stations.filter(s => s.api_source === currentSourceFilter);
+            }
+            
+            // Filter by network (WW, WU)
+            if (currentNetworkFilter !== 'all') {
+                if (currentNetworkFilter === 'ww') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+                } else if (currentNetworkFilter === 'wu') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+                }
             }
             
             // Search
@@ -4651,6 +4716,7 @@
             // Load saved preferences
             chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
             categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
+            currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
             
             // Set active classes based on saved preferences
             if (chartGroupMode === 'category') {
@@ -4674,6 +4740,9 @@
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
             }
+            
+            // Set network filter dropdown
+            document.getElementById('networkFilter').value = currentNetworkFilter;
             
             await loadData();
             setupEventListeners();
