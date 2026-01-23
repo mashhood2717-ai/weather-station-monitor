@@ -1993,10 +1993,10 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     const hoursToFetch = days > 0 ? days * 24 : hours;
 
     // Determine aggregation granularity based on requested period
-    // default: hourly; days >=7 -> daily, days >=30 -> monthly, days >=365 -> yearly
+    // default: hourly; days >=7 -> daily, days >=90 -> monthly, days >=365 -> yearly
     let granularity = 'hour';
     if (days >= 365) granularity = 'year';
-    else if (days >= 30) granularity = 'month';
+    else if (days >= 90) granularity = 'month';
     else if (days >= 7) granularity = 'day';
 
     // Get station info from HubService (best-effort)
