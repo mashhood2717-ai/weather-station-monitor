@@ -2479,8 +2479,31 @@ async function handleDashboardStats(env, corsHeaders) {
     const midnightUTC = new Date(midnightPKT.getTime() - (5 * 60 * 60 * 1000)); // Convert back to UTC
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
     
+    // First, identify stations with constant/stale temperature readings (same value for 1+ hour)
+    // These are likely frozen sensors and should be excluded from extremes
+    const staleStationsQuery = await env.DB.prepare(`
+      SELECT DISTINCT station_id
+      FROM (
+        SELECT 
+          station_id,
+          COUNT(DISTINCT ROUND(temperature, 1)) as unique_temps,
+          COUNT(*) as total_readings
+        FROM status_logs
+        WHERE timestamp >= datetime('now', '-1 hour')
+          AND temperature IS NOT NULL
+        GROUP BY station_id
+        HAVING unique_temps = 1 AND total_readings >= 2
+      )
+    `).all();
+    
+    const staleStationIds = (staleStationsQuery.results || []).map(r => r.station_id);
+    const staleExcludeClause = staleStationIds.length > 0 
+      ? `AND sl.station_id NOT IN (${staleStationIds.map(id => `'${id}'`).join(',')})` 
+      : '';
+    
     // Get daily extremes since midnight PKT from status_logs
-    // Using aggregate queries for efficiency
+    // Added temperature range filter (-50 to 60°C) to exclude glitched sensor data
+    // Also exclude stations with constant values (stale/frozen sensor)
     const extremesQuery = await env.DB.prepare(`
       SELECT 
         'max_temp' as metric,
@@ -2492,10 +2515,16 @@ async function handleDashboardStats(env, corsHeaders) {
       WHERE sl.timestamp >= ?
         AND sl.is_online = 1
         AND sl.temperature IS NOT NULL
+        AND sl.temperature BETWEEN -50 AND 60
+        ${staleExcludeClause}
       GROUP BY sl.station_id
       HAVING MAX(sl.temperature) = (
-        SELECT MAX(temperature) FROM status_logs 
-        WHERE timestamp >= ? AND is_online = 1 AND temperature IS NOT NULL
+        SELECT MAX(temperature) FROM status_logs sl2
+        WHERE sl2.timestamp >= ? 
+          AND sl2.is_online = 1 
+          AND sl2.temperature IS NOT NULL
+          AND sl2.temperature BETWEEN -50 AND 60
+          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
       )
       LIMIT 1
     `).bind(midnightStr, midnightStr).first();
@@ -2510,10 +2539,16 @@ async function handleDashboardStats(env, corsHeaders) {
       WHERE sl.timestamp >= ?
         AND sl.is_online = 1
         AND sl.temperature IS NOT NULL
+        AND sl.temperature BETWEEN -50 AND 60
+        ${staleExcludeClause}
       GROUP BY sl.station_id
       HAVING MIN(sl.temperature) = (
-        SELECT MIN(temperature) FROM status_logs 
-        WHERE timestamp >= ? AND is_online = 1 AND temperature IS NOT NULL
+        SELECT MIN(temperature) FROM status_logs sl2
+        WHERE sl2.timestamp >= ? 
+          AND sl2.is_online = 1 
+          AND sl2.temperature IS NOT NULL
+          AND sl2.temperature BETWEEN -50 AND 60
+          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
       )
       LIMIT 1
     `).bind(midnightStr, midnightStr).first();
