@@ -418,6 +418,124 @@ export default {
       } else if (path === '/api/daily-report/excel') {
         // Download daily report as Excel/CSV
         return await handleDailyReportExcel(env, corsHeaders);
+      } else if (path === '/api/backfill-downtime') {
+        // Backfill historical downtime records from status_logs (batched to avoid rate limits)
+        try {
+          const batchSize = parseInt(url.searchParams.get('batch_size')) || 10;
+          const offset = parseInt(url.searchParams.get('offset')) || 0;
+
+          console.log(`Starting downtime backfill batch: offset=${offset}, batch_size=${batchSize}`);
+
+          // Get stations in batches
+          const stations = await env.DB.prepare(`
+            SELECT station_id FROM stations
+            ORDER BY station_id
+            LIMIT ? OFFSET ?
+          `).bind(batchSize, offset).all();
+
+          if (stations.results.length === 0) {
+            return new Response(JSON.stringify({
+              success: true,
+              message: 'Backfill complete - no more stations to process',
+              offset: offset,
+              batch_size: batchSize,
+              processed: 0
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+
+          let totalRecords = 0;
+          let processedStations = 0;
+
+          for (const station of stations.results) {
+            const stationId = station.station_id;
+            processedStations++;
+
+            // Get all status logs for this station, ordered by timestamp
+            const logs = await env.DB.prepare(`
+              SELECT timestamp, is_online
+              FROM status_logs
+              WHERE station_id = ?
+              ORDER BY timestamp ASC
+            `).bind(stationId).all();
+
+            if (logs.results.length === 0) continue;
+
+            let currentDowntimeStart = null;
+
+            for (let i = 0; i < logs.results.length; i++) {
+              const log = logs.results[i];
+              const isOnline = log.is_online === 1;
+
+              if (!isOnline && currentDowntimeStart === null) {
+                // Station just went offline
+                currentDowntimeStart = log.timestamp;
+              } else if (isOnline && currentDowntimeStart !== null) {
+                // Station just came back online - create downtime record
+                const startTime = currentDowntimeStart;
+                const endTime = log.timestamp;
+
+                // Calculate duration in minutes
+                const start = new Date(startTime);
+                const end = new Date(endTime);
+                const durationMinutes = Math.floor((end - start) / (1000 * 60));
+
+                // Only create records for outages longer than 15 minutes (avoid noise)
+                if (durationMinutes >= 15) {
+                  try {
+                    await env.DB.prepare(`
+                      INSERT OR IGNORE INTO downtime_records
+                      (station_id, start_time, end_time, duration_minutes, status)
+                      VALUES (?, ?, ?, ?, 'resolved')
+                    `).bind(stationId, startTime, endTime, durationMinutes).run();
+                    totalRecords++;
+                  } catch (e) {
+                    // Ignore duplicate key errors
+                  }
+                }
+
+                currentDowntimeStart = null;
+              }
+            }
+
+            // Handle case where station is still offline at the end
+            if (currentDowntimeStart !== null) {
+              // Calculate duration from start to now
+              const start = new Date(currentDowntimeStart);
+              const now = new Date();
+              const durationMinutes = Math.floor((now - start) / (1000 * 60));
+
+              if (durationMinutes >= 15) {
+                try {
+                  await env.DB.prepare(`
+                    INSERT OR IGNORE INTO downtime_records
+                    (station_id, start_time, duration_minutes, status)
+                    VALUES (?, ?, ?, 'active')
+                  `).bind(stationId, currentDowntimeStart, durationMinutes).run();
+                  totalRecords++;
+                } catch (e) {
+                  // Ignore duplicate key errors
+                }
+              }
+            }
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: `Processed batch: ${processedStations} stations, ${totalRecords} records created`,
+            offset: offset,
+            batch_size: batchSize,
+            processed: processedStations,
+            records_created: totalRecords,
+            next_offset: offset + batchSize
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+        } catch (error) {
+          console.error('Backfill error:', error);
+          return new Response(JSON.stringify({
+            success: false,
+            error: error.message
+          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       } else if (path === '/api/dashboard-stats') {
         // Get avg uptime/downtime and daily extremes (since midnight PKT)
         return await handleDashboardStats(env, corsHeaders);
@@ -1213,6 +1331,13 @@ async function syncSingleStation(env, station) {
     windSpeed,
     0
   ).run();
+  
+  // Track downtime events
+  if (!isOnline) {
+    await handleStationOffline(env, stationId);
+  } else {
+    await handleStationOnline(env, stationId);
+  }
   
   return stationId;
 }
@@ -2192,7 +2317,46 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       }
     }
 
-    // Get downtime records - last 30 days or last 10 records (whichever is more useful)
+    // Calculate downtime from the same status_logs data used for uptime
+    // This ensures consistency between uptime and downtime calculations
+    let totalDowntimeMinutes = 0;
+    let downtimeIncidents = 0;
+    let currentOfflineStart = null;
+
+    // Use the same time filter as the uptime calculation
+    const downtimeTimeFilter = hours > 0 ? `timestamp >= datetime('now', '-${hoursToFetch} hours')` : `timestamp >= datetime('now', '-24 hours')`;
+
+    const statusLogs = await env.DB.prepare(`
+      SELECT timestamp, is_online
+      FROM status_logs
+      WHERE station_id = ? AND ${downtimeTimeFilter}
+      ORDER BY timestamp ASC
+    `).bind(stationId).all();
+
+    for (const log of statusLogs.results || []) {
+      const isOnline = log.is_online === 1;
+
+      if (!isOnline && currentOfflineStart === null) {
+        // Station just went offline
+        currentOfflineStart = new Date(log.timestamp);
+        downtimeIncidents++;
+      } else if (isOnline && currentOfflineStart !== null) {
+        // Station just came back online - calculate downtime duration
+        const offlineEnd = new Date(log.timestamp);
+        const durationMinutes = Math.floor((offlineEnd - currentOfflineStart) / (1000 * 60));
+        totalDowntimeMinutes += durationMinutes;
+        currentOfflineStart = null;
+      }
+    }
+
+    // Handle case where station is still offline at the end of the period
+    if (currentOfflineStart !== null) {
+      const periodEnd = new Date();
+      const durationMinutes = Math.floor((periodEnd - currentOfflineStart) / (1000 * 60));
+      totalDowntimeMinutes += durationMinutes;
+    }
+
+    // Get recent downtime records for display (last 10 incidents)
     const downtimeResult = await env.DB.prepare(`
       SELECT start_time, end_time, duration_minutes, status, reason
       FROM downtime_records
@@ -2200,9 +2364,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       ORDER BY start_time DESC
       LIMIT 10
     `).bind(stationId).all();
-    const downtimes = downtimeResult.results || [];
-
-    const totalDowntimeMinutes = downtimes.reduce((acc, d) => acc + (d.duration_minutes || 0), 0);
+    const recentDowntimes = downtimeResult.results || [];
 
     // Overall uptime based on aggregated checks if available
     const overallTotal = aggRows.reduce((a,b) => a + (b.total_checks||0), 0);
@@ -2227,8 +2389,8 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       downtime: {
         total_minutes: totalDowntimeMinutes,
         total_hours: (totalDowntimeMinutes / 60).toFixed(2),
-        incidents: downtimes.length,
-        records: downtimes
+        incidents: downtimeIncidents,
+        records: recentDowntimes
       },
       hourly_data: timeseries,
       tracking_since: trackingSince,
