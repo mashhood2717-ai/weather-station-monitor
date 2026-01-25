@@ -3746,13 +3746,27 @@
             }
             
             // Outage records
-            if (data.downtime.records && data.downtime.records.length > 0) {
-                document.getElementById('downtimeRecords').innerHTML = data.downtime.records.map(d => `
-                    <div class="downtime-record">
-                        <span class="downtime-time">${formatDatePKT(d.start_time)}</span>
-                        <span class="downtime-duration">${d.duration_minutes ? d.duration_minutes + ' min' : 'Ongoing'}</span>
-                    </div>
-                `).join('');
+            if ((data.downtime.records && data.downtime.records.length > 0) || data.downtime.total_minutes > 0) {
+                let recordsHtml = '';
+                
+                // Show calculated downtime incidents if any
+                if (data.downtime.total_minutes > 0 && data.downtime.incidents > 0) {
+                    recordsHtml += `<div style="margin-bottom: 10px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--danger);">
+                        <strong>⚠️ ${data.downtime.incidents} outage${data.downtime.incidents > 1 ? 's' : ''} detected</strong> - Total offline time: ${data.downtime.total_hours}h
+                    </div>`;
+                }
+                
+                // Show detailed records from downtime_records table
+                if (data.downtime.records && data.downtime.records.length > 0) {
+                    recordsHtml += data.downtime.records.map(d => `
+                        <div class="downtime-record">
+                            <span class="downtime-time">${formatDatePKT(d.start_time)}</span>
+                            <span class="downtime-duration">${d.duration_minutes ? d.duration_minutes + ' min' : 'Ongoing'}</span>
+                        </div>
+                    `).join('');
+                }
+                
+                document.getElementById('downtimeRecords').innerHTML = recordsHtml;
             } else {
                 document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No outages recorded (${periodLabel.toLowerCase()})</div>`;
             }
