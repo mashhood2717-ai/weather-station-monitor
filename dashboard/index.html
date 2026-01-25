@@ -4723,6 +4723,14 @@
                     }
                 });
             });
+
+            // Modal click-outside-to-close functionality
+            document.getElementById('stationModal').addEventListener('click', (e) => {
+                // Only close if clicked on the overlay itself, not on the modal content
+                if (e.target.id === 'stationModal') {
+                    closeStationModal();
+                }
+            });
         }
         
         // Initialize
