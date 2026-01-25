@@ -2333,7 +2333,16 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       ORDER BY timestamp ASC
     `).bind(stationId).all();
 
-    for (const log of statusLogs.results || []) {
+    const logs = statusLogs.results || [];
+    
+    // If the first log shows station offline, assume it was offline from the start of the period
+    if (logs.length > 0 && logs[0].is_online === 0) {
+      const periodStart = new Date(Date.now() - (hoursToFetch * 60 * 60 * 1000));
+      currentOfflineStart = periodStart;
+      downtimeIncidents++;
+    }
+
+    for (const log of logs) {
       const isOnline = log.is_online === 1;
 
       if (!isOnline && currentOfflineStart === null) {
