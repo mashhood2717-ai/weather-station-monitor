@@ -2395,6 +2395,7 @@
                     document.querySelectorAll('.uptime-range-btn').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
                     const range = e.target.dataset.range;
+                    localStorage.setItem('uptimeRange', range);
                     initUptimeTrendLineChart(range);
                 });
             });
@@ -4610,8 +4611,8 @@
                 else if (chartGroupMode === 'province') initProvinceUptimeChart();
                 else initCategoryUptimeChart();
                 
-                // Initialize uptime trend line chart (default to 24h)
-                initUptimeTrendLineChart('24h');
+                // Initialize uptime trend line chart with saved preference
+                initUptimeTrendLineChart(currentUptimeRange);
 
                 // Load uptime percentages from Worker
                 await loadUptimePercentages();
@@ -4745,6 +4746,12 @@
             chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
             categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
             currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
+            currentUptimeRange = localStorage.getItem('uptimeRange') || '24h';
+            
+            // Set active uptime range button based on saved preference
+            document.querySelectorAll('.uptime-range-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.range === currentUptimeRange);
+            });
             
             // Set active classes based on saved preferences
             if (chartGroupMode === 'category') {
