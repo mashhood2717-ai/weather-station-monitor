@@ -1131,22 +1131,26 @@ async function sendDailyEmailReport(env) {
 <!DOCTYPE html>
 <html>
 <head>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; color: #1e293b; max-width: 700px; margin: 0 auto; }
-    h1 { color: #0284c7; border-bottom: 2px solid #0284c7; padding-bottom: 10px; }
-    .summary { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
-    .stat-box { background: #f1f5f9; padding: 15px 20px; border-radius: 8px; text-align: center; min-width: 120px; }
-    .stat-box h3 { margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; }
-    .stat-box .value { font-size: 28px; font-weight: bold; margin: 8px 0 0; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; max-width: 700px; margin: 0 auto; padding: 20px; line-height: 1.6; font-size: 14px; }
+    h1 { color: #0284c7; border-bottom: 2px solid #0284c7; padding-bottom: 12px; font-weight: 700; font-size: 24px; letter-spacing: -0.5px; }
+    h2 { font-size: 16px; font-weight: 600; color: #334155; margin: 25px 0 12px; letter-spacing: -0.3px; }
+    p { margin: 8px 0; }
+    .summary { display: flex; gap: 12px; margin: 24px 0; flex-wrap: wrap; }
+    .stat-box { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 16px 20px; border-radius: 12px; text-align: center; min-width: 115px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .stat-box h3 { margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+    .stat-box .value { font-size: 26px; font-weight: 700; margin: 6px 0 0; letter-spacing: -1px; }
     .online { color: #10b981; }
     .offline { color: #ef4444; }
-    table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
-    th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
-    th { background: #f1f5f9; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; border-radius: 8px; overflow: hidden; }
+    th, td { border: 1px solid #e2e8f0; padding: 10px 14px; text-align: left; }
+    th { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; color: #475569; }
     tr:nth-child(even) { background: #f8fafc; }
-    .footer { margin-top: 30px; color: #64748b; font-size: 12px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-    .alert { background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 15px; margin: 15px 0; }
-    .alert h3 { color: #ef4444; margin: 0 0 10px; }
+    tr:hover { background: #f1f5f9; }
+    .footer { margin-top: 35px; color: #64748b; font-size: 12px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 24px; }
+    .alert { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 1px solid #fca5a5; border-radius: 12px; padding: 16px; margin: 20px 0; }
+    .alert h3 { color: #dc2626; margin: 0 0 12px; font-size: 14px; font-weight: 600; }
   </style>
 </head>
 <body>
