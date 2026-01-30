@@ -418,6 +418,124 @@ export default {
       } else if (path === '/api/daily-report/excel') {
         // Download daily report as Excel/CSV
         return await handleDailyReportExcel(env, corsHeaders);
+      } else if (path === '/api/backfill-downtime') {
+        // Backfill historical downtime records from status_logs (batched to avoid rate limits)
+        try {
+          const batchSize = parseInt(url.searchParams.get('batch_size')) || 10;
+          const offset = parseInt(url.searchParams.get('offset')) || 0;
+
+          console.log(`Starting downtime backfill batch: offset=${offset}, batch_size=${batchSize}`);
+
+          // Get stations in batches
+          const stations = await env.DB.prepare(`
+            SELECT station_id FROM stations
+            ORDER BY station_id
+            LIMIT ? OFFSET ?
+          `).bind(batchSize, offset).all();
+
+          if (stations.results.length === 0) {
+            return new Response(JSON.stringify({
+              success: true,
+              message: 'Backfill complete - no more stations to process',
+              offset: offset,
+              batch_size: batchSize,
+              processed: 0
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+
+          let totalRecords = 0;
+          let processedStations = 0;
+
+          for (const station of stations.results) {
+            const stationId = station.station_id;
+            processedStations++;
+
+            // Get all status logs for this station, ordered by timestamp
+            const logs = await env.DB.prepare(`
+              SELECT timestamp, is_online
+              FROM status_logs
+              WHERE station_id = ?
+              ORDER BY timestamp ASC
+            `).bind(stationId).all();
+
+            if (logs.results.length === 0) continue;
+
+            let currentDowntimeStart = null;
+
+            for (let i = 0; i < logs.results.length; i++) {
+              const log = logs.results[i];
+              const isOnline = log.is_online === 1;
+
+              if (!isOnline && currentDowntimeStart === null) {
+                // Station just went offline
+                currentDowntimeStart = log.timestamp;
+              } else if (isOnline && currentDowntimeStart !== null) {
+                // Station just came back online - create downtime record
+                const startTime = currentDowntimeStart;
+                const endTime = log.timestamp;
+
+                // Calculate duration in minutes
+                const start = new Date(startTime);
+                const end = new Date(endTime);
+                const durationMinutes = Math.floor((end - start) / (1000 * 60));
+
+                // Only create records for outages longer than 15 minutes (avoid noise)
+                if (durationMinutes >= 15) {
+                  try {
+                    await env.DB.prepare(`
+                      INSERT OR IGNORE INTO downtime_records
+                      (station_id, start_time, end_time, duration_minutes, status)
+                      VALUES (?, ?, ?, ?, 'resolved')
+                    `).bind(stationId, startTime, endTime, durationMinutes).run();
+                    totalRecords++;
+                  } catch (e) {
+                    // Ignore duplicate key errors
+                  }
+                }
+
+                currentDowntimeStart = null;
+              }
+            }
+
+            // Handle case where station is still offline at the end
+            if (currentDowntimeStart !== null) {
+              // Calculate duration from start to now
+              const start = new Date(currentDowntimeStart);
+              const now = new Date();
+              const durationMinutes = Math.floor((now - start) / (1000 * 60));
+
+              if (durationMinutes >= 15) {
+                try {
+                  await env.DB.prepare(`
+                    INSERT OR IGNORE INTO downtime_records
+                    (station_id, start_time, duration_minutes, status)
+                    VALUES (?, ?, ?, 'active')
+                  `).bind(stationId, currentDowntimeStart, durationMinutes).run();
+                  totalRecords++;
+                } catch (e) {
+                  // Ignore duplicate key errors
+                }
+              }
+            }
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: `Processed batch: ${processedStations} stations, ${totalRecords} records created`,
+            offset: offset,
+            batch_size: batchSize,
+            processed: processedStations,
+            records_created: totalRecords,
+            next_offset: offset + batchSize
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+        } catch (error) {
+          console.error('Backfill error:', error);
+          return new Response(JSON.stringify({
+            success: false,
+            error: error.message
+          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       } else if (path === '/api/dashboard-stats') {
         // Get avg uptime/downtime and daily extremes (since midnight PKT)
         return await handleDashboardStats(env, corsHeaders);
@@ -553,7 +671,7 @@ async function handleStorageStats(env, corsHeaders = {}) {
 
 // Station category mapping (same as dashboard)
 const STATION_CATEGORIES = {
-  '217041': 'community', '160484': 'corporate', '224681': 'owner', '160497': 'community',
+  '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',
   '169631': 'corporate', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
   '169682': 'corporate', '169694': 'corporate', 'C13': 'community', '165897': 'community',
   '176678': 'community', '176749': 'community', '169767': 'corporate', 'C14': 'reference',
@@ -571,11 +689,11 @@ const STATION_CATEGORIES = {
   '175132': 'corporate', '147761': 'community', '147492': 'community', '162057': 'community',
   '162130': 'community', '164315': 'community', '164179': 'corporate', '164181': 'corporate',
   '170382': 'community', '175222': 'corporate', 'C12': 'community', '188822': 'corporate',
-  '188834': 'corporate', '177683': 'reference', '170426': 'community', '170433': 'community',
+  '188834': 'corporate', '177683': 'community', '170426': 'community', '170433': 'community',
   '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
-  '177740': 'reference', '177802': 'community', '170462': 'community', '170469': 'community',
+  '177740': 'community', '177802': 'community', '170462': 'community', '170469': 'community',
   '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
-  '170556': 'corporate', '162416': 'community', '162474': 'reference', 'C23': 'reference',
+  '170556': 'corporate', '162416': 'community', '162474': 'community', 'C23': 'community',
   '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
   '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
   '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
@@ -588,7 +706,7 @@ const STATION_CATEGORIES = {
   '167006': 'community', '192289': 'corporate', '202668': 'corporate', '160726': 'community',
   '160777': 'corporate', 'C7': 'reference', '178475': 'reference', '178480': 'community',
   'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
-  'C26': 'owner', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
+  'C26': 'community', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
   '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
   '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
   '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
@@ -596,7 +714,7 @@ const STATION_CATEGORIES = {
   '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
   '169639': 'corporate', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
   'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
-  '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'reference',
+  '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'community',
   '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
   'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
   'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
@@ -607,13 +725,13 @@ const STATION_CATEGORIES = {
   'ITURBA4': 'wu', 'IKARAC33': 'wu', 'IKARAC12': 'wu', 'IKARAC25': 'wu',
   'IKARAC24': 'wu', 'IKARAC17': 'wu', 'ITANDO3': 'wu', 'IKARAC38': 'wu',
   'IJATI2': 'wu', '101361': 'corporate', '104536': 'corporate', '117090': 'corporate',
-  '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'owner',
-  '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'owner',
+  '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'community',
+  '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'community',
   '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
-  '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'owner',
-  '131643': 'owner', '131893': 'owner', '220024': 'corporate', '132393': 'community',
+  '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'community',
+  '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
   '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
-  '133035': 'corporate', '133150': 'owner', '133253': 'community', '133425': 'community',
+  '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
   '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
   '201736': 'community', '129498': 'corporate', '134268': 'community', '134297': 'community',
   'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
@@ -658,6 +776,7 @@ async function generateDailyReportData(env) {
     return {
       station_id: s.stationID,
       station_name: s.stationName,
+      poi: s.poi,
       status: s.status,
       category: category,
       api_source: s.apiSource || 'N/A',
@@ -677,7 +796,7 @@ async function generateDailyReportData(env) {
   const total = stations.length;
   
   // Category breakdown
-  const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
+  const categories = ['corporate', 'community', 'reference', 'wu'];
   const categoryStats = {};
   categories.forEach(cat => {
     const catStations = stations.filter(s => s.category === cat);
@@ -707,7 +826,7 @@ async function generateDailyReportData(env) {
   // Find MAX temperature with station name (only from stations online in last 24h)
   const stationsWithTemp = stations
     .filter(s => s.status === 'Active' && s.temperature !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
-    .map(s => ({ name: s.station_name, temp: parseFloat(s.temperature) }))
+    .map(s => ({ name: s.poi || s.station_name, temp: parseFloat(s.temperature) }))
     .filter(s => !isNaN(s.temp));
   
   let maxTemp = null;
@@ -721,7 +840,7 @@ async function generateDailyReportData(env) {
   // Find MAX rainfall with station name (only from stations that had at least 1 online check in last 24h)
   const stationsWithRain = stations
     .filter(s => s.rainfall !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
-    .map(s => ({ name: s.station_name, rain: parseFloat(s.rainfall) }))
+    .map(s => ({ name: s.poi || s.station_name, rain: parseFloat(s.rainfall) }))
     .filter(s => !isNaN(s.rain) && s.rain > 0);
   
   let maxRainfall = '0.0';
@@ -737,7 +856,7 @@ async function generateDailyReportData(env) {
     .filter(s => s.status !== 'Active')
     .map(s => ({
       station_id: s.station_id,
-      station_name: s.station_name,
+      station_name: s.poi || s.station_name,
       api_source: s.api_source,
       category: s.category,
       last_seen: s.last_seen
@@ -796,7 +915,6 @@ async function handleDailyReportExcel(env, corsHeaders) {
       'Corporate': { bg: '#dbeafe', text: '#1e40af' },
       'Community': { bg: '#dcfce7', text: '#166534' },
       'Reference': { bg: '#fef3c7', text: '#92400e' },
-      'Owner': { bg: '#f3e8ff', text: '#7c3aed' },
       'WU': { bg: '#ffe4e6', text: '#be123c' },
       'Unknown': { bg: '#f1f5f9', text: '#475569' }
     };
@@ -1156,11 +1274,99 @@ async function sendDailyEmailReport(env) {
 // ============================================================
 
 // ============================================================
-// SYNC ALL STATIONS
+// SYNC ALL STATIONS - With Batch Processing
 // ============================================================
 
+const BATCH_SIZE = 29; // Process 29 stations per batch for optimal performance
+
+// Helper function to process a single station
+async function syncSingleStation(env, station) {
+  const stationId = String(station.stationID);
+  const isOnline = station.status === 'Active' ? 1 : 0;
+  // Prefer poi (user-friendly name) over stationName (technical name)
+  const displayName = station.poi || station.stationName || 'Unknown';
+  const stationName = station.stationName || 'Unknown';
+  const apiSource = station.apiSource || null;
+  
+  // Ensure station exists in stations table (upsert) - use poi as station_name for display
+  await env.DB.prepare(`
+    INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
+    VALUES (?, ?, ?, ?, ?, ?, date('now'))
+    ON CONFLICT(station_id) DO UPDATE SET
+      station_name = excluded.station_name,
+      latitude = excluded.latitude,
+      longitude = excluded.longitude,
+      api_source = excluded.api_source
+  `).bind(
+    stationId,
+    displayName,
+    stationName,
+    parseFloat(station.lat) || 0,
+    parseFloat(station.long) || 0,
+    apiSource
+  ).run();
+  
+  // Use temperature directly from API
+  let temperature = null;
+  if (station.temperature !== undefined && station.temperature !== null && station.temperature !== 'N/A') {
+    temperature = parseFloat(station.temperature);
+  }
+  
+  // Get rainfall if available
+  let rainfall = station.rainfall !== undefined && station.rainfall !== null ? parseFloat(station.rainfall) : null;
+  
+  // Get wind speed if available
+  let windSpeed = station.windSpeed !== undefined && station.windSpeed !== null ? parseFloat(station.windSpeed) : null;
+
+  // Insert status log with all sensor data
+  await env.DB.prepare(`
+    INSERT INTO status_logs 
+    (station_id, timestamp, is_online, temperature, rainfall, wind_speed, response_time_ms)
+    VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
+  `).bind(
+    stationId,
+    isOnline,
+    temperature,
+    rainfall,
+    windSpeed,
+    0
+  ).run();
+  
+  // Track downtime events
+  if (!isOnline) {
+    await handleStationOffline(env, stationId);
+  } else {
+    await handleStationOnline(env, stationId);
+  }
+  
+  return stationId;
+}
+
+// Process a batch of stations in parallel
+async function processBatch(env, stations) {
+  const results = await Promise.allSettled(
+    stations.map(station => syncSingleStation(env, station))
+  );
+  
+  let success = 0;
+  let failed = 0;
+  
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      success++;
+    } else {
+      failed++;
+      if (failed <= 3) {
+        console.error(`Failed to sync ${stations[index]?.stationID}: ${result.reason?.message}`);
+      }
+    }
+  });
+  
+  return { success, failed };
+}
+
 async function syncAllStations(env, corsHeaders = {}) {
-  console.log('Starting station sync...');
+  console.log('Starting station sync with batch processing...');
   const startTime = Date.now();
 
   try {
@@ -1182,81 +1388,34 @@ async function syncAllStations(env, corsHeaders = {}) {
 
     console.log(`Fetched ${apiStations.length} stations from HubService for sync`);
 
-    let successCount = 0;
-    let failCount = 0;
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    const totalBatches = Math.ceil(apiStations.length / BATCH_SIZE);
 
-    // Process stations sequentially to avoid DB conflicts
-    for (const station of apiStations) {
-      try {
-        const stationId = String(station.stationID);
-        const isOnline = station.status === 'Active' ? 1 : 0;
-        // Prefer poi (user-friendly name) over stationName (technical name)
-        const displayName = station.poi || station.stationName || 'Unknown';
-        const stationName = station.stationName || 'Unknown';
-        const apiSource = station.apiSource || null;
-        
-        // Ensure station exists in stations table (upsert) - use poi as station_name for display
-        await env.DB.prepare(`
-          INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
-          VALUES (?, ?, ?, ?, ?, ?, date('now'))
-          ON CONFLICT(station_id) DO UPDATE SET
-            station_name = excluded.station_name,
-            latitude = excluded.latitude,
-            longitude = excluded.longitude,
-            api_source = excluded.api_source
-        `).bind(
-          stationId,
-          displayName,
-          stationName,
-          parseFloat(station.lat) || 0,
-          parseFloat(station.long) || 0,
-          apiSource
-        ).run();
-        
-        // Use temperature directly from API
-        let temperature = null;
-        if (station.temperature !== undefined && station.temperature !== null && station.temperature !== 'N/A') {
-          temperature = parseFloat(station.temperature);
-        }
-        
-        // Get rainfall if available
-        let rainfall = station.rainfall !== undefined && station.rainfall !== null ? parseFloat(station.rainfall) : null;
-        
-        // Get wind speed if available
-        let windSpeed = station.windSpeed !== undefined && station.windSpeed !== null ? parseFloat(station.windSpeed) : null;
-
-        // Insert status log with all sensor data
-        await env.DB.prepare(`
-          INSERT INTO status_logs 
-          (station_id, timestamp, is_online, temperature, rainfall, wind_speed, response_time_ms)
-          VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
-        `).bind(
-          stationId,
-          isOnline,
-          temperature,
-          rainfall,
-          windSpeed,
-          0
-        ).run();
-
-        successCount++;
-      } catch (error) {
-        // Log the first few errors for debugging
-        if (failCount < 3) {
-          console.error(`Failed to sync ${station.stationID}: ${error.message}`);
-        }
-        failCount++;
-      }
+    // Process stations in batches
+    for (let i = 0; i < apiStations.length; i += BATCH_SIZE) {
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const batch = apiStations.slice(i, i + BATCH_SIZE);
+      
+      console.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} stations)...`);
+      
+      const { success, failed } = await processBatch(env, batch);
+      totalSuccess += success;
+      totalFailed += failed;
+      
+      console.log(`Batch ${batchNum} complete: ${success} success, ${failed} failed`);
     }
 
-    console.log(`Sync result: ${successCount} success, ${failCount} failed`);
+    console.log(`Sync result: ${totalSuccess} success, ${totalFailed} failed`);
 
     const duration = Date.now() - startTime;
     const result = {
       success: true,
-      synced: successCount,
-      failed: failCount,
+      synced: totalSuccess,
+      failed: totalFailed,
       total: apiStations.length,
+      batches: totalBatches,
+      batch_size: BATCH_SIZE,
       duration_ms: duration,
       timestamp: new Date().toISOString(),
     };
@@ -1287,7 +1446,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       stations = hubStations.map(s => ({
         station_id: s.stationID,
         station_name: s.stationName,
-        location: s.stationName,
+        location: s.poi || s.stationName,
         latitude: s.lat,
         longitude: s.long,
         temperature: s.temperature,
@@ -1367,7 +1526,8 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
   }
 }
 
-async function syncSingleStation(env, stationId) {
+// Legacy function to sync a single station by ID from HubService API
+async function syncSingleStationById(env, stationId) {
   const syncStart = Date.now();
 
   try {
@@ -1958,10 +2118,10 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     const hoursToFetch = days > 0 ? days * 24 : hours;
 
     // Determine aggregation granularity based on requested period
-    // default: hourly; days >=7 -> daily, days >=30 -> monthly, days >=365 -> yearly
+    // default: hourly; days >=7 -> daily, days >=90 -> monthly, days >=1095 -> yearly
     let granularity = 'hour';
-    if (days >= 365) granularity = 'year';
-    else if (days >= 30) granularity = 'month';
+    if (days >= 1095) granularity = 'year';
+    else if (days >= 90) granularity = 'month';
     else if (days >= 7) granularity = 'day';
 
     // Get station info from HubService (best-effort)
@@ -2157,7 +2317,55 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       }
     }
 
-    // Get downtime records - last 30 days or last 10 records (whichever is more useful)
+    // Calculate downtime from the same status_logs data used for uptime
+    // This ensures consistency between uptime and downtime calculations
+    let totalDowntimeMinutes = 0;
+    let downtimeIncidents = 0;
+    let currentOfflineStart = null;
+
+    // Use the same time filter as the uptime calculation
+    const downtimeTimeFilter = hours > 0 ? `timestamp >= datetime('now', '-${hoursToFetch} hours')` : `timestamp >= datetime('now', '-24 hours')`;
+
+    const statusLogs = await env.DB.prepare(`
+      SELECT timestamp, is_online
+      FROM status_logs
+      WHERE station_id = ? AND ${downtimeTimeFilter}
+      ORDER BY timestamp ASC
+    `).bind(stationId).all();
+
+    const logs = statusLogs.results || [];
+    
+    // If the first log shows station offline, assume it was offline from the start of the period
+    if (logs.length > 0 && logs[0].is_online === 0) {
+      const periodStart = new Date(Date.now() - (hoursToFetch * 60 * 60 * 1000));
+      currentOfflineStart = periodStart;
+      downtimeIncidents++;
+    }
+
+    for (const log of logs) {
+      const isOnline = log.is_online === 1;
+
+      if (!isOnline && currentOfflineStart === null) {
+        // Station just went offline
+        currentOfflineStart = new Date(log.timestamp);
+        downtimeIncidents++;
+      } else if (isOnline && currentOfflineStart !== null) {
+        // Station just came back online - calculate downtime duration
+        const offlineEnd = new Date(log.timestamp);
+        const durationMinutes = Math.floor((offlineEnd - currentOfflineStart) / (1000 * 60));
+        totalDowntimeMinutes += durationMinutes;
+        currentOfflineStart = null;
+      }
+    }
+
+    // Handle case where station is still offline at the end of the period
+    if (currentOfflineStart !== null) {
+      const periodEnd = new Date();
+      const durationMinutes = Math.floor((periodEnd - currentOfflineStart) / (1000 * 60));
+      totalDowntimeMinutes += durationMinutes;
+    }
+
+    // Get recent downtime records for display (last 10 incidents)
     const downtimeResult = await env.DB.prepare(`
       SELECT start_time, end_time, duration_minutes, status, reason
       FROM downtime_records
@@ -2165,9 +2373,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       ORDER BY start_time DESC
       LIMIT 10
     `).bind(stationId).all();
-    const downtimes = downtimeResult.results || [];
-
-    const totalDowntimeMinutes = downtimes.reduce((acc, d) => acc + (d.duration_minutes || 0), 0);
+    const recentDowntimes = downtimeResult.results || [];
 
     // Overall uptime based on aggregated checks if available
     const overallTotal = aggRows.reduce((a,b) => a + (b.total_checks||0), 0);
@@ -2192,8 +2398,8 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       downtime: {
         total_minutes: totalDowntimeMinutes,
         total_hours: (totalDowntimeMinutes / 60).toFixed(2),
-        incidents: downtimes.length,
-        records: downtimes
+        incidents: downtimeIncidents,
+        records: recentDowntimes
       },
       hourly_data: timeseries,
       tracking_since: trackingSince,
@@ -2432,7 +2638,7 @@ async function handleCleanupBlacklistedStations(env, corsHeaders) {
 }
 
 // ============================================================
-// DASHBOARD STATS - Avg uptime/downtime, daily extremes (since midnight PKT)
+// DASHBOARD STATS - Avg uptime/downtime, daily extremes (since midnight PKT from D1)
 // ============================================================
 async function handleDashboardStats(env, corsHeaders) {
   try {
@@ -2444,59 +2650,180 @@ async function handleDashboardStats(env, corsHeaders) {
     const midnightUTC = new Date(midnightPKT.getTime() - (5 * 60 * 60 * 1000)); // Convert back to UTC
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
     
-    // Get daily extremes since midnight PKT from status_logs - ONLY from online stations
-    // station_name now stores poi (user-friendly name), location stores technical stationName
-    const dailyExtremesQuery = await env.DB.prepare(`
+    // Improved stale sensor detection:
+    // A station is considered stale/frozen if:
+    // 1. It has 2+ readings BEFORE midnight AND 2+ readings AFTER midnight
+    // 2. The temperature value is the same (within 0.1°C) across all these readings
+    // This catches sensors that appear "online" but have frozen values
+    const staleStationsQuery = await env.DB.prepare(`
+      SELECT station_id
+      FROM (
+        SELECT 
+          station_id,
+          -- Count readings before midnight (last 6 hours of previous day)
+          SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) as readings_before_midnight,
+          -- Count readings after midnight (today)
+          SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) as readings_after_midnight,
+          -- Check if all temperatures are the same (within 0.1°C)
+          COUNT(DISTINCT ROUND(temperature, 1)) as unique_temps,
+          COUNT(*) as total_readings
+        FROM status_logs
+        WHERE timestamp >= datetime(?, '-6 hours')
+          AND temperature IS NOT NULL
+          AND is_online = 1
+        GROUP BY station_id
+        HAVING 
+          readings_before_midnight >= 2 
+          AND readings_after_midnight >= 2
+          AND unique_temps = 1
+          AND total_readings >= 4
+      )
+    `).bind(midnightStr, midnightStr, midnightStr).all();
+    
+    const staleStationIds = (staleStationsQuery.results || []).map(r => r.station_id);
+    
+    // Seasonal temperature validation for Pakistan
+    // Summer months (April-September): Can reach 52°C in Jacobabad/Sindh deserts
+    // Winter months (October-March): Can drop to -15°C in northern areas (Skardu, Gilgit)
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const isSummer = currentMonth >= 4 && currentMonth <= 9; // April to September
+    
+    let MIN_VALID_TEMP, MAX_VALID_TEMP;
+    if (isSummer) {
+      // Summer: April-September
+      MIN_VALID_TEMP = 5;   // Unlikely to go below 5°C even in northern areas during summer
+      MAX_VALID_TEMP = 52;  // Jacobabad can hit 52°C
+    } else {
+      // Winter: October-March  
+      MIN_VALID_TEMP = -15; // Northern areas (Skardu, Gilgit) can hit -15°C
+      MAX_VALID_TEMP = 40;  // Unlikely to exceed 40°C in winter
+    }
+    
+    const staleExcludeClause = staleStationIds.length > 0 
+      ? `AND sl.station_id NOT IN (${staleStationIds.map(id => `'${id}'`).join(',')})` 
+      : '';
+    
+    // Get daily extremes since midnight PKT from status_logs
+    // Filters applied:
+    // 1. is_online = 1 (station must be marked active)
+    // 2. Seasonal temperature range (summer: 5-52°C, winter: -15-40°C)
+    // 3. Exclude stale/frozen sensors (same value before & after midnight)
+    const extremesQuery = await env.DB.prepare(`
       SELECT 
+        'max_temp' as metric,
         sl.station_id,
         COALESCE(s.station_name, s.location, sl.station_id) as display_name,
-        sl.temperature,
-        sl.rainfall,
-        sl.wind_speed,
-        sl.timestamp
+        MAX(sl.temperature) as value
       FROM status_logs sl
       LEFT JOIN stations s ON sl.station_id = s.station_id
       WHERE sl.timestamp >= ?
         AND sl.is_online = 1
         AND sl.temperature IS NOT NULL
-    `).bind(midnightStr).all();
+        AND sl.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+        ${staleExcludeClause}
+      GROUP BY sl.station_id
+      HAVING MAX(sl.temperature) = (
+        SELECT MAX(temperature) FROM status_logs sl2
+        WHERE sl2.timestamp >= ? 
+          AND sl2.is_online = 1 
+          AND sl2.temperature IS NOT NULL
+          AND sl2.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
+      )
+      LIMIT 1
+    `).bind(midnightStr, midnightStr).first();
     
-    const rows = dailyExtremesQuery.results || [];
+    const minTempQuery = await env.DB.prepare(`
+      SELECT 
+        sl.station_id,
+        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
+        MIN(sl.temperature) as value
+      FROM status_logs sl
+      LEFT JOIN stations s ON sl.station_id = s.station_id
+      WHERE sl.timestamp >= ?
+        AND sl.is_online = 1
+        AND sl.temperature IS NOT NULL
+        AND sl.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+        ${staleExcludeClause}
+      GROUP BY sl.station_id
+      HAVING MIN(sl.temperature) = (
+        SELECT MIN(temperature) FROM status_logs sl2
+        WHERE sl2.timestamp >= ? 
+          AND sl2.is_online = 1 
+          AND sl2.temperature IS NOT NULL
+          AND sl2.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
+      )
+      LIMIT 1
+    `).bind(midnightStr, midnightStr).first();
     
-    // Find max and min temperature, max rainfall, max wind with station names
-    let maxTemp = null, maxTempStation = null;
-    let minTemp = null, minTempStation = null;
-    let maxRainfall = 0, maxRainfallStation = 'No rainfall';
-    let maxWind = 0, maxWindStation = 'No wind data';
+    const maxRainQuery = await env.DB.prepare(`
+      SELECT 
+        sl.station_id,
+        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
+        sl.rainfall as value,
+        sl.timestamp as reading_time
+      FROM status_logs sl
+      LEFT JOIN stations s ON sl.station_id = s.station_id
+      WHERE sl.timestamp >= ?
+        AND sl.is_online = 1
+        AND sl.rainfall IS NOT NULL
+        AND sl.rainfall > 0
+        AND sl.rainfall < 500
+        AND sl.timestamp = (
+          SELECT MAX(timestamp) FROM status_logs 
+          WHERE station_id = sl.station_id AND timestamp >= ?
+        )
+        AND sl.station_id NOT IN (
+          -- Exclude stations with stale rainfall (same value for 3+ consecutive readings)
+          SELECT station_id FROM (
+            SELECT station_id, COUNT(DISTINCT ROUND(rainfall, 1)) as unique_rain
+            FROM status_logs
+            WHERE timestamp >= ? AND rainfall IS NOT NULL AND rainfall > 0
+            GROUP BY station_id
+            HAVING COUNT(*) >= 3 AND unique_rain = 1
+          )
+        )
+      ORDER BY sl.rainfall DESC
+      LIMIT 1
+    `).bind(midnightStr, midnightStr, midnightStr).first();
     
-    for (const row of rows) {
-      const temp = parseFloat(row.temperature);
-      const rain = parseFloat(row.rainfall) || 0;
-      const wind = parseFloat(row.wind_speed) || 0;
-      
-      if (!isNaN(temp)) {
-        if (maxTemp === null || temp > maxTemp) {
-          maxTemp = temp;
-          maxTempStation = row.display_name || row.station_id;
-        }
-        if (minTemp === null || temp < minTemp) {
-          minTemp = temp;
-          minTempStation = row.display_name || row.station_id;
-        }
-      }
-      
-      if (rain > maxRainfall) {
-        maxRainfall = rain;
-        maxRainfallStation = row.display_name || row.station_id;
-      }
-      
-      if (wind > maxWind) {
-        maxWind = wind;
-        maxWindStation = row.display_name || row.station_id;
-      }
-    }
+    const maxWindQuery = await env.DB.prepare(`
+      SELECT 
+        sl.station_id,
+        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
+        MAX(sl.wind_speed) as value
+      FROM status_logs sl
+      LEFT JOIN stations s ON sl.station_id = s.station_id
+      WHERE sl.timestamp >= ?
+        AND sl.is_online = 1
+        AND sl.wind_speed IS NOT NULL
+        AND sl.wind_speed > 0
+      GROUP BY sl.station_id
+      HAVING MAX(sl.wind_speed) = (
+        SELECT MAX(wind_speed) FROM status_logs 
+        WHERE timestamp >= ? AND is_online = 1 AND wind_speed IS NOT NULL AND wind_speed > 0
+      )
+      LIMIT 1
+    `).bind(midnightStr, midnightStr).first();
     
-    // Get average uptime percentage across all stations (last 24 hours)
+    // Extract values - safely handle null query results
+    const maxTemp = extremesQuery && extremesQuery.value !== null ? parseFloat(extremesQuery.value).toFixed(1) : null;
+    const maxTempStation = extremesQuery?.display_name || null;
+    const minTemp = minTempQuery && minTempQuery.value !== null ? parseFloat(minTempQuery.value).toFixed(1) : null;
+    const minTempStation = minTempQuery?.display_name || null;
+    const maxRainfall = maxRainQuery && maxRainQuery.value !== null ? parseFloat(maxRainQuery.value).toFixed(1) : '0.0';
+    const maxRainfallStation = maxRainQuery?.display_name || 'No rainfall';
+    const maxWind = maxWindQuery && maxWindQuery.value !== null ? parseFloat(maxWindQuery.value).toFixed(1) : '0.0';
+    const maxWindStation = maxWindQuery?.display_name || 'No wind data';
+    
+    // Get record count since midnight
+    const countQuery = await env.DB.prepare(`
+      SELECT COUNT(*) as cnt FROM status_logs WHERE timestamp >= ?
+    `).bind(midnightStr).first();
+    const recordCount = countQuery?.cnt || 0;
+    
+    // Get average uptime percentage across all stations (last 24 hours) from DB
     const avgUptimeQuery = await env.DB.prepare(`
       SELECT 
         station_id,
@@ -2525,21 +2852,23 @@ async function handleDashboardStats(env, corsHeaders) {
     return new Response(JSON.stringify({
       success: true,
       daily_extremes: {
-        max_temp: maxTemp !== null ? parseFloat(maxTemp.toFixed(1)) : null,
+        max_temp: maxTemp !== null ? parseFloat(maxTemp) : null,
         max_temp_station: maxTempStation,
-        min_temp: minTemp !== null ? parseFloat(minTemp.toFixed(1)) : null,
+        min_temp: minTemp !== null ? parseFloat(minTemp) : null,
         min_temp_station: minTempStation,
-        max_rainfall: parseFloat(maxRainfall.toFixed(1)),
+        max_rainfall: parseFloat(maxRainfall),
         max_rainfall_station: maxRainfallStation,
-        max_wind_gust: parseFloat(maxWind.toFixed(1)),
+        max_wind_gust: parseFloat(maxWind),
         max_wind_gust_station: maxWindStation,
-        since_midnight_pkt: midnightStr
+        since_midnight_pkt: midnightStr,
+        source: 'd1_history'
       },
       average_uptime: {
         uptime_pct: parseFloat(avgUptimePct.toFixed(1)),
         downtime_pct: parseFloat(avgDowntimePct.toFixed(1)),
         stations_counted: stationCount
       },
+      records_since_midnight: recordCount,
       timestamp: now.toISOString()
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
