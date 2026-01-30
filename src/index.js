@@ -542,6 +542,9 @@ export default {
       } else if (path === '/api/uptime-trend-chart') {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
         return await handleUptimeTrendChart(env, url, corsHeaders);
+      } else if (path === '/api/send-daily-report') {
+        // Manually trigger sending daily email report
+        return await handleSendDailyReport(env, corsHeaders);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
