@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>[STAGING] Weatherwalay Dashboard</title>
+    <title>[STAGING] Weatherwalay Stations Monitoring Dashboard</title>
     
-    <!-- Preload Inter font for faster loading -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
@@ -654,8 +654,9 @@
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
             display: flex;
-            justify-content: space-between;
+            flex-wrap: wrap;
             align-items: center;
+            gap: 12px;
         }
         
         .list-title {
@@ -887,53 +888,104 @@
             box-shadow: 0 0 6px #9ca3af;
         }
         
-        /* Category Tabs */
-        .category-tabs {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border);
+        /* Category Dropdown */
+        .category-dropdown {
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 180px;
         }
         
-        .category-tab {
+        .category-dropdown:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+        
+        /* Time Range Toggle */
+        .time-range-toggle {
             display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 14px;
-            border-radius: 20px;
+            gap: 4px;
+            background: rgba(15, 23, 42, 0.5);
             border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .time-range-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
             background: transparent;
             color: var(--text-secondary);
             cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
             transition: all 0.2s;
-            font-size: 13px;
         }
         
-        .category-tab:hover {
-            background: var(--bg-card-hover);
+        .time-range-btn:hover {
+            background: rgba(14, 165, 233, 0.1);
             color: var(--text-primary);
         }
         
-        .category-tab.active {
+        .time-range-btn.active {
             background: var(--primary);
             color: white;
+        }
+        
+        .date-input {
+            padding: 6px 10px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .date-input:focus {
+            outline: none;
             border-color: var(--primary);
         }
         
-        .cat-count {
-            background: rgba(255,255,255,0.2);
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
+        .apply-btn {
+            padding: 6px 14px;
+            background: var(--success);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
         }
         
-        .category-tab.active .cat-count {
-            background: rgba(255,255,255,0.3);
+        .apply-btn:hover {
+            background: #059669;
         }
         
+        .list-filters {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+        
+        .filter-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
         /* Category Badges */
         .category-badge {
             display: inline-flex;
@@ -957,12 +1009,6 @@
             background: rgba(59, 130, 246, 0.15);
             color: #3b82f6;
             border: 1px solid rgba(59, 130, 246, 0.3);
-        }
-        
-        .category-badge.owner {
-            background: rgba(245, 158, 11, 0.15);
-            color: #f59e0b;
-            border: 1px solid rgba(245, 158, 11, 0.3);
         }
         
         .category-badge.wu {
@@ -1244,6 +1290,10 @@
                 gap: 8px;
             }
             
+            .category-dropdown {
+                width: 100%;
+            }
+            
             .category-tabs {
                 flex-wrap: wrap;
                 gap: 5px;
@@ -1257,6 +1307,25 @@
             .filter-btn {
                 padding: 8px 12px;
                 font-size: 12px;
+            }
+            
+            /* Custom date picker mobile styles */
+            #customDateRange {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 10px !important;
+            }
+            
+            #customDateRange .date-input {
+                width: 100%;
+                padding: 12px;
+                font-size: 14px;
+            }
+            
+            #customDateRange .apply-btn {
+                width: 100%;
+                padding: 12px;
+                font-size: 14px;
             }
             
             .export-buttons {
@@ -1306,11 +1375,34 @@
             }
             
             table {
-                font-size: 12px;
+                font-size: 11px;
+                min-width: 500px;
             }
             
             th, td {
-                padding: 8px 6px;
+                padding: 6px 4px;
+            }
+            
+            /* Hide Source (2nd) and POI (7th) columns on mobile */
+            th:nth-child(2), td:nth-child(2),
+            th:nth-child(7), td:nth-child(7) {
+                display: none;
+            }
+            
+            /* Hide station ID on mobile to save space */
+            td:first-child small {
+                display: none;
+            }
+            
+            /* Compact status badge on mobile */
+            .status-badge {
+                padding: 3px 6px;
+                font-size: 9px;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
             }
             
             .offline-panel {
@@ -1499,9 +1591,18 @@
                     <div style="font-size:13px; color:var(--text-secondary);">Group:</div>
                     <button id="btnCategory" class="chart-toggle active" data-group="category">Category</button>
                     <button id="btnSource" class="chart-toggle" data-group="source">Source</button>
+                    <button id="btnProvince" class="chart-toggle" data-group="province">Province</button>
                     <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Type:</div>
                     <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
+                    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                        <div style="font-size:13px; color:var(--text-secondary);">Network:</div>
+                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)" style="min-width: 140px;">
+                            <option value="all">🌐 All Networks</option>
+                            <option value="ww">🏠 WeatherWalay</option>
+                            <option value="wu">🌐 Weather Underground</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="height: 200px; max-height: 200px; margin-top:8px;">
                     <canvas id="categoryUptimeChart"></canvas>
@@ -1542,45 +1643,53 @@
             <!-- Station List -->
             <div class="station-list">
                 <div class="list-header">
-                    <h2 class="list-title">All Stations</h2>
-                    <!-- Category Tabs -->
-                    <div class="category-tabs">
-                        <button class="category-tab active" data-category="all">
-                            <span>📊</span> All <span class="cat-count" id="countAll">0</span>
-                        </button>
-                        <button class="category-tab" data-category="corporate">
-                            <span>🏢</span> Corporate <span class="cat-count" id="countCorporate">0</span>
-                        </button>
-                        <button class="category-tab" data-category="community">
-                            <span>👥</span> Community <span class="cat-count" id="countCommunity">0</span>
-                        </button>
-                        <button class="category-tab" data-category="reference">
-                            <span>📍</span> Reference <span class="cat-count" id="countReference">0</span>
-                        </button>
-                        <button class="category-tab" data-category="owner">
-                            <span>👤</span> Employee Stations <span class="cat-count" id="countOwner">0</span>
-                        </button>
-                        <button class="category-tab" data-category="wu">
-                            <span>🌐</span> Others <span class="cat-count" id="countWU">0</span>
-                        </button>
-                    </div>
-                    <div class="controls">
-                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search stations...">
-                        <select id="sourceFilter" class="source-filter">
+                    <h2 class="list-title" style="margin: 0;">All Stations:</h2>
+                    
+                    <!-- Controls Row -->
+                    <div class="controls" style="gap: 8px;">
+                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 120px;">
+                        <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)" style="min-width: 120px;">
+                            <option value="all">📊 All Categories</option>
+                            <option value="corporate">🏢 Corporate</option>
+                            <option value="community">👥 Community</option>
+                            <option value="reference">📍 Reference</option>
+                            <option value="wu">🌐 External</option>
+                        </select>
+                        <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
                             <option value="all">All Sources</option>
                             <option value="Davis">Davis</option>
                             <option value="Misol">Misol</option>
                             <option value="WU">WU</option>
                         </select>
-                        <button class="filter-btn active" data-filter="all">All</button>
-                        <button class="filter-btn" data-filter="active">Active</button>
-                        <button class="filter-btn" data-filter="inactive">Inactive</button>
-                        <button class="filter-btn" data-filter="disabled">Disabled</button>
-                        <div class="export-buttons">
-                            <button class="export-btn" onclick="exportToCSV()" title="Export to CSV">📥 CSV</button>
-                            <button class="export-btn excel" onclick="downloadDailyReport()" title="Download Full Report">📊 Excel</button>
-                            <button class="export-btn" onclick="exportToPDF()" title="Print Report">🖨️ Print</button>
-                        </div>
+                        <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)" style="min-width: 110px;">
+                            <option value="all">🔘 All Status</option>
+                            <option value="active">🟢 Active</option>
+                            <option value="inactive">🔴 Inactive</option>
+                            <option value="disabled">⚫ Disabled</option>
+                        </select>
+                        <select id="exportDropdown" class="source-filter" onchange="handleExport(this.value)" style="min-width: 100px;">
+                            <option value="">📤 Export</option>
+                            <option value="csv">📥 CSV</option>
+                            <option value="excel">📊 Excel</option>
+                            <option value="print">🖨️ Print</option>
+                        </select>
+                        <select id="uptimePeriod" class="source-filter" onchange="handleUptimePeriod(this.value)" style="min-width: 120px;">
+                            <option value="24h">⏱️ 24h</option>
+                            <option value="daily">⏱️ Today</option>
+                            <option value="7d">⏱️ 7D</option>
+                            <option value="30d">⏱️ 30D</option>
+                            <option value="1y">⏱️ 1Y</option>
+                            <option value="custom">⏱️ Custom</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Custom Date Range Row (hidden by default) -->
+                    <div id="customDateRange" style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                        <span style="color: var(--text-secondary); font-size: 13px;">Custom Range:</span>
+                        <input type="date" id="startDate" class="date-input" title="Start Date">
+                        <span style="color: var(--text-secondary);">to</span>
+                        <input type="date" id="endDate" class="date-input" title="End Date">
+                        <button class="apply-btn" onclick="applyCustomRange()">Apply</button>
                     </div>
                 </div>
                 
@@ -1944,20 +2053,20 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // Configuration - STAGING ENVIRONMENT
+        // Configuration
         const API_BASE = 'https://hubservice.weatherwalay.com';
-        const WORKER_API = 'https://weatherlink-monitor-staging.mashhood2717.workers.dev'; // STAGING Worker URL
+        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
         
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
-            '217041': 'community', '160484': 'corporate', '224681': 'owner', '160497': 'community',
-            '169631': 'community', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
-            '169682': 'community', '169694': 'community', 'C13': 'community', '165897': 'community',
-            '176678': 'community', '176749': 'community', '169767': 'community', 'C14': 'reference',
+            '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',
+            '169631': 'corporate', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
+            '169682': 'corporate', '169694': 'corporate', 'C13': 'community', '165897': 'community',
+            '176678': 'community', '176749': 'community', '169767': 'corporate', 'C14': 'reference',
             '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
             '163746': 'community', '192287': 'corporate', '176854': 'corporate', '177200': 'community',
-            '169859': 'community', 'IPASRU1': 'wu', '161483': 'community', '207397': 'community',
-            'C20': 'community', '163831': 'community', '163843': 'community', '169947': 'community',
+            '169859': 'corporate', 'IPASRU1': 'wu', '161483': 'community', '207397': 'community',
+            'C20': 'community', '163831': 'community', '163843': 'community', '169947': 'corporate',
             '172461': 'reference', '172475': 'reference', '174619': 'community', '161580': 'community',
             '188331': 'corporate', '188337': 'corporate', '177303': 'reference', '177310': 'reference',
             '198090': 'corporate', '177389': 'community', '172577': 'community', '177408': 'corporate',
@@ -1968,11 +2077,11 @@
             '175132': 'corporate', '147761': 'community', '147492': 'community', '162057': 'community',
             '162130': 'community', '164315': 'community', '164179': 'corporate', '164181': 'corporate',
             '170382': 'community', '175222': 'corporate', 'C12': 'community', '188822': 'corporate',
-            '188834': 'corporate', '177683': 'reference', '170426': 'community', '170433': 'community',
+            '188834': 'corporate', '177683': 'community', '170426': 'community', '170433': 'community',
             '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
-            '177740': 'reference', '177802': 'community', '170462': 'community', '170469': 'community',
+            '177740': 'community', '177802': 'community', '170462': 'community', '170469': 'community',
             '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
-            '170556': 'corporate', '162416': 'community', '162474': 'reference', 'C23': 'reference',
+            '170556': 'corporate', '162416': 'community', '162474': 'community', 'C23': 'community',
             '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
             '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
             '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
@@ -1985,15 +2094,15 @@
             '167006': 'community', '192289': 'corporate', '202668': 'corporate', '160726': 'community',
             '160777': 'corporate', 'C7': 'reference', '178475': 'reference', '178480': 'community',
             'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
-            'C26': 'owner', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
+            'C26': 'community', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
             '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
             '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
-            '169407': 'community', '169438': 'community', '169455': 'community', 'C6': 'corporate',
-            '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'community',
-            '169500': 'community', '174130': 'community', '163360': 'community', '163347': 'community',
-            '169639': 'community', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
+            '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
+            '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'corporate',
+            '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
+            '169639': 'corporate', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
             'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
-            '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'reference',
+            '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'community',
             '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
             'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
             'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
@@ -2004,15 +2113,15 @@
             'ITURBA4': 'wu', 'IKARAC33': 'wu', 'IKARAC12': 'wu', 'IKARAC25': 'wu',
             'IKARAC24': 'wu', 'IKARAC17': 'wu', 'ITANDO3': 'wu', 'IKARAC38': 'wu',
             'IJATI2': 'wu', '101361': 'corporate', '104536': 'corporate', '117090': 'corporate',
-            '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'owner',
-            '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'owner',
+            '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'community',
+            '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'community',
             '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
-            '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'owner',
-            '131643': 'reference', '131893': 'reference', '220024': 'corporate', '132393': 'community',
+            '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'community',
+            '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
             '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
-            '133035': 'corporate', '133150': 'owner', '133253': 'community', '133425': 'community',
+            '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
             '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
-            '201736': 'community', '129498': 'community', '134268': 'community', '134297': 'community',
+            '201736': 'community', '129498': 'corporate', '134268': 'community', '134297': 'community',
             'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
             'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
             'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
@@ -2027,8 +2136,7 @@
         const CATEGORY_CONFIG = {
             'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
             'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
-            'owner': { name: 'Employee Stations', color: '#f59e0b', icon: '👤' },
-            'wu': { name: 'Others', color: '#ec4899', icon: '🌐' },
+            'wu': { name: 'External', color: '#ec4899', icon: '🌐' },
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' }
         };
         
@@ -2077,6 +2185,7 @@
         let allStations = [];
         let currentFilter = 'all';
         let currentSourceFilter = 'all';
+        let currentNetworkFilter = 'all';
         let sortColumn = 'name';
         let sortDirection = 'asc';
         let map = null;
@@ -2291,6 +2400,7 @@
                     document.querySelectorAll('.uptime-range-btn').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
                     const range = e.target.dataset.range;
+                    localStorage.setItem('uptimeRange', range);
                     initUptimeTrendLineChart(range);
                 });
             });
@@ -2298,8 +2408,8 @@
         
         // Category Uptime Chart
         let categoryUptimeChart = null;
-            let categoryChartType = 'bar';
-            let chartGroupMode = 'category'; // 'category' or 'source'
+        let categoryChartType = 'bar';
+        let chartGroupMode = 'category'; // 'category', 'source', or 'province'
         
         function initCategoryUptimeChart() {
             const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
@@ -2308,16 +2418,24 @@
                 categoryUptimeChart.destroy();
             }
 
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
             // Calculate uptime for each category - prefer real 24h uptime when available
-            const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'Employee Stations', 'Others'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
 
             categories.forEach(cat => {
-                const catStations = allStations.filter(s => s.category === cat);
+                const catStations = filteredStations.filter(s => s.category === cat);
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
 
@@ -2448,6 +2566,14 @@
                 categoryUptimeChart.destroy();
             }
 
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
             // Calculate uptime for each source type
             const sources = ['Davis', 'Misol', 'WU'];
             const sourceNames = ['Davis', 'Misol', 'Weather Underground'];
@@ -2457,7 +2583,7 @@
             const totalData = [];
 
             sources.forEach(src => {
-                const srcStations = allStations.filter(s => s.api_source === src);
+                const srcStations = filteredStations.filter(s => s.api_source === src);
                 const total = srcStations.length;
                 const active = srcStations.filter(s => s.status === 'Active').length;
 
@@ -2575,11 +2701,163 @@
             }
         }
 
+        // Province Uptime Chart - groups by province
+        function initProvinceUptimeChart() {
+            const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
+
+            if (categoryUptimeChart) {
+                categoryUptimeChart.destroy();
+            }
+
+            // Apply network filter first
+            let filteredStations = allStations;
+            if (currentNetworkFilter === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (currentNetworkFilter === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+
+            // Calculate uptime for each province
+            const provinces = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
+            const provinceNames = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
+            const provinceColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
+            const uptimeData = [];
+            const activeData = [];
+            const totalData = [];
+
+            provinces.forEach(prov => {
+                const provStations = filteredStations.filter(s => s.province === prov);
+                const total = provStations.length;
+                const active = provStations.filter(s => s.status === 'Active').length;
+
+                // Compute average uptime using stations that have real checks (checks_24h > 0).
+                // Prefer `uptime_24h` when present, otherwise fall back to `uptime` which may be supplied by realtime API.
+                const uptimes = provStations
+                    .filter(s => s.checks_24h && s.checks_24h > 0)
+                    .map(s => {
+                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
+                    })
+                    .filter(v => !isNaN(v));
+
+                let avgUptime = 0;
+                if (uptimes.length > 0) {
+                    const sum = uptimes.reduce((a, b) => a + b, 0);
+                    avgUptime = sum / uptimes.length;
+                } else {
+                    // No recorded checks for this province — fall back to current status
+                    if (total > 0) {
+                        avgUptime = (active / total) * 100;
+                    } else {
+                        avgUptime = 0;
+                    }
+                }
+
+                uptimeData.push(Number(avgUptime.toFixed(1)));
+                activeData.push(active);
+                totalData.push(total);
+            });
+
+            const chartType = categoryChartType === 'line' ? 'line' : 'bar';
+            const commonDataset = {
+                label: 'Uptime %',
+                data: uptimeData
+            };
+
+            if (chartType === 'bar') {
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: provinceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            backgroundColor: provinceColors.map(c => c + '80'),
+                            borderColor: provinceColors,
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            minBarLength: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [
+                                            `Uptime: ${context.parsed.y.toFixed(1)}%`,
+                                            `Active: ${activeData[idx]} / ${totalData[idx]}`
+                                        ];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            } else {
+                // line chart
+                categoryUptimeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: provinceNames,
+                        datasets: [{
+                            ...commonDataset,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.08)',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: provinceColors,
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#f1f5f9',
+                                bodyColor: '#94a3b8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                        }
+                    }
+                });
+            }
+        }
+
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
-            const categories = ['corporate', 'community', 'reference', 'owner', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'Employee Stations', 'Others'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -2707,6 +2985,15 @@
             // Filter by category
             if (currentCategory !== 'all') {
                 stations = stations.filter(s => s.category === currentCategory);
+            }
+            
+            // Filter by network (WW, WU)
+            if (currentNetworkFilter !== 'all') {
+                if (currentNetworkFilter === 'ww') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+                } else if (currentNetworkFilter === 'wu') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+                }
             }
             
             stations.forEach(station => {
@@ -2993,7 +3280,6 @@
                 corporate: 0,
                 community: 0,
                 reference: 0,
-                owner: 0,
                 wu: 0
             };
             
@@ -3009,14 +3295,12 @@
             const countCorporate = document.getElementById('countCorporate');
             const countCommunity = document.getElementById('countCommunity');
             const countReference = document.getElementById('countReference');
-            const countOwner = document.getElementById('countOwner');
             const countWU = document.getElementById('countWU');
             
             if (countAll) countAll.textContent = counts.all;
             if (countCorporate) countCorporate.textContent = counts.corporate;
             if (countCommunity) countCommunity.textContent = counts.community;
             if (countReference) countReference.textContent = counts.reference;
-            if (countOwner) countOwner.textContent = counts.owner;
             if (countWU) countWU.textContent = counts.wu;
         }
         
@@ -3058,6 +3342,152 @@
             return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
         }
         
+        // Current time range for filtering
+        let currentTimeRange = '24h';
+        
+        // Filter by category dropdown
+        function filterByCategory(category) {
+            currentCategory = category;
+            renderTable();
+            updateMapMarkers();
+            updateCategoryChart();
+            
+            // Update count display
+            const counts = {
+                all: allStations.length,
+                corporate: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'corporate').length,
+                community: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'community').length,
+                reference: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'reference').length,
+                wu: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu').length
+            };
+            const count = counts[category] || counts.all;
+            document.getElementById('countAll').textContent = count;
+        }
+        
+        function filterByNetwork(network) {
+            currentNetworkFilter = network;
+            localStorage.setItem('networkFilter', network);
+            renderTable();
+            updateMapMarkers();
+            updateCategoryChart();
+            
+            // Update count display based on network filter (if element exists)
+            let filteredStations = allStations;
+            if (network === 'ww') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            } else if (network === 'wu') {
+                filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+            }
+            const countAllEl = document.getElementById('countAll');
+            if (countAllEl) {
+                countAllEl.textContent = filteredStations.length;
+            }
+        }
+        
+        // Set time range for uptime display
+        function setTimeRange(range) {
+            currentTimeRange = range;
+            
+            // Update active button
+            document.querySelectorAll('.time-range-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.range === range);
+            });
+            
+            // Hide custom date picker if not custom
+            if (range !== 'custom') {
+                document.getElementById('customDateRange').style.display = 'none';
+                // Refresh data with new time range
+                loadUptimeData(range);
+            }
+        }
+        
+        // Show custom date picker
+        function showCustomDatePicker() {
+            currentTimeRange = 'custom';
+            
+            // Update active button
+            document.querySelectorAll('.time-range-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.range === 'custom');
+            });
+            
+            // Show date pickers
+            const customDiv = document.getElementById('customDateRange');
+            customDiv.style.display = 'flex';
+            
+            // Set default dates (last 7 days)
+            const today = new Date();
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+            document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
+        }
+        
+        // Apply custom date range
+        function applyCustomRange() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (!startDate || !endDate) {
+                showNotification('Please select both start and end dates', 'error');
+                return;
+            }
+            
+            if (new Date(startDate) > new Date(endDate)) {
+                showNotification('Start date must be before end date', 'error');
+                return;
+            }
+            
+            loadUptimeData('custom', startDate, endDate);
+        }
+        
+        // Load uptime data for selected time range
+        async function loadUptimeData(range, startDate = null, endDate = null) {
+            try {
+                showNotification('Loading uptime data...', 'info');
+                
+                let url = `${WORKER_API}/api/uptime-percentages?range=${range}`;
+                if (range === 'custom' && startDate && endDate) {
+                    url += `&start=${startDate}&end=${endDate}`;
+                }
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    showNotification('Failed to load uptime data', 'error');
+                    return;
+                }
+                
+                const data = await response.json();
+                if (!data.uptime_data) {
+                    showNotification('No uptime data returned', 'error');
+                    return;
+                }
+                
+                // Update station uptime values
+                const uptimeMap = {};
+                data.uptime_data.forEach(u => {
+                    uptimeMap[u.station_id] = u.uptime_24h;
+                });
+                
+                // Update allStations with new uptime
+                let updatedCount = 0;
+                allStations = allStations.map(s => {
+                    const newUptime = uptimeMap[s.station_id];
+                    if (newUptime !== undefined) {
+                        updatedCount++;
+                        return { ...s, uptime_24h: newUptime };
+                    }
+                    return s;
+                });
+                
+                renderTable();
+                showNotification(`Uptime updated for ${updatedCount} stations (${range})`, 'success');
+            } catch (e) {
+                console.warn('Failed to load uptime data for range:', range, e);
+                showNotification('Error loading uptime: ' + e.message, 'error');
+            }
+        }
+        
         // Render table
         function renderTable() {
             let stations = [...allStations];
@@ -3082,6 +3512,15 @@
                 stations = stations.filter(s => s.api_source === currentSourceFilter);
             }
             
+            // Filter by network (WW, WU)
+            if (currentNetworkFilter !== 'all') {
+                if (currentNetworkFilter === 'ww') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+                } else if (currentNetworkFilter === 'wu') {
+                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
+                }
+            }
+            
             // Search
             const searchTerm = document.getElementById('searchBox').value.toLowerCase();
             if (searchTerm) {
@@ -3095,21 +3534,26 @@
             
             // Sort
             stations.sort((a, b) => {
-                let aVal = a[sortColumn];
-                let bVal = b[sortColumn];
+                let aVal, bVal;
                 
                 if (sortColumn === 'temperature') {
-                    aVal = parseFloat(aVal) || 0;
-                    bVal = parseFloat(bVal) || 0;
+                    aVal = parseFloat(a.temperature) || -999;
+                    bVal = parseFloat(b.temperature) || -999;
                 } else if (sortColumn === 'rainfall') {
-                    aVal = parseFloat(aVal) || 0;
-                    bVal = parseFloat(bVal) || 0;
+                    aVal = parseFloat(a.rainfall) || 0;
+                    bVal = parseFloat(b.rainfall) || 0;
                 } else if (sortColumn === 'uptime') {
-                    aVal = parseFloat(aVal) || 0;
-                    bVal = parseFloat(bVal) || 0;
+                    aVal = parseFloat(a.uptime_24h) || 0;
+                    bVal = parseFloat(b.uptime_24h) || 0;
+                } else if (sortColumn === 'name') {
+                    aVal = String(a.station_name || '').toLowerCase();
+                    bVal = String(b.station_name || '').toLowerCase();
+                } else if (sortColumn === 'status') {
+                    aVal = String(a.status || '').toLowerCase();
+                    bVal = String(b.status || '').toLowerCase();
                 } else {
-                    aVal = String(aVal).toLowerCase();
-                    bVal = String(bVal).toLowerCase();
+                    aVal = String(a[sortColumn] || '').toLowerCase();
+                    bVal = String(b[sortColumn] || '').toLowerCase();
                 }
                 
                 if (sortDirection === 'asc') {
@@ -3311,13 +3755,27 @@
             }
             
             // Outage records
-            if (data.downtime.records && data.downtime.records.length > 0) {
-                document.getElementById('downtimeRecords').innerHTML = data.downtime.records.map(d => `
-                    <div class="downtime-record">
-                        <span class="downtime-time">${formatDatePKT(d.start_time)}</span>
-                        <span class="downtime-duration">${d.duration_minutes ? d.duration_minutes + ' min' : 'Ongoing'}</span>
-                    </div>
-                `).join('');
+            if ((data.downtime.records && data.downtime.records.length > 0) || data.downtime.total_minutes > 0) {
+                let recordsHtml = '';
+                
+                // Show calculated downtime incidents if any
+                if (data.downtime.total_minutes > 0 && data.downtime.incidents > 0) {
+                    recordsHtml += `<div style="margin-bottom: 10px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--danger);">
+                        <strong>⚠️ ${data.downtime.incidents} outage${data.downtime.incidents > 1 ? 's' : ''} detected</strong> - Total offline time: ${data.downtime.total_hours}h
+                    </div>`;
+                }
+                
+                // Show detailed records from downtime_records table
+                if (data.downtime.records && data.downtime.records.length > 0) {
+                    recordsHtml += data.downtime.records.map(d => `
+                        <div class="downtime-record">
+                            <span class="downtime-time">${formatDatePKT(d.start_time)}</span>
+                            <span class="downtime-duration">${d.duration_minutes ? d.duration_minutes + ' min' : 'Ongoing'}</span>
+                        </div>
+                    `).join('');
+                }
+                
+                document.getElementById('downtimeRecords').innerHTML = recordsHtml;
             } else {
                 document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No outages recorded (${periodLabel.toLowerCase()})</div>`;
             }
@@ -3640,6 +4098,44 @@
             // Removed from header - no action needed
         }
         
+        // Handle export dropdown
+        function handleExport(value) {
+            if (!value) return;
+            
+            switch(value) {
+                case 'csv':
+                    exportToCSV();
+                    break;
+                case 'excel':
+                    downloadDailyReport();
+                    break;
+                case 'print':
+                    exportToPDF();
+                    break;
+            }
+            
+            // Reset dropdown to default
+            document.getElementById('exportDropdown').value = '';
+        }
+        
+        // Filter by status dropdown
+        function filterByStatus(status) {
+            currentFilter = status;
+            renderTable();
+        }
+        
+        // Handle uptime period dropdown
+        function handleUptimePeriod(value) {
+            currentTimeRange = value;
+            if (value === 'custom') {
+                showCustomDatePicker();
+            } else {
+                document.getElementById('customDateRange').style.display = 'none';
+                loadUptimeData(value);
+                showNotification(`Uptime period changed to ${value}`, 'info');
+            }
+        }
+        
         // Export stations to CSV
         function exportToCSV() {
             const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Availability (%)', 'Location', 'Latitude', 'Longitude', 'Last Update'];
@@ -3814,7 +4310,7 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const now = new Date();
-                const filename = `weather_report_${now.toISOString().split('T')[0]}.csv`;
+                const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
                 
                 link.setAttribute('href', url);
                 link.setAttribute('download', filename);
@@ -3938,6 +4434,129 @@
             }
         }
 
+        // Station ID to Province mapping (from verified CSV data)
+        const STATION_PROVINCES = {
+            // Islamabad
+            '224681': 'Islamabad', '163746': 'Islamabad', 'C26': 'Islamabad', '163264': 'Islamabad', 'C25': 'Islamabad',
+            'C6': 'Islamabad', 'C3': 'Islamabad', '127500': 'Islamabad', 'IISLAMAB22': 'Islamabad', 'IISLAM13': 'Islamabad',
+            'IISLAM9': 'Islamabad', 'IISLAM1': 'Islamabad', 'IPUNJA22': 'Islamabad', 'IRAWAL3': 'Islamabad',
+            'IISLAMAB7': 'Islamabad', 'IISLAM11': 'Islamabad', 'IISLAM21': 'Islamabad', '137535': 'Islamabad',
+            'IISLAM25': 'Islamabad', 'IISLAM26': 'Islamabad', '147145': 'Islamabad', '147435': 'Islamabad',
+            '150367': 'Islamabad', '128962': 'Islamabad', '129104': 'Islamabad', '221563': 'Islamabad',
+            // Punjab
+            '160497': 'Punjab', 'ILAHOR38': 'Punjab', '165743': 'Punjab', '165799': 'Punjab', 'C13': 'Punjab',
+            '165897': 'Punjab', 'C14': 'Punjab', 'IPASRU1': 'Punjab', '174619': 'Punjab', 'C11': 'Punjab',
+            'C15': 'Punjab', '186109': 'Punjab', '228881': 'Punjab', '159738': 'Punjab', '163601': 'Punjab',
+            '158829': 'Punjab', 'C21': 'Punjab', 'C16': 'Punjab', 'C17': 'Punjab', '160691': 'Punjab',
+            '160700': 'Punjab', '175132': 'Punjab', '147761': 'Punjab', '147492': 'Punjab', '162057': 'Punjab',
+            '162130': 'Punjab', '164315': 'Punjab', '175222': 'Punjab', 'C12': 'Punjab', '162345': 'Punjab',
+            '162329': 'Punjab', '202114': 'Punjab', '168681': 'Punjab', '162416': 'Punjab', '162474': 'Punjab',
+            'C23': 'Punjab', '164594': 'Punjab', '164604': 'Punjab', '168729': 'Punjab', '173079': 'Punjab',
+            '173126': 'Punjab', 'IPINDI7': 'Punjab', '162498': 'Punjab', '164690': 'Punjab', '191766': 'Punjab',
+            '168734': 'Punjab', '166840': 'Punjab', '166842': 'Punjab', '168851': 'Punjab', '175830': 'Punjab',
+            '166865': 'Punjab', '166868': 'Punjab', '168865': 'Punjab', '175970': 'Punjab', '166904': 'Punjab',
+            '166907': 'Punjab', '169020': 'Punjab', '178395': 'Punjab', '178386': 'Punjab', '166990': 'Punjab',
+            '167006': 'Punjab', '202668': 'Punjab', '160726': 'Punjab', '160777': 'Punjab', 'C7': 'Punjab',
+            '178475': 'Punjab', '178480': 'Punjab', 'IMURREE2': 'Punjab', '167088': 'Punjab', '167102': 'Punjab',
+            '169126': 'Punjab', 'C4': 'Punjab', 'C5': 'Punjab', '168781': 'Punjab', 'C19': 'Punjab',
+            '185206': 'Punjab', 'C22': 'Punjab', '165326': 'Punjab', '160873': 'Punjab', '221876': 'Punjab',
+            '160951': 'Punjab', '221803': 'Punjab', '174130': 'Punjab', '163360': 'Punjab', '163347': 'Punjab',
+            '165656': 'Punjab', '174221': 'Punjab', 'C8': 'Punjab', 'C9': 'Punjab', 'C10': 'Punjab',
+            '165665': 'Punjab', '165726': 'Punjab', '165732': 'Punjab', '165757': 'Punjab', '128522': 'Punjab',
+            '221884': 'Punjab', 'IPUNJA24': 'Punjab', 'IPUNJABR2': 'Punjab', 'IRAWAL18': 'Punjab', 'IRAWAL29': 'Punjab',
+            'IRAWAL16': 'Punjab', 'IFEDERAL8': 'Punjab', 'ILAHOR14': 'Punjab', 'I90582126': 'Punjab',
+            'I90582706': 'Punjab', 'IMURID1': 'Punjab', '101361': 'Punjab', '104536': 'Punjab', '117090': 'Punjab',
+            '211337': 'Punjab', '129010': 'Punjab', '180025': 'Punjab', '180027': 'Punjab', '129644': 'Punjab',
+            '129727': 'Punjab', '182269': 'Punjab', '130584': 'Punjab', '130787': 'Punjab', '194398': 'Punjab',
+            '131893': 'Punjab', '220024': 'Punjab', '132393': 'Punjab', '132465': 'Punjab', '132463': 'Punjab',
+            '206075': 'Punjab', '133029': 'Punjab', '133035': 'Punjab', '133150': 'Punjab', '133253': 'Punjab',
+            '133425': 'Punjab', '133509': 'Punjab', '201736': 'Punjab', '150067': 'Punjab', '150967': 'Punjab',
+            '131812': 'Punjab', '129090': 'Punjab', '129952': 'Punjab', '142628': 'Punjab', '139347': 'Punjab',
+            '133500': 'Punjab', '216612': 'Punjab', '221544': 'Punjab', '221555': 'Punjab', '221695': 'Punjab',
+            '221726': 'Punjab', '221703': 'Punjab', '221746': 'Punjab', '221873': 'Punjab', '221910': 'Punjab',
+            '221938': 'Punjab', '147425': 'Punjab', '228127': 'Punjab',
+            // KPK
+            '217041': 'KPK', '160484': 'KPK', '176678': 'KPK', '176749': 'KPK', '163674': 'KPK', '163691': 'KPK',
+            '176854': 'KPK', '177200': 'KPK', '161483': 'KPK', '207397': 'KPK', 'C20': 'KPK', '163831': 'KPK',
+            '163843': 'KPK', '172461': 'KPK', '172475': 'KPK', '161580': 'KPK', '177303': 'KPK', '177310': 'KPK',
+            '177389': 'KPK', '172577': 'KPK', '177408': 'KPK', '163333': 'KPK', '188822': 'KPK', '188834': 'KPK',
+            '128168': 'KPK', 'IKMILPUR2': 'KPK', 'IKHYBERP3': 'KPK', 'IKHYBE2': 'KPK', '183871': 'KPK',
+            '144841': 'KPK', '131374': 'KPK', '131643': 'KPK', '134031': 'KPK', '134038': 'KPK', '137991': 'KPK',
+            // Sindh
+            '188154': 'Sindh', '188166': 'Sindh', '192287': 'Sindh', '164176': 'Sindh', '170332': 'Sindh',
+            '170382': 'Sindh', '170426': 'Sindh', '170433': 'Sindh', '175318': 'Sindh', '175407': 'Sindh',
+            '170462': 'Sindh', '170469': 'Sindh', '175416': 'Sindh', '170481': 'Sindh', '170556': 'Sindh',
+            '199831': 'Sindh', '199834': 'Sindh', '175472': 'Sindh', '175480': 'Sindh', '170712': 'Sindh',
+            '175682': 'Sindh', '178269': 'Sindh', '170725': 'Sindh', '170765': 'Sindh', '192289': 'Sindh',
+            '205861': 'Sindh', '170638': 'Sindh', 'IKUNRI2': 'Sindh', 'ISINDH20': 'Sindh', 'ISINDH23': 'Sindh',
+            'ISINDH25': 'Sindh', 'IKARAC33': 'Sindh', 'IKARAC12': 'Sindh', 'IKARAC25': 'Sindh', 'IKARAC24': 'Sindh',
+            'IKARAC17': 'Sindh', 'ITANDO3': 'Sindh', 'IKARAC38': 'Sindh', 'IJATI2': 'Sindh', '134268': 'Sindh',
+            '134297': 'Sindh', 'IKARAC41': 'Sindh', '217831': 'Sindh',
+            // Balochistan
+            '169631': 'Balochistan', '169682': 'Balochistan', '169694': 'Balochistan', '169767': 'Balochistan',
+            '188331': 'Balochistan', '188337': 'Balochistan', '169859': 'Balochistan', '169947': 'Balochistan',
+            '164179': 'Balochistan', '164181': 'Balochistan', '169407': 'Balochistan', '169438': 'Balochistan',
+            '169455': 'Balochistan', '169497': 'Balochistan', '169500': 'Balochistan', '169639': 'Balochistan',
+            'INUSHK12': 'Balochistan', 'ITURBA4': 'Balochistan', '129498': 'Balochistan',
+            // AJK
+            '198090': 'AJK', '177683': 'AJK', '177740': 'AJK', '177802': 'AJK', '174057': 'AJK',
+            '162588': 'AJK', '130231': 'AJK',
+            // Gilgit-Baltistan
+            '146260': 'GB'
+        };
+
+        // Determine province from station ID or location name
+        function determineProvince(stationId, location) {
+            // First check direct station ID mapping
+            if (stationId && STATION_PROVINCES[stationId.toString()]) {
+                return STATION_PROVINCES[stationId.toString()];
+            }
+            
+            // Fallback to location-based detection
+            if (!location) return '';
+            const loc = location.toLowerCase();
+            
+            // Islamabad
+            if (loc.includes('islamabad') || loc.includes('i-8') || loc.includes('i-9') || loc.includes('i-10') || 
+                loc.includes('f-8') || loc.includes('f-10') || loc.includes('f-11') || loc.includes('g-8') || 
+                loc.includes('g-15') || loc.includes('d-12') || loc.includes('d-17') || loc.includes('e-11') ||
+                loc.includes('banigala') || loc.includes('quaid e azam university') || loc.includes('nust')) return 'Islamabad';
+            
+            // Punjab
+            if (loc.includes('lahore') || loc.includes('rawalpindi') || loc.includes('rwp') || loc.includes('pindi') ||
+                loc.includes('multan') || loc.includes('faisalabad') || loc.includes('gujranwala') || loc.includes('sialkot') ||
+                loc.includes('bahawalpur') || loc.includes('sargodha') || loc.includes('jhelum') || loc.includes('chakwal') ||
+                loc.includes('attock') || loc.includes('mianwali') || loc.includes('bhakkar') || loc.includes('layyah') ||
+                loc.includes('murree') || loc.includes('westridge') || loc.includes('bahria town')) return 'Punjab';
+            
+            // KPK
+            if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat') ||
+                loc.includes('kohat') || loc.includes('bannu') || loc.includes('d.i khan') || loc.includes('dera ismail') ||
+                loc.includes('charsadda') || loc.includes('nowshera') || loc.includes('swabi') || loc.includes('haripur') ||
+                loc.includes('mansehra') || loc.includes('nathiagali') || loc.includes('waziristan')) return 'KPK';
+            
+            // Sindh
+            if (loc.includes('karachi') || loc.includes('hyderabad') || loc.includes('sukkur') || loc.includes('larkana') ||
+                loc.includes('nawabshah') || loc.includes('mirpur khas') || loc.includes('dadu') || loc.includes('thatta') ||
+                loc.includes('badin') || loc.includes('khairpur') || loc.includes('sanghar') || loc.includes('jacobabad') ||
+                loc.includes('gulshan') || loc.includes('surjani') || loc.includes('malir')) return 'Sindh';
+            
+            // Balochistan
+            if (loc.includes('quetta') || loc.includes('gwadar') || loc.includes('turbat') || loc.includes('sibi') ||
+                loc.includes('ziarat') || loc.includes('loralai') || loc.includes('pishin') || loc.includes('khuzdar') ||
+                loc.includes('nushki') || loc.includes('zhob') || loc.includes('chaman')) return 'Balochistan';
+            
+            // AJK
+            if (loc.includes('muzaffarabad') || loc.includes('mirpur') || loc.includes('rawalakot') || loc.includes('bagh') ||
+                loc.includes('kotli') || loc.includes('azad kashmir') || loc.includes('ajk')) return 'AJK';
+            
+            // GB
+            if (loc.includes('gilgit') || loc.includes('skardu') || loc.includes('hunza') || loc.includes('baltistan') ||
+                loc.includes('shimshal')) return 'GB';
+            
+            return '';
+        }
+
         // Load data from API
         async function loadData() {
             try {
@@ -3951,7 +4570,7 @@
                     const category = STATION_CATEGORIES[s.station_id] || 'community';
                     return {
                         station_id: s.station_id,
-                        station_name: s.station_name || s.location || `Station ${s.station_id}`,
+                        station_name: s.location || s.station_name || `Station ${s.station_id}`,
                         location: s.location || s.station_name || '',
                         latitude: parseFloat(s.latitude) || 0,
                         longitude: parseFloat(s.longitude) || 0,
@@ -3963,6 +4582,7 @@
                         last_seen: s.last_seen || null,
                         last_update: s.last_update || null,
                         category: category,
+                        province: determineProvince(s.station_id, s.location || s.station_name || ''),
                         uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
                         checks_24h: s.checks_24h || 0,
                         uptime: s.uptime_24h !== undefined && s.uptime_24h !== null ? s.uptime_24h : (s.is_active === 1 ? 100.0 : 0.0)
@@ -3991,17 +4611,23 @@
                     });
                 updateRecentOffline({ recent: offlineStations.slice(0, 20) });
                 
-                // Initialize category chart
-                initCategoryUptimeChart();
+                // Initialize chart based on saved mode
+                if (chartGroupMode === 'source') initSourceUptimeChart();
+                else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                else initCategoryUptimeChart();
                 
-                // Initialize uptime trend line chart (default to 24h)
-                initUptimeTrendLineChart('24h');
+                // Initialize uptime trend line chart with saved preference
+                initUptimeTrendLineChart(currentUptimeRange);
 
                 // Load uptime percentages from Worker
                 await loadUptimePercentages();
 
-                // Rebuild category chart after realtime uptimes applied
-                try { initCategoryUptimeChart(); } catch(e) { console.warn('Could not re-init category chart:', e.message); }
+                // Rebuild chart after realtime uptimes applied based on saved mode
+                try {
+                    if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                    else initCategoryUptimeChart();
+                } catch(e) { console.warn('Could not re-init chart:', e.message); }
             } catch (error) {
                 console.error('Error loading data:', error);
             }
@@ -4035,50 +4661,58 @@
                 });
             });
             
-            // Category tabs
-            document.querySelectorAll('.category-tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    currentCategory = tab.dataset.category;
-                    renderTable();
-                    updateMapMarkers();
-                    updateCategoryChart();
-                });
-            });
+            // Category dropdown - handled via onchange in HTML
             
             // Chart group toggles (Category / Source)
             document.getElementById('btnCategory')?.addEventListener('click', () => {
                 chartGroupMode = 'category';
+                localStorage.setItem('chartGroupMode', 'category');
                 document.getElementById('btnCategory')?.classList.add('active');
                 document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
                 document.getElementById('categoryChartTitle').textContent = 'Category Availability Summary';
                 if (currentCategory === 'all') initCategoryUptimeChart();
             });
             document.getElementById('btnSource')?.addEventListener('click', () => {
                 chartGroupMode = 'source';
+                localStorage.setItem('chartGroupMode', 'source');
                 document.getElementById('btnSource')?.classList.add('active');
                 document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
                 document.getElementById('categoryChartTitle').textContent = 'Source Availability Summary';
                 if (currentCategory === 'all') initSourceUptimeChart();
+            });
+            document.getElementById('btnProvince')?.addEventListener('click', () => {
+                chartGroupMode = 'province';
+                localStorage.setItem('chartGroupMode', 'province');
+                document.getElementById('btnProvince')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('categoryChartTitle').textContent = 'Province Availability Summary';
+                if (currentCategory === 'all') initProvinceUptimeChart();
             });
 
             // Chart type toggles (Bar / Line)
             document.getElementById('btnBar')?.addEventListener('click', () => {
                 categoryChartType = 'bar';
+                localStorage.setItem('categoryChartType', 'bar');
                 document.getElementById('btnBar')?.classList.add('active');
                 document.getElementById('btnLine')?.classList.remove('active');
                 if (currentCategory === 'all') {
                     if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
                     else initCategoryUptimeChart();
                 }
             });
+            
             document.getElementById('btnLine')?.addEventListener('click', () => {
                 categoryChartType = 'line';
+                localStorage.setItem('categoryChartType', 'line');
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
                 if (currentCategory === 'all') {
                     if (chartGroupMode === 'source') initSourceUptimeChart();
+                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
                     else initCategoryUptimeChart();
                 }
             });
@@ -4098,22 +4732,68 @@
                     }
                 });
             });
+
+            // Modal click-outside-to-close functionality
+            document.getElementById('stationModal').addEventListener('click', (e) => {
+                // Only close if clicked on the overlay itself, not on the modal content
+                if (e.target.id === 'stationModal') {
+                    closeStationModal();
+                }
+            });
         }
         
         // Initialize
         async function init() {
             initTheme();
             initMap();
+            
+            // Load saved preferences
+            chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
+            categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
+            currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
+            currentUptimeRange = localStorage.getItem('uptimeRange') || '24h';
+            
+            // Set active uptime range button based on saved preference
+            document.querySelectorAll('.uptime-range-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.range === currentUptimeRange);
+            });
+            
+            // Set active classes based on saved preferences
+            if (chartGroupMode === 'category') {
+                document.getElementById('btnCategory')?.classList.add('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
+            } else if (chartGroupMode === 'source') {
+                document.getElementById('btnSource')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnProvince')?.classList.remove('active');
+            } else if (chartGroupMode === 'province') {
+                document.getElementById('btnProvince')?.classList.add('active');
+                document.getElementById('btnCategory')?.classList.remove('active');
+                document.getElementById('btnSource')?.classList.remove('active');
+            }
+            
+            if (categoryChartType === 'bar') {
+                document.getElementById('btnBar')?.classList.add('active');
+                document.getElementById('btnLine')?.classList.remove('active');
+            } else {
+                document.getElementById('btnLine')?.classList.add('active');
+                document.getElementById('btnBar')?.classList.remove('active');
+            }
+            
+            // Set network filter dropdown
+            document.getElementById('networkFilter').value = currentNetworkFilter;
+            
             await loadData();
             setupEventListeners();
             setupUptimeRangeToggles();
             
-            // Auto-refresh every 5 minutes
-            setInterval(loadData, 5 * 60 * 1000);
+            // Auto-refresh DISABLED for staging - use manual sync only
+            // setInterval(loadData, 5 * 60 * 1000);
         }
         
         // Start when page loads
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
-</html><!-- cache-bust: 20260130103939 -->
+</html>
