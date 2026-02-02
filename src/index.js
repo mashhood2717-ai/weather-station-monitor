@@ -1289,6 +1289,35 @@ const BATCH_SIZE = 29; // Process 29 stations per batch for optimal performance
 // Helper function to process a single station
 async function syncSingleStation(env, station) {
   const stationId = String(station.stationID);
+  
+  // Skip logging for Disabled stations - they shouldn't count toward uptime/downtime
+  // Only Active and Inactive stations affect availability metrics
+  if (station.status === 'Disabled') {
+    // Still upsert station metadata but don't log status
+    const displayName = station.poi || station.stationName || 'Unknown';
+    const stationName = station.stationName || 'Unknown';
+    const apiSource = station.apiSource || null;
+    
+    await env.DB.prepare(`
+      INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
+      VALUES (?, ?, ?, ?, ?, ?, date('now'))
+      ON CONFLICT(station_id) DO UPDATE SET
+        station_name = excluded.station_name,
+        latitude = excluded.latitude,
+        longitude = excluded.longitude,
+        api_source = excluded.api_source
+    `).bind(
+      stationId,
+      displayName,
+      stationName,
+      parseFloat(station.lat) || 0,
+      parseFloat(station.long) || 0,
+      apiSource
+    ).run();
+    
+    return stationId; // Skip status logging for Disabled stations
+  }
+  
   const isOnline = station.status === 'Active' ? 1 : 0;
   // Prefer poi (user-friendly name) over stationName (technical name)
   const displayName = station.poi || station.stationName || 'Unknown';
@@ -2656,204 +2685,128 @@ async function handleDashboardStats(env, corsHeaders) {
     midnightPKT.setUTCHours(0, 0, 0, 0);
     const midnightUTC = new Date(midnightPKT.getTime() - (5 * 60 * 60 * 1000)); // Convert back to UTC
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
-    
-    // Improved stale sensor detection:
-    // A station is considered stale/frozen if:
-    // 1. It has 2+ readings BEFORE midnight AND 2+ readings AFTER midnight
-    // 2. The temperature value is the same (within 0.1°C) across all these readings
-    // This catches sensors that appear "online" but have frozen values
-    const staleStationsQuery = await env.DB.prepare(`
-      SELECT station_id
-      FROM (
-        SELECT 
-          station_id,
-          -- Count readings before midnight (last 6 hours of previous day)
-          SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) as readings_before_midnight,
-          -- Count readings after midnight (today)
-          SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) as readings_after_midnight,
-          -- Check if all temperatures are the same (within 0.1°C)
-          COUNT(DISTINCT ROUND(temperature, 1)) as unique_temps,
-          COUNT(*) as total_readings
-        FROM status_logs
-        WHERE timestamp >= datetime(?, '-6 hours')
-          AND temperature IS NOT NULL
-          AND is_online = 1
-        GROUP BY station_id
-        HAVING 
-          readings_before_midnight >= 2 
-          AND readings_after_midnight >= 2
-          AND unique_temps = 1
-          AND total_readings >= 4
-      )
-    `).bind(midnightStr, midnightStr, midnightStr).all();
-    
-    const staleStationIds = (staleStationsQuery.results || []).map(r => r.station_id);
+    const sixHoursBeforeMidnight = new Date(midnightUTC.getTime() - (6 * 60 * 60 * 1000)).toISOString().slice(0, 19).replace('T', ' ');
     
     // Seasonal temperature validation for Pakistan
-    // Summer months (April-September): Can reach 52°C in Jacobabad/Sindh deserts
-    // Winter months (October-March): Can drop to -15°C in northern areas (Skardu, Gilgit)
-    const currentMonth = now.getMonth() + 1; // 1-12
-    const isSummer = currentMonth >= 4 && currentMonth <= 9; // April to September
+    const currentMonth = now.getMonth() + 1;
+    const isSummer = currentMonth >= 4 && currentMonth <= 9;
+    const MIN_VALID_TEMP = isSummer ? 5 : -15;
+    const MAX_VALID_TEMP = isSummer ? 52 : 40;
     
-    let MIN_VALID_TEMP, MAX_VALID_TEMP;
-    if (isSummer) {
-      // Summer: April-September
-      MIN_VALID_TEMP = 5;   // Unlikely to go below 5°C even in northern areas during summer
-      MAX_VALID_TEMP = 52;  // Jacobabad can hit 52°C
-    } else {
-      // Winter: October-March  
-      MIN_VALID_TEMP = -15; // Northern areas (Skardu, Gilgit) can hit -15°C
-      MAX_VALID_TEMP = 40;  // Unlikely to exceed 40°C in winter
-    }
-    
-    const staleExcludeClause = staleStationIds.length > 0 
-      ? `AND sl.station_id NOT IN (${staleStationIds.map(id => `'${id}'`).join(',')})` 
-      : '';
-    
-    // Get daily extremes since midnight PKT from status_logs
-    // Filters applied:
-    // 1. is_online = 1 (station must be marked active)
-    // 2. Seasonal temperature range (summer: 5-52°C, winter: -15-40°C)
-    // 3. Exclude stale/frozen sensors (same value before & after midnight)
+    // OPTIMIZED: Single query with stale detection + extremes using CTEs
     const extremesQuery = await env.DB.prepare(`
-      SELECT 
-        'max_temp' as metric,
-        sl.station_id,
-        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
-        MAX(sl.temperature) as value
-      FROM status_logs sl
-      LEFT JOIN stations s ON sl.station_id = s.station_id
-      WHERE sl.timestamp >= ?
-        AND sl.is_online = 1
-        AND sl.temperature IS NOT NULL
-        AND sl.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-        ${staleExcludeClause}
-      GROUP BY sl.station_id
-      HAVING MAX(sl.temperature) = (
-        SELECT MAX(temperature) FROM status_logs sl2
-        WHERE sl2.timestamp >= ? 
-          AND sl2.is_online = 1 
-          AND sl2.temperature IS NOT NULL
-          AND sl2.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
+      WITH 
+      -- Detect stale/frozen temperature sensors (same value before & after midnight)
+      stale_temp_stations AS (
+        SELECT station_id
+        FROM status_logs
+        WHERE timestamp >= ? AND temperature IS NOT NULL AND is_online = 1
+        GROUP BY station_id
+        HAVING 
+          SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) >= 2
+          AND SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) >= 2
+          AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
+          AND COUNT(*) >= 4
+      ),
+      -- Detect stale rainfall sensors (same value for 3+ readings)
+      stale_rain_stations AS (
+        SELECT station_id
+        FROM status_logs
+        WHERE timestamp >= ? AND rainfall IS NOT NULL AND rainfall > 0
+        GROUP BY station_id
+        HAVING COUNT(*) >= 3 AND COUNT(DISTINCT ROUND(rainfall, 1)) = 1
+      ),
+      -- Today's valid data excluding stale sensors
+      today_data AS (
+        SELECT 
+          sl.station_id,
+          s.station_name as display_name,
+          sl.temperature,
+          sl.rainfall,
+          sl.wind_speed
+        FROM status_logs sl
+        LEFT JOIN stations s ON sl.station_id = s.station_id
+        WHERE sl.timestamp >= ?
+          AND sl.is_online = 1
+      ),
+      -- Max temp (excluding stale)
+      max_temp_result AS (
+        SELECT station_id, display_name, temperature as value, 'max_temp' as metric
+        FROM today_data
+        WHERE temperature IS NOT NULL 
+          AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+          AND station_id NOT IN (SELECT station_id FROM stale_temp_stations)
+        ORDER BY temperature DESC LIMIT 1
+      ),
+      -- Min temp (excluding stale)
+      min_temp_result AS (
+        SELECT station_id, display_name, temperature as value, 'min_temp' as metric
+        FROM today_data
+        WHERE temperature IS NOT NULL 
+          AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+          AND station_id NOT IN (SELECT station_id FROM stale_temp_stations)
+        ORDER BY temperature ASC LIMIT 1
+      ),
+      -- Max rain (excluding stale)
+      max_rain_result AS (
+        SELECT station_id, display_name, rainfall as value, 'max_rain' as metric
+        FROM today_data
+        WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
+          AND station_id NOT IN (SELECT station_id FROM stale_rain_stations)
+        ORDER BY rainfall DESC LIMIT 1
+      ),
+      -- Max wind
+      max_wind_result AS (
+        SELECT station_id, display_name, wind_speed as value, 'max_wind' as metric
+        FROM today_data
+        WHERE wind_speed IS NOT NULL AND wind_speed > 0
+        ORDER BY wind_speed DESC LIMIT 1
       )
-      LIMIT 1
-    `).bind(midnightStr, midnightStr).first();
+      SELECT * FROM max_temp_result
+      UNION ALL SELECT * FROM min_temp_result
+      UNION ALL SELECT * FROM max_rain_result
+      UNION ALL SELECT * FROM max_wind_result
+    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
     
-    const minTempQuery = await env.DB.prepare(`
-      SELECT 
-        sl.station_id,
-        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
-        MIN(sl.temperature) as value
-      FROM status_logs sl
-      LEFT JOIN stations s ON sl.station_id = s.station_id
-      WHERE sl.timestamp >= ?
-        AND sl.is_online = 1
-        AND sl.temperature IS NOT NULL
-        AND sl.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-        ${staleExcludeClause}
-      GROUP BY sl.station_id
-      HAVING MIN(sl.temperature) = (
-        SELECT MIN(temperature) FROM status_logs sl2
-        WHERE sl2.timestamp >= ? 
-          AND sl2.is_online = 1 
-          AND sl2.temperature IS NOT NULL
-          AND sl2.temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-          ${staleExcludeClause.replace(/sl\./g, 'sl2.')}
-      )
-      LIMIT 1
-    `).bind(midnightStr, midnightStr).first();
+    // Parse results
+    let maxTemp = null, maxTempStation = null;
+    let minTemp = null, minTempStation = null;
+    let maxRainfall = '0.0', maxRainfallStation = 'No rainfall';
+    let maxWind = '0.0', maxWindStation = 'No wind data';
     
-    const maxRainQuery = await env.DB.prepare(`
-      SELECT 
-        sl.station_id,
-        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
-        sl.rainfall as value,
-        sl.timestamp as reading_time
-      FROM status_logs sl
-      LEFT JOIN stations s ON sl.station_id = s.station_id
-      WHERE sl.timestamp >= ?
-        AND sl.is_online = 1
-        AND sl.rainfall IS NOT NULL
-        AND sl.rainfall > 0
-        AND sl.rainfall < 500
-        AND sl.timestamp = (
-          SELECT MAX(timestamp) FROM status_logs 
-          WHERE station_id = sl.station_id AND timestamp >= ?
-        )
-        AND sl.station_id NOT IN (
-          -- Exclude stations with stale rainfall (same value for 3+ consecutive readings)
-          SELECT station_id FROM (
-            SELECT station_id, COUNT(DISTINCT ROUND(rainfall, 1)) as unique_rain
-            FROM status_logs
-            WHERE timestamp >= ? AND rainfall IS NOT NULL AND rainfall > 0
-            GROUP BY station_id
-            HAVING COUNT(*) >= 3 AND unique_rain = 1
-          )
-        )
-      ORDER BY sl.rainfall DESC
-      LIMIT 1
-    `).bind(midnightStr, midnightStr, midnightStr).first();
-    
-    const maxWindQuery = await env.DB.prepare(`
-      SELECT 
-        sl.station_id,
-        COALESCE(s.station_name, s.location, sl.station_id) as display_name,
-        MAX(sl.wind_speed) as value
-      FROM status_logs sl
-      LEFT JOIN stations s ON sl.station_id = s.station_id
-      WHERE sl.timestamp >= ?
-        AND sl.is_online = 1
-        AND sl.wind_speed IS NOT NULL
-        AND sl.wind_speed > 0
-      GROUP BY sl.station_id
-      HAVING MAX(sl.wind_speed) = (
-        SELECT MAX(wind_speed) FROM status_logs 
-        WHERE timestamp >= ? AND is_online = 1 AND wind_speed IS NOT NULL AND wind_speed > 0
-      )
-      LIMIT 1
-    `).bind(midnightStr, midnightStr).first();
-    
-    // Extract values - safely handle null query results
-    const maxTemp = extremesQuery && extremesQuery.value !== null ? parseFloat(extremesQuery.value).toFixed(1) : null;
-    const maxTempStation = extremesQuery?.display_name || null;
-    const minTemp = minTempQuery && minTempQuery.value !== null ? parseFloat(minTempQuery.value).toFixed(1) : null;
-    const minTempStation = minTempQuery?.display_name || null;
-    const maxRainfall = maxRainQuery && maxRainQuery.value !== null ? parseFloat(maxRainQuery.value).toFixed(1) : '0.0';
-    const maxRainfallStation = maxRainQuery?.display_name || 'No rainfall';
-    const maxWind = maxWindQuery && maxWindQuery.value !== null ? parseFloat(maxWindQuery.value).toFixed(1) : '0.0';
-    const maxWindStation = maxWindQuery?.display_name || 'No wind data';
-    
-    // Get record count since midnight
-    const countQuery = await env.DB.prepare(`
-      SELECT COUNT(*) as cnt FROM status_logs WHERE timestamp >= ?
-    `).bind(midnightStr).first();
-    const recordCount = countQuery?.cnt || 0;
-    
-    // Get average uptime percentage across all stations (last 24 hours) from DB
-    const avgUptimeQuery = await env.DB.prepare(`
-      SELECT 
-        station_id,
-        COUNT(*) as total_checks,
-        SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks
-      FROM status_logs 
-      WHERE timestamp >= datetime('now', '-24 hours')
-      GROUP BY station_id
-    `).all();
-    
-    const uptimeResults = avgUptimeQuery.results || [];
-    let totalUptime = 0;
-    let stationCount = 0;
-    
-    for (const row of uptimeResults) {
-      if (row.total_checks > 0) {
-        const uptime = (row.online_checks / row.total_checks) * 100;
-        totalUptime += uptime;
-        stationCount++;
+    for (const row of (extremesQuery.results || [])) {
+      if (row.metric === 'max_temp' && row.value !== null) {
+        maxTemp = parseFloat(row.value).toFixed(1);
+        maxTempStation = row.display_name;
+      } else if (row.metric === 'min_temp' && row.value !== null) {
+        minTemp = parseFloat(row.value).toFixed(1);
+        minTempStation = row.display_name;
+      } else if (row.metric === 'max_rain' && row.value !== null) {
+        maxRainfall = parseFloat(row.value).toFixed(1);
+        maxRainfallStation = row.display_name || 'Unknown';
+      } else if (row.metric === 'max_wind' && row.value !== null) {
+        maxWind = parseFloat(row.value).toFixed(1);
+        maxWindStation = row.display_name || 'Unknown';
       }
     }
     
-    const avgUptimePct = stationCount > 0 ? (totalUptime / stationCount) : 0;
+    // OPTIMIZED: Single query for uptime stats (combined count + uptime)
+    const uptimeQuery = await env.DB.prepare(`
+      SELECT 
+        COUNT(DISTINCT station_id) as station_count,
+        COUNT(*) as total_checks,
+        SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
+        (SELECT COUNT(*) FROM status_logs WHERE timestamp >= ?) as records_since_midnight
+      FROM status_logs 
+      WHERE timestamp >= datetime('now', '-24 hours')
+    `).bind(midnightStr).first();
+    
+    const stationCount = uptimeQuery?.station_count || 0;
+    const totalChecks = uptimeQuery?.total_checks || 0;
+    const onlineChecks = uptimeQuery?.online_checks || 0;
+    const recordCount = uptimeQuery?.records_since_midnight || 0;
+    
+    const avgUptimePct = totalChecks > 0 ? (onlineChecks / totalChecks) * 100 : 0;
     const avgDowntimePct = 100 - avgUptimePct;
     
     return new Response(JSON.stringify({

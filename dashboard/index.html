@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- v2.6 - Moved Last Sync to header, fixed mobile responsiveness -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -254,6 +255,83 @@
             align-items: center;
             animation: fadeIn 0.6s ease;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header-logo .logo-light {
+            display: none;
+        }
+        
+        .header-logo .logo-dark {
+            display: block;
+        }
+        
+        [data-theme="light"] .header-logo .logo-light {
+            display: block;
+        }
+        
+        [data-theme="light"] .header-logo .logo-dark {
+            display: none;
+        }
+        
+        .header-logo .system-name {
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            border-left: 2px solid rgba(255, 255, 255, 0.3);
+            padding-left: 12px;
+        }
+        
+        /* Hide system name on mobile */
+        @media (max-width: 768px) {
+            .header-logo .system-name {
+                display: none;
+            }
+            .header-logo svg {
+                width: 180px;
+                height: auto;
+            }
+        }
+        
+        [data-theme="light"] .header-logo .system-name {
+            color: #011B60;
+            border-left-color: rgba(1, 27, 96, 0.3);
+        }
+        
+        .header-sync {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .header-sync .sync-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+        
+        .header-sync .sync-time {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        @media (max-width: 480px) {
+            .header-sync {
+                display: none;
+            }
         }
         
         h1 {
@@ -536,6 +614,14 @@
             transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
+        .ring-disabled {
+            fill: none;
+            stroke: #6b7280;
+            stroke-width: 25;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
         .ring-center {
             position: absolute;
             top: 50%;
@@ -587,6 +673,11 @@
         .legend-dot.offline {
             background: var(--danger);
             box-shadow: 0 0 10px var(--danger);
+        }
+        
+        .legend-dot.disabled {
+            background: #6b7280;
+            box-shadow: 0 0 10px #6b7280;
         }
         
         .legend-label {
@@ -1261,6 +1352,11 @@
                 text-align: center;
             }
             
+            .header-logo svg {
+                width: 200px;
+                height: auto;
+            }
+            
             h1 {
                 font-size: 18px;
             }
@@ -1476,8 +1572,50 @@
     <div class="container">
         <!-- Header -->
         <header>
-            <h1>⚡ WEATHERWALAY STATIONS MONITORING</h1>
+            <div class="header-logo">
+                <!-- Light theme logo (blue text) -->
+                <svg class="logo-light" width="280" height="47" viewBox="0 0 661 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M277.89 37.0889L268.108 70.5312H258.993L252.897 47.1738L246.8 70.5312H237.626L227.785 37.0889H236.361L242.28 62.5627L248.681 37.0889H257.61L263.892 62.5037L269.812 37.0889H277.898H277.89Z" fill="#011B60"/>
+                    <path d="M312.724 56.1621H288.279C288.439 58.6159 289.266 60.5469 290.75 61.9551C292.242 63.3633 294.089 64.0716 296.307 64.0716C299.443 64.0716 301.678 62.7224 303.01 60.0241H312.126C311.164 63.2452 309.309 65.893 306.569 67.9589C303.828 70.0332 300.472 71.0704 296.492 71.0704C293.271 71.0704 290.387 70.3536 287.832 68.9286C285.277 67.5035 283.287 65.4798 281.854 62.8658C280.429 60.2518 279.712 57.233 279.712 53.8095C279.712 50.386 280.412 47.3083 281.828 44.6943C283.237 42.0803 285.21 40.065 287.748 38.6568C290.286 37.2486 293.204 36.5403 296.501 36.5403C299.798 36.5403 302.53 37.2233 305.042 38.5893C307.555 39.9553 309.512 41.8863 310.894 44.3823C312.286 46.8782 312.977 49.7536 312.977 53.0169C312.977 54.1468 312.893 55.1924 312.733 56.1537L312.724 56.1621ZM304.216 51.0353C304.174 48.6996 303.398 46.8614 301.889 45.5122C300.379 44.163 298.499 43.4885 296.248 43.4885C294.114 43.4885 292.327 44.163 290.876 45.5122C289.426 46.8614 288.566 48.6996 288.279 51.0353H304.216Z" fill="#011B60"/>
+                    <path d="M318.365 44.6943C319.714 42.0803 321.544 40.065 323.855 38.6568C326.165 37.2486 328.754 36.5403 331.612 36.5403C334.108 36.5403 336.292 37.0462 338.164 38.0497C340.036 39.0531 341.537 40.3264 342.659 41.8526V37.0799H351.167V70.5223H342.659V65.6316C341.571 67.2 340.07 68.4985 338.164 69.5273C336.25 70.556 334.049 71.0704 331.553 71.0704C328.737 71.0704 326.174 70.3452 323.855 68.8948C321.544 67.4445 319.706 65.4039 318.365 62.7646C317.016 60.1253 316.342 57.0981 316.342 53.6831C316.342 50.268 317.016 47.3083 318.365 44.6858V44.6943ZM341.453 48.531C340.643 47.0637 339.564 45.9338 338.19 45.1496C336.824 44.3654 335.356 43.9691 333.779 43.9691C332.203 43.9691 330.761 44.3486 329.437 45.1159C328.113 45.8832 327.034 46.9963 326.207 48.4635C325.381 49.9307 324.968 51.6762 324.968 53.6831C324.968 55.6899 325.381 57.4523 326.207 58.9616C327.034 60.471 328.121 61.6262 329.471 62.4357C330.82 63.2452 332.253 63.6416 333.788 63.6416C335.323 63.6416 336.824 63.2452 338.198 62.461C339.564 61.6768 340.652 60.5469 341.461 59.0797C342.262 57.6125 342.667 55.8502 342.667 53.8011C342.667 51.7521 342.262 49.9897 341.461 48.5225L341.453 48.531Z" fill="#011B60"/>
+                    <path d="M368.68 44.0367V60.2098C368.68 61.3397 368.95 62.1492 369.498 62.6552C370.038 63.1611 370.957 63.4056 372.247 63.4056H376.168V70.5309H370.856C363.73 70.5309 360.172 67.0737 360.172 60.1508V44.0367H356.192V37.097H360.172V28.825H368.68V37.097H376.168V44.0367H368.68Z" fill="#011B60"/>
+                    <path d="M407.25 38.2698C409.223 39.3744 410.758 41.0103 411.871 43.1605C412.975 45.3107 413.532 47.8994 413.532 50.9182V70.5316H405.083V52.065C405.083 49.4088 404.416 47.3682 403.093 45.9347C401.769 44.5097 399.956 43.7929 397.662 43.7929C395.369 43.7929 393.488 44.5097 392.139 45.9347C390.79 47.3598 390.115 49.4088 390.115 52.065V70.5316H381.666V25.866H390.115V41.2548C391.203 39.8045 392.654 38.6661 394.458 37.8482C396.271 37.0218 398.278 36.6087 400.496 36.6087C403.034 36.6087 405.285 37.1652 407.258 38.2698H407.25Z" fill="#011B60"/>
+                    <path d="M451.797 56.1621H427.352C427.512 58.6159 428.338 60.5469 429.822 61.9551C431.315 63.3633 433.162 64.0716 435.379 64.0716C438.516 64.0716 440.751 62.7224 442.083 60.0241H451.198C450.237 63.2452 448.382 65.893 445.641 67.9589C442.901 70.0332 439.545 71.0704 435.565 71.0704C432.344 71.0704 429.46 70.3536 426.905 68.9286C424.35 67.5035 422.36 65.4798 420.926 62.8658C419.501 60.2518 418.785 57.233 418.785 53.8095C418.785 50.386 419.485 47.3083 420.901 44.6943C422.309 42.0803 424.282 40.065 426.821 38.6568C429.359 37.2486 432.276 36.5403 435.573 36.5403C438.87 36.5403 441.602 37.2233 444.115 38.5893C446.628 39.9553 448.584 41.8863 449.967 44.3823C451.358 46.8782 452.05 49.7536 452.05 53.0169C452.05 54.1468 451.966 55.1924 451.805 56.1537L451.797 56.1621ZM443.289 51.0353C443.247 48.6996 442.471 46.8614 440.961 45.5122C439.452 44.163 437.572 43.4885 435.32 43.4885C433.187 43.4885 431.399 44.163 429.949 45.5122C428.499 46.8614 427.639 48.6996 427.352 51.0353H443.289Z" fill="#011B60"/>
+                    <path d="M470.289 38.3036C472.043 37.1737 474.041 36.6172 476.293 36.6172V45.4879H474.058C471.402 45.4879 469.403 46.1119 468.054 47.3599C466.705 48.6079 466.031 50.7834 466.031 53.878V70.5402H457.581V37.0894H466.031V43.0088C467.118 40.9935 468.535 39.4251 470.289 38.3036Z" fill="#011B60"/>
+                    <path d="M527.73 37.0889L517.949 70.5312H508.833L502.737 47.1738L496.64 70.5312H487.466L477.625 37.0889H486.201L492.121 62.5627L498.521 37.0889H507.45L513.732 62.5037L519.652 37.0889H527.738H527.73Z" fill="#011B60"/>
+                    <path d="M531.558 44.6943C532.907 42.0803 534.737 40.065 537.048 38.6568C539.358 37.2486 541.947 36.5403 544.805 36.5403C547.301 36.5403 549.485 37.0462 551.357 38.0497C553.229 39.0531 554.73 40.3264 555.851 41.8526V37.0799H564.36V70.5223H555.851V65.6316C554.764 67.2 553.263 68.4985 551.357 69.5273C549.443 70.556 547.242 71.0704 544.746 71.0704C541.93 71.0704 539.366 70.3452 537.048 68.8948C534.737 67.4445 532.899 65.4039 531.558 62.7646C530.209 60.1253 529.534 57.0981 529.534 53.6831C529.534 50.268 530.209 47.3083 531.558 44.6858V44.6943ZM554.646 48.531C553.836 47.0637 552.757 45.9338 551.382 45.1496C550.016 44.3654 548.549 43.9691 546.972 43.9691C545.395 43.9691 543.954 44.3486 542.63 45.1159C541.306 45.8832 540.227 46.9963 539.4 48.4635C538.574 49.9307 538.161 51.6762 538.161 53.6831C538.161 55.6899 538.574 57.4523 539.4 58.9616C540.227 60.471 541.314 61.6262 542.663 62.4357C544.013 63.2452 545.446 63.6416 546.981 63.6416C548.515 63.6416 550.016 63.2452 551.391 62.461C552.757 61.6768 553.845 60.5469 554.654 59.0797C555.455 57.6125 555.86 55.8502 555.86 53.8011C555.86 51.7521 555.455 49.9897 554.654 48.5225L554.646 48.531Z" fill="#011B60"/>
+                    <path d="M580.481 25.866V70.5316H572.032V25.866H580.481Z" fill="#011B60"/>
+                    <path d="M588.054 44.6943C589.403 42.0803 591.233 40.065 593.543 38.6568C595.854 37.2486 598.442 36.5403 601.301 36.5403C603.797 36.5403 605.981 37.0462 607.853 38.0497C609.725 39.0531 611.226 40.3264 612.347 41.8526V37.0799H620.855V70.5223H612.347V65.6316C611.259 67.2 609.759 68.4985 607.853 69.5273C605.939 70.556 603.738 71.0704 601.242 71.0704C598.426 71.0704 595.862 70.3452 593.543 68.8948C591.233 67.4445 589.395 65.4039 588.054 62.7646C586.705 60.1253 586.03 57.0981 586.03 53.6831C586.03 50.268 586.705 47.3083 588.054 44.6858V44.6943ZM611.141 48.531C610.332 47.0637 609.253 45.9338 607.878 45.1496C606.512 44.3654 605.045 43.9691 603.468 43.9691C601.891 43.9691 600.449 44.3486 599.125 45.1159C597.802 45.8832 596.722 46.9963 595.896 48.4635C595.07 49.9307 594.656 51.6762 594.656 53.6831C594.656 55.6899 595.07 57.4523 595.896 58.9616C596.722 60.471 597.81 61.6262 599.159 62.4357C600.508 63.2452 601.942 63.6416 603.476 63.6416C605.011 63.6416 606.512 63.2452 607.887 62.461C609.253 61.6768 610.34 60.5469 611.15 59.0797C611.951 57.6125 612.356 55.8502 612.356 53.8011C612.356 51.7521 611.951 49.9897 611.15 48.5225L611.141 48.531Z" fill="#011B60"/>
+                    <path d="M634.144 37.0888L642.779 60.4461L651.532 37.0888H660.529L639.828 86.3416H630.831L638.074 69.6794L624.675 37.0803H634.153L634.144 37.0888Z" fill="#011B60"/>
+                    <path d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z" fill="#397DFF"/>
+                    <path d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z" fill="#0952DF"/>
+                    <path d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z" fill="#FFB000"/>
+                </svg>
+                <!-- Dark theme logo (white text) -->
+                <svg class="logo-dark" width="280" height="47" viewBox="0 0 661 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M277.89 37.0891L268.109 70.5314H258.993L252.897 47.1741L246.8 70.5314H237.626L227.786 37.0891H236.361L242.281 62.563L248.681 37.0891H257.611L263.893 62.5039L269.812 37.0891H277.899H277.89Z" fill="white"/>
+                    <path d="M312.724 56.1624H288.279C288.439 58.6162 289.266 60.5472 290.75 61.9553C292.242 63.3635 294.089 64.0718 296.307 64.0718C299.443 64.0718 301.678 62.7227 303.01 60.0244H312.126C311.164 63.2455 309.309 65.8932 306.569 67.9591C303.828 70.0334 300.472 71.0706 296.492 71.0706C293.271 71.0706 290.387 70.3539 287.832 68.9288C285.277 67.5038 283.287 65.48 281.854 62.866C280.429 60.252 279.712 57.2333 279.712 53.8098C279.712 50.3863 280.412 47.3085 281.828 44.6945C283.237 42.0805 285.21 40.0652 287.748 38.657C290.286 37.2488 293.204 36.5405 296.501 36.5405C299.798 36.5405 302.53 37.2235 305.042 38.5896C307.555 39.9556 309.512 41.8866 310.894 44.3825C312.286 46.8785 312.977 49.7539 312.977 53.0172C312.977 54.1471 312.893 55.1927 312.733 56.154L312.724 56.1624ZM304.216 51.0356C304.174 48.6998 303.398 46.8616 301.889 45.5124C300.379 44.1633 298.499 43.4887 296.248 43.4887C294.114 43.4887 292.327 44.1633 290.876 45.5124C289.426 46.8616 288.566 48.6998 288.279 51.0356H304.216Z" fill="white"/>
+                    <path d="M318.365 44.6945C319.714 42.0805 321.544 40.0652 323.855 38.657C326.165 37.2488 328.754 36.5405 331.612 36.5405C334.108 36.5405 336.292 37.0465 338.164 38.0499C340.036 39.0533 341.537 40.3266 342.659 41.8528V37.0802H351.167V70.5225H342.659V65.6318C341.571 67.2002 340.07 68.4988 338.164 69.5275C336.25 70.5562 334.049 71.0706 331.553 71.0706C328.737 71.0706 326.174 70.3454 323.855 68.8951C321.544 67.4447 319.706 65.4041 318.365 62.7648C317.016 60.1255 316.342 57.0984 316.342 53.6833C316.342 50.2682 317.016 47.3085 318.365 44.6861V44.6945ZM341.453 48.5312C340.643 47.064 339.564 45.9341 338.19 45.1499C336.824 44.3657 335.356 43.9693 333.779 43.9693C332.203 43.9693 330.761 44.3488 329.437 45.1161C328.113 45.8835 327.034 46.9965 326.207 48.4637C325.381 49.9309 324.968 51.6764 324.968 53.6833C324.968 55.6902 325.381 57.4525 326.207 58.9619C327.034 60.4713 328.121 61.6265 329.471 62.436C330.82 63.2455 332.253 63.6418 333.788 63.6418C335.323 63.6418 336.824 63.2455 338.198 62.4613C339.564 61.6771 340.652 60.5472 341.461 59.0799C342.262 57.6127 342.667 55.8504 342.667 53.8014C342.667 51.7523 342.262 49.99 341.461 48.5228L341.453 48.5312Z" fill="white"/>
+                    <path d="M368.68 44.037V60.2101C368.68 61.34 368.95 62.1495 369.498 62.6554C370.038 63.1613 370.957 63.4059 372.247 63.4059H376.168V70.5311H370.856C363.73 70.5311 360.172 67.0739 360.172 60.151V44.037H356.192V37.0972H360.172V28.8252H368.68V37.0972H376.168V44.037H368.68Z" fill="white"/>
+                    <path d="M407.25 38.2701C409.223 39.3747 410.758 41.0105 411.871 43.1608C412.975 45.311 413.532 47.8997 413.532 50.9184V70.5319H405.083V52.0652C405.083 49.4091 404.416 47.3685 403.093 45.935C401.769 44.5099 399.956 43.7932 397.662 43.7932C395.369 43.7932 393.488 44.5099 392.139 45.935C390.79 47.36 390.115 49.4091 390.115 52.0652V70.5319H381.666V25.8662H390.115V41.2551C391.203 39.8047 392.654 38.6664 394.458 37.8484C396.271 37.0221 398.278 36.6089 400.496 36.6089C403.034 36.6089 405.285 37.1654 407.258 38.2701H407.25Z" fill="white"/>
+                    <path d="M451.797 56.1624H427.352C427.512 58.6162 428.338 60.5472 429.822 61.9553C431.315 63.3635 433.162 64.0718 435.379 64.0718C438.516 64.0718 440.751 62.7227 442.083 60.0244H451.198C450.237 63.2455 448.382 65.8932 445.641 67.9591C442.901 70.0334 439.545 71.0706 435.565 71.0706C432.344 71.0706 429.46 70.3539 426.905 68.9288C424.35 67.5038 422.36 65.48 420.926 62.866C419.501 60.252 418.785 57.2333 418.785 53.8098C418.785 50.3863 419.485 47.3085 420.901 44.6945C422.309 42.0805 424.282 40.0652 426.821 38.657C429.359 37.2488 432.276 36.5405 435.573 36.5405C438.87 36.5405 441.602 37.2235 444.115 38.5896C446.628 39.9556 448.584 41.8866 449.967 44.3825C451.358 46.8785 452.05 49.7539 452.05 53.0172C452.05 54.1471 451.966 55.1927 451.805 56.154L451.797 56.1624ZM443.289 51.0356C443.247 48.6998 442.471 46.8616 440.961 45.5124C439.452 44.1633 437.572 43.4887 435.32 43.4887C433.187 43.4887 431.399 44.1633 429.949 45.5124C428.499 46.8616 427.639 48.6998 427.352 51.0356H443.289Z" fill="white"/>
+                    <path d="M470.289 38.3039C472.043 37.174 474.041 36.6174 476.293 36.6174V45.4882H474.058C471.402 45.4882 469.403 46.1122 468.054 47.3601C466.705 48.6081 466.031 50.7836 466.031 53.8783V70.5404H457.581V37.0896H466.031V43.0091C467.118 40.9938 468.535 39.4254 470.289 38.3039Z" fill="white"/>
+                    <path d="M527.73 37.0891L517.949 70.5314H508.833L502.737 47.1741L496.64 70.5314H487.466L477.625 37.0891H486.201L492.121 62.563L498.521 37.0891H507.45L513.732 62.5039L519.652 37.0891H527.738H527.73Z" fill="white"/>
+                    <path d="M531.558 44.6945C532.907 42.0805 534.737 40.0652 537.048 38.657C539.358 37.2488 541.947 36.5405 544.805 36.5405C547.301 36.5405 549.485 37.0465 551.357 38.0499C553.229 39.0533 554.73 40.3266 555.851 41.8528V37.0802H564.36V70.5225H555.851V65.6318C554.764 67.2002 553.263 68.4988 551.357 69.5275C549.443 70.5562 547.242 71.0706 544.746 71.0706C541.93 71.0706 539.366 70.3454 537.048 68.8951C534.737 67.4447 532.899 65.4041 531.558 62.7648C530.209 60.1255 529.534 57.0984 529.534 53.6833C529.534 50.2682 530.209 47.3085 531.558 44.6861V44.6945ZM554.646 48.5312C553.836 47.064 552.757 45.9341 551.382 45.1499C550.016 44.3657 548.549 43.9693 546.972 43.9693C545.395 43.9693 543.954 44.3488 542.63 45.1161C541.306 45.8835 540.227 46.9965 539.4 48.4637C538.574 49.9309 538.161 51.6764 538.161 53.6833C538.161 55.6902 538.574 57.4525 539.4 58.9619C540.227 60.4713 541.314 61.6265 542.663 62.436C544.013 63.2455 545.446 63.6418 546.981 63.6418C548.515 63.6418 550.016 63.2455 551.391 62.4613C552.757 61.6771 553.845 60.5472 554.654 59.0799C555.455 57.6127 555.86 55.8504 555.86 53.8014C555.86 51.7523 555.455 49.99 554.654 48.5228L554.646 48.5312Z" fill="white"/>
+                    <path d="M580.481 25.8662V70.5319H572.032V25.8662H580.481Z" fill="white"/>
+                    <path d="M588.054 44.6945C589.403 42.0805 591.233 40.0652 593.543 38.657C595.854 37.2488 598.442 36.5405 601.301 36.5405C603.797 36.5405 605.981 37.0465 607.853 38.0499C609.725 39.0533 611.226 40.3266 612.347 41.8528V37.0802H620.855V70.5225H612.347V65.6318C611.259 67.2002 609.759 68.4988 607.853 69.5275C605.939 70.5562 603.738 71.0706 601.242 71.0706C598.426 71.0706 595.862 70.3454 593.543 68.8951C591.233 67.4447 589.395 65.4041 588.054 62.7648C586.705 60.1255 586.03 57.0984 586.03 53.6833C586.03 50.2682 586.705 47.3085 588.054 44.6861V44.6945ZM611.141 48.5312C610.332 47.064 609.253 45.9341 607.878 45.1499C606.512 44.3657 605.045 43.9693 603.468 43.9693C601.891 43.9693 600.449 44.3488 599.125 45.1161C597.802 45.8835 596.722 46.9965 595.896 48.4637C595.07 49.9309 594.656 51.6764 594.656 53.6833C594.656 55.6902 595.07 57.4525 595.896 58.9619C596.722 60.4713 597.81 61.6265 599.159 62.436C600.508 63.2455 601.942 63.6418 603.476 63.6418C605.011 63.6418 606.512 63.2455 607.887 62.4613C609.253 61.6771 610.34 60.5472 611.15 59.0799C611.951 57.6127 612.356 55.8504 612.356 53.8014C612.356 51.7523 611.951 49.99 611.15 48.5228L611.141 48.5312Z" fill="white"/>
+                    <path d="M634.145 37.0892L642.779 60.4466L651.532 37.0892H660.529L639.828 86.342H630.831L638.074 69.6799L624.675 37.0808H634.153L634.145 37.0892Z" fill="white"/>
+                    <path d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z" fill="#397DFF"/>
+                    <path d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z" fill="#0952DF"/>
+                    <path d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z" fill="#FFB000"/>
+                </svg>
+                <span class="system-name">Stations Monitoring System</span>
+            </div>
             <div class="header-right">
+                <div class="header-sync" title="Last API sync time">
+                    <span class="sync-label">Last Sync</span>
+                    <span class="sync-time" id="headerSyncTime">--:--</span>
+                </div>
                 <button id="themeToggle" class="theme-toggle" title="Toggle theme">
                     <span class="theme-icon">🌙</span>
                 </button>
@@ -1500,9 +1638,15 @@
             </div>
             
             <div class="stat-card offline">
-                <div class="stat-label">Offline</div>
+                <div class="stat-label">Inactive</div>
                 <div class="stat-value" id="offlineCount">0</div>
                 <div class="stat-trend down" id="offlineTrend"></div>
+            </div>
+            
+            <div class="stat-card" style="border-left: 3px solid #6b7280;">
+                <div class="stat-label">Disabled</div>
+                <div class="stat-value" id="disabledCount" style="color: #6b7280;">0</div>
+                <div class="stat-station" style="font-size: 10px; color: var(--text-secondary);">Not monitored</div>
             </div>
             
             <div class="stat-card" style="border-left: 3px solid var(--success);">
@@ -1540,15 +1684,6 @@
                 <div class="stat-value" id="maxWindGust" style="color: #8b5cf6;">-- km/h</div>
                 <div class="stat-station" id="maxWindGustStation">--</div>
             </div>
-            
-            <div class="stat-card sync">
-                <div class="stat-label">🔄 Last Sync</div>
-                <div class="stat-value" id="lastApiSync">--</div>
-                <div class="stat-station">
-                    <span style="color: #888;">📱</span>
-                    <span id="pageLoaded" style="color: #10b981;">--</span>
-                </div>
-            </div>
         </div>
 
         <!-- Charts -->
@@ -1561,6 +1696,7 @@
                             <circle class="ring-background" cx="125" cy="125" r="80"></circle>
                             <circle id="ringOnline" class="ring-online" cx="125" cy="125" r="80"></circle>
                             <circle id="ringOffline" class="ring-offline" cx="125" cy="125" r="80"></circle>
+                            <circle id="ringDisabled" class="ring-disabled" cx="125" cy="125" r="80"></circle>
                         </svg>
                         <div class="ring-center">
                             <div class="ring-total" id="ringTotal">0</div>
@@ -1575,7 +1711,11 @@
                         </div>
                         <div class="legend-item">
                             <div class="legend-dot offline"></div>
-                            <span class="legend-label">Inactive/Disabled: <span class="legend-count" id="legendOffline">0</span></span>
+                            <span class="legend-label">Inactive: <span class="legend-count" id="legendOffline">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot disabled"></div>
+                            <span class="legend-label">Disabled: <span class="legend-count" id="legendDisabled">0</span></span>
                         </div>
                     </div>
                 </div>
@@ -3140,8 +3280,12 @@
                             month: 'short',
                             timeZone: 'Asia/Karachi'
                         });
-                        document.getElementById('lastApiSync').textContent = `${syncTime}`;
-                        document.getElementById('lastApiSync').title = `Last synced: ${syncDateStr} at ${syncTime} PKT`;
+                        // Update header sync time
+                        const headerSync = document.getElementById('headerSyncTime');
+                        if (headerSync) {
+                            headerSync.textContent = syncTime;
+                            headerSync.title = `Last synced: ${syncDateStr} at ${syncTime} PKT`;
+                        }
                     }
                 }
             } catch (e) {
@@ -3153,19 +3297,23 @@
         function updateStats(stats) {
             const realTotal = stats.total || 0;
             const realOnline = stats.online || 0;
-            const realOffline = stats.offline || 0;
+            const realOffline = stats.offline || 0;  // Now only Inactive stations
+            const realDisabled = stats.disabled || 0;
             
             // Calculate display values: extra stations are always "online"
             const extraStations = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
             const displayTotal = DISPLAY_TOTAL_STATIONS;
             const displayOnline = realOnline + extraStations;
-            const displayOffline = realOffline; // Offline stays real
+            const displayOffline = realOffline; // Inactive count stays real
+            const displayDisabled = realDisabled; // Disabled count stays real
             
             animateCounter(document.getElementById('ringTotal'), displayTotal);
             animateCounter(document.getElementById('onlineCount'), displayOnline);
             animateCounter(document.getElementById('offlineCount'), displayOffline);
+            animateCounter(document.getElementById('disabledCount'), displayDisabled);
             animateCounter(document.getElementById('legendOnline'), displayOnline);
             animateCounter(document.getElementById('legendOffline'), displayOffline);
+            animateCounter(document.getElementById('legendDisabled'), displayDisabled);
             
             // Update trend indicators
             updateTrendIndicator('onlineTrend', displayOnline, previousStats.online);
@@ -3174,16 +3322,6 @@
             // Fetch daily extremes and avg uptime from backend API (since midnight PKT)
             fetchDashboardStats();
             
-            // Update page loaded time (when user refreshed)
-            const now = new Date();
-            const pageLoadTime = now.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZone: 'Asia/Karachi',
-                hour12: true
-            });
-            document.getElementById('pageLoaded').textContent = pageLoadTime;
-            
             // Fetch last API sync time from database
             fetchLastApiSyncTime();
             
@@ -3191,7 +3329,7 @@
             previousStats.online = displayOnline;
             previousStats.offline = displayOffline;
             
-            updateRingChart(displayOnline, displayOffline, displayTotal);
+            updateRingChart(displayOnline, displayOffline, displayDisabled, displayTotal);
         }
         
         // Update trend indicator
@@ -3257,10 +3395,11 @@
         }
         
         // Update ring chart
-        function updateRingChart(online, offline, total) {
+        function updateRingChart(online, offline, disabled, total) {
             const circumference = 2 * Math.PI * 80;
             const onlinePercent = total > 0 ? (online / total) * 100 : 0;
             const offlinePercent = total > 0 ? (offline / total) * 100 : 0;
+            const disabledPercent = total > 0 ? (disabled / total) * 100 : 0;
             
             const ringOnline = document.getElementById('ringOnline');
             const onlineLength = (circumference * onlinePercent) / 100;
@@ -3271,6 +3410,11 @@
             const offlineLength = (circumference * offlinePercent) / 100;
             ringOffline.style.strokeDasharray = `${offlineLength} ${circumference}`;
             ringOffline.style.strokeDashoffset = -onlineLength;
+            
+            const ringDisabled = document.getElementById('ringDisabled');
+            const disabledLength = (circumference * disabledPercent) / 100;
+            ringDisabled.style.strokeDasharray = `${disabledLength} ${circumference}`;
+            ringDisabled.style.strokeDashoffset = -(onlineLength + offlineLength);
         }
         
         // Update category counts
@@ -4411,13 +4555,15 @@
                         updateMapMarkers();
                         
                         // Calculate stats from allStations
+                        // Only Inactive counts as offline, Disabled stations are intentionally turned off
                         const active = allStations.filter(s => s.status === 'Active').length;
                         const inactive = allStations.filter(s => s.status === 'Inactive').length;
                         const disabled = allStations.filter(s => s.status === 'Disabled').length;
                         updateStats({
                             total: allStations.length,
                             online: active,
-                            offline: inactive + disabled
+                            offline: inactive,  // Only Inactive, not Disabled
+                            disabled: disabled
                         });
                         // Refresh category uptime chart now that uptimes were updated
                         try {
@@ -4592,7 +4738,9 @@
                 const stats = {
                     total: allStations.length,
                     online: allStations.filter(s => s.is_online === 1).length,
-                    offline: allStations.filter(s => s.is_online === 0).length
+                    // Only count Inactive as offline, not Disabled (Disabled stations are intentionally turned off)
+                    offline: allStations.filter(s => s.status === 'Inactive').length,
+                    disabled: allStations.filter(s => s.status === 'Disabled').length
                 };
 
                 updateStats(stats);
@@ -4600,9 +4748,10 @@
                 renderTable();
                 updateLastUpdate();
                 
-                // Update recent offline stations panel - sort by last_seen (most recent first), show 20
+                // Update recent offline stations panel - only show Inactive stations, not Disabled
+                // Disabled stations are intentionally turned off and shouldn't be in the "needs attention" list
                 const offlineStations = allStations
-                    .filter(s => s.status !== 'Active')
+                    .filter(s => s.status === 'Inactive')
                     .sort((a, b) => {
                         // Sort by last_seen descending (most recent first)
                         const aTime = a.last_seen ? new Date(a.last_seen).getTime() : 0;
