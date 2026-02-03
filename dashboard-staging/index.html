@@ -1023,6 +1023,12 @@
             border: 1px solid rgba(20, 184, 166, 0.3);
         }
         
+        .category-badge.wow {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        
         /* Offline Panel */
         .offline-panel {
             background: rgba(30, 41, 59, 0.8);
@@ -1653,6 +1659,7 @@
                             <option value="corporate">🏢 Corporate</option>
                             <option value="community">👥 Community</option>
                             <option value="reference">📍 Reference</option>
+                            <option value="wow">🛣️ WOW</option>
                             <option value="wu">🌐 External</option>
                         </select>
                         <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
@@ -1702,7 +1709,7 @@
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
                                 <th onclick="sortTable('rainfall')">Rain ↕</th>
-                                <th onclick="sortTable('uptime')">Availability ↕</th>
+                                <th onclick="sortTable('uptime')"><span id="availabilityHeader">Availability</span> ↕</th>
                                 <th onclick="sortTable('location')">POI ↕</th>
                             </tr>
                         </thead>
@@ -2098,13 +2105,13 @@
             '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
             '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
             '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
-            '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'corporate',
+            '160951': 'community', '169497': 'corporate',
             '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
             '169639': 'corporate', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
             'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
             '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'community',
             '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
-            'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
+            'IISLAM9': 'wu', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
             'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
             'IPUNJABR2': 'wu', 'IRAWAL18': 'wu', 'IRAWAL29': 'wu', 'IRAWAL16': 'wu',
             'INUSHK12': 'wu', 'IFEDERAL8': 'wu', 'IKMILPUR2': 'wu', 'IKHYBERP3': 'wu',
@@ -2127,9 +2134,11 @@
             'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
             '150367': 'reference', '150967': 'corporate', '131812': 'reference', '129090': 'community',
             '129952': 'community', '142628': 'corporate', '139347': 'community', '133500': 'community',
-            '217831': 'community', '216612': 'corporate', '221544': 'corporate', '221563': 'corporate',
-            '221555': 'corporate', '221695': 'corporate', '221726': 'corporate', '221703': 'corporate',
-            '221746': 'corporate', '221873': 'corporate', '221910': 'corporate', '221938': 'corporate'
+            '217831': 'community',
+            // WOW - Toll Plaza Stations
+            '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
+            '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
+            '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow'
         };
         
         // Category display names and colors
@@ -2137,7 +2146,15 @@
             'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
             'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
             'wu': { name: 'External', color: '#ec4899', icon: '🌐' },
-            'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' }
+            'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' },
+            'wow': { name: 'WOW', color: '#f59e0b', icon: '🛣️' }
+        };
+        
+        // Source overrides for stations with missing/incorrect api_source from HubService
+        const SOURCE_OVERRIDES = {
+            '216612': 'Davis', '221544': 'Davis', '221563': 'Davis', '221555': 'Davis', '221695': 'Davis',
+            '221726': 'Davis', '221703': 'Davis', '221746': 'Davis', '221873': 'Davis',
+            '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis'
         };
         
         // Current category filter
@@ -2427,9 +2444,9 @@
             }
 
             // Calculate uptime for each category - prefer real 24h uptime when available
-            const categories = ['corporate', 'community', 'reference', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -2855,9 +2872,9 @@
 
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
-            const categories = ['corporate', 'community', 'reference', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4127,12 +4144,20 @@
         // Handle uptime period dropdown
         function handleUptimePeriod(value) {
             currentTimeRange = value;
+            // Update modal availability label
+            const rangeLabels = { '24h': '24h', 'daily': 'Today', '7d': '7 Days', '30d': '30 Days', '1y': '1 Year', 'custom': 'Custom' };
+            const labelEl = document.getElementById('modalAvailLabel');
+            if (labelEl) labelEl.textContent = `Availability (${rangeLabels[value] || value})`;
+            // Update table header
+            const headerEl = document.getElementById('availabilityHeader');
+            if (headerEl) headerEl.textContent = `Availability (${rangeLabels[value] || value})`;
+            
             if (value === 'custom') {
                 showCustomDatePicker();
             } else {
                 document.getElementById('customDateRange').style.display = 'none';
                 loadUptimeData(value);
-                showNotification(`Uptime period changed to ${value}`, 'info');
+                showNotification(`Uptime period changed to ${rangeLabels[value] || value}`, 'info');
             }
         }
         
@@ -4568,13 +4593,14 @@
 
                 allStations = payload.stations.map(s => {
                     const category = STATION_CATEGORIES[s.station_id] || 'community';
+                    const apiSource = SOURCE_OVERRIDES[s.station_id] || s.api_source || 'N/A';
                     return {
                         station_id: s.station_id,
                         station_name: s.location || s.station_name || `Station ${s.station_id}`,
                         location: s.location || s.station_name || '',
                         latitude: parseFloat(s.latitude) || 0,
                         longitude: parseFloat(s.longitude) || 0,
-                        api_source: s.api_source || 'N/A',
+                        api_source: apiSource,
                         is_online: s.is_active === 1 ? 1 : 0,
                         status: s.status || (s.is_active === 1 ? 'Active' : 'Inactive'),
                         temperature: s.temperature !== undefined ? s.temperature : null,

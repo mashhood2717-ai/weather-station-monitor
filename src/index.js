@@ -713,13 +713,13 @@ const STATION_CATEGORIES = {
   '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
   '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
   '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
-  '221876': 'corporate', '160951': 'community', '221803': 'corporate', '169497': 'corporate',
+  '160951': 'community', '169497': 'corporate',
   '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
   '169639': 'corporate', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
   'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
   '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'community',
   '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
-  'IISLAM9': 'wu', '221884': 'corporate', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
+  'IISLAM9': 'wu', 'IPUNJA24': 'wu', 'IISLAM1': 'wu',
   'IPUNJA22': 'wu', 'IRAWAL3': 'wu', 'IISLAMAB7': 'wu', 'IISLAM11': 'wu',
   'IPUNJABR2': 'wu', 'IRAWAL18': 'wu', 'IRAWAL29': 'wu', 'IRAWAL16': 'wu',
   'INUSHK12': 'wu', 'IFEDERAL8': 'wu', 'IKMILPUR2': 'wu', 'IKHYBERP3': 'wu',
@@ -742,9 +742,11 @@ const STATION_CATEGORIES = {
   'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
   '150367': 'reference', '150967': 'corporate', '131812': 'reference', '129090': 'community',
   '129952': 'community', '142628': 'corporate', '139347': 'community', '133500': 'community',
-  '217831': 'community', '216612': 'corporate', '221544': 'corporate', '221563': 'corporate',
-  '221555': 'corporate', '221695': 'corporate', '221726': 'corporate', '221703': 'corporate',
-  '221746': 'corporate', '221873': 'corporate', '221910': 'corporate', '221938': 'corporate'
+  '217831': 'community',
+  // WOW - Toll Plaza Stations
+  '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
+  '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
+  '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow'
 };
 
 async function generateDailyReportData(env) {
