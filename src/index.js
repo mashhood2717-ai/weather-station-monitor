@@ -2702,7 +2702,8 @@ async function handleDashboardStats(env, corsHeaders) {
           s.station_name as display_name,
           sl.temperature,
           sl.rainfall,
-          sl.wind_speed
+          sl.wind_speed,
+          sl.timestamp
         FROM status_logs sl
         LEFT JOIN stations s ON sl.station_id = s.station_id
         WHERE sl.timestamp >= ?
@@ -2732,6 +2733,7 @@ async function handleDashboardStats(env, corsHeaders) {
         FROM today_data
         WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
           AND station_id NOT IN (SELECT station_id FROM stale_rain_stations)
+          AND timestamp > datetime(?, '+1 hour')
         ORDER BY rainfall DESC LIMIT 1
       ),
       -- Max wind
@@ -2745,7 +2747,7 @@ async function handleDashboardStats(env, corsHeaders) {
       UNION ALL SELECT * FROM min_temp_result
       UNION ALL SELECT * FROM max_rain_result
       UNION ALL SELECT * FROM max_wind_result
-    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
+    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr).all();
 
     // Parse results
     let maxTemp = null, maxTempStation = null;
