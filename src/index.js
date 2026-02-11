@@ -2687,13 +2687,28 @@ async function handleDashboardStats(env, corsHeaders) {
           AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
           AND COUNT(*) >= 4
       ),
-      -- Detect stale rainfall sensors (same value for 3+ readings)
+      -- Detect stale rainfall sensors: high reading at midnight boundary with zeros after
       stale_rain_stations AS (
-        SELECT station_id
-        FROM status_logs
-        WHERE timestamp >= ? AND rainfall IS NOT NULL AND rainfall > 0
-        GROUP BY station_id
-        HAVING COUNT(*) >= 3 AND COUNT(DISTINCT ROUND(rainfall, 1)) = 1
+        SELECT DISTINCT station_id
+        FROM (
+          -- Find stations with >10mm in first minute after midnight
+          SELECT station_id, rainfall
+          FROM status_logs
+          WHERE timestamp >= ? AND timestamp <= datetime(?, '+1 minute')
+            AND rainfall > 10
+        ) boundary_high
+        WHERE station_id IN (
+          -- That have all zeros in next readings
+          SELECT station_id FROM status_logs
+          WHERE timestamp > datetime(?, '+1 minute') AND rainfall = 0
+          GROUP BY station_id
+          HAVING COUNT(*) >= 2
+        )
+        AND station_id IN (
+          -- And same high value existed before midnight
+          SELECT station_id FROM status_logs
+          WHERE timestamp < ? AND rainfall = boundary_high.rainfall
+        )
       ),
       -- Today's valid data excluding stale sensors
       today_data AS (
@@ -2733,7 +2748,6 @@ async function handleDashboardStats(env, corsHeaders) {
         FROM today_data
         WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
           AND station_id NOT IN (SELECT station_id FROM stale_rain_stations)
-          AND timestamp > datetime(?, '+1 minute')
         ORDER BY rainfall DESC LIMIT 1
       ),
       -- Max wind
@@ -2747,7 +2761,7 @@ async function handleDashboardStats(env, corsHeaders) {
       UNION ALL SELECT * FROM min_temp_result
       UNION ALL SELECT * FROM max_rain_result
       UNION ALL SELECT * FROM max_wind_result
-    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr).all();
+    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr).all();
 
     // Parse results
     let maxTemp = null, maxTempStation = null;
