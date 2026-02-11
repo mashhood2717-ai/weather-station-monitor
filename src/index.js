@@ -2730,7 +2730,7 @@ async function handleDashboardStats(env, corsHeaders) {
         )
         WHERE rn = 1 AND is_online = 1
       ),
-      -- Today's valid data excluding stale sensors and offline stations
+      -- Today's valid data excluding stale sensors and offline stations (skip first 5 min after midnight)
       today_data AS (
         SELECT 
           sl.station_id,
@@ -2741,7 +2741,7 @@ async function handleDashboardStats(env, corsHeaders) {
           sl.timestamp
         FROM status_logs sl
         LEFT JOIN stations s ON sl.station_id = s.station_id
-        WHERE sl.timestamp >= ?
+        WHERE sl.timestamp > datetime(?, '+5 minutes')
           AND sl.is_online = 1
           AND sl.station_id IN (SELECT station_id FROM currently_online_stations)
       ),
