@@ -2733,7 +2733,7 @@ async function handleDashboardStats(env, corsHeaders) {
         FROM today_data
         WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
           AND station_id NOT IN (SELECT station_id FROM stale_rain_stations)
-          AND timestamp > datetime(?, '+1 hour')
+          AND timestamp > datetime(?, '+1 minute')
         ORDER BY rainfall DESC LIMIT 1
       ),
       -- Max wind
