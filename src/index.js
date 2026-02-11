@@ -2687,20 +2687,16 @@ async function handleDashboardStats(env, corsHeaders) {
           AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
           AND COUNT(*) >= 4
       ),
-      -- Detect stale rainfall sensors: high reading at midnight with all zeros after
+      -- Exclude readings within 1 minute after midnight PKT that are > 15mm (likely from previous day)
+      midnight_pkt_utc AS (
+        SELECT datetime(?, '+0 minutes') as midnight_time
+      ),
       stale_rain_stations AS (
-        SELECT station_id
-        FROM (
-          SELECT 
-            sl1.station_id,
-            MAX(CASE WHEN sl1.timestamp >= ? AND sl1.timestamp <= datetime(?, '+1 minute') 
-                     AND sl1.rainfall > 10 THEN sl1.rainfall ELSE NULL END) as boundary_reading,
-            COUNT(CASE WHEN sl1.timestamp > datetime(?, '+1 minute') AND sl1.rainfall = 0 THEN 1 END) as zero_count,
-            COUNT(CASE WHEN sl1.timestamp < ? AND sl1.rainfall > 10 THEN 1 END) as pre_midnight_high
-          FROM status_logs sl1
-          GROUP BY sl1.station_id
-        )
-        WHERE boundary_reading > 10 AND zero_count >= 2 AND pre_midnight_high > 0
+        SELECT DISTINCT station_id
+        FROM status_logs, midnight_pkt_utc
+        WHERE timestamp >= midnight_pkt_utc.midnight_time
+          AND timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 minutes')
+          AND rainfall > 15
       ),
       -- Today's valid data excluding stale sensors
       today_data AS (
@@ -2753,7 +2749,7 @@ async function handleDashboardStats(env, corsHeaders) {
       UNION ALL SELECT * FROM min_temp_result
       UNION ALL SELECT * FROM max_rain_result
       UNION ALL SELECT * FROM max_wind_result
-    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr, midnightStr).all();
+    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
 
     // Parse results
     let maxTemp = null, maxTempStation = null;
