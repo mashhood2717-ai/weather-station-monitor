@@ -2687,16 +2687,25 @@ async function handleDashboardStats(env, corsHeaders) {
           AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
           AND COUNT(*) >= 4
       ),
-      -- Exclude readings within 1 minute after midnight PKT that are > 15mm (likely from previous day)
+      -- Store midnight timestamp for reuse
       midnight_pkt_utc AS (
-        SELECT datetime(?, '+0 minutes') as midnight_time
+        SELECT ? as midnight_time
       ),
+      -- Detect stale rainfall: reading at midnight >= reading at 11:59 PM (sensor didn't reset)
       stale_rain_stations AS (
-        SELECT DISTINCT station_id
-        FROM status_logs, midnight_pkt_utc
-        WHERE timestamp >= midnight_pkt_utc.midnight_time
-          AND timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 minutes')
-          AND rainfall > 15
+        SELECT DISTINCT sl1.station_id
+        FROM status_logs sl1, midnight_pkt_utc
+        WHERE sl1.timestamp >= midnight_pkt_utc.midnight_time 
+          AND sl1.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+1 minute')
+          AND sl1.rainfall IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM status_logs sl2
+            WHERE sl2.station_id = sl1.station_id
+              AND sl2.timestamp >= datetime(midnight_pkt_utc.midnight_time, '-1 minute')
+              AND sl2.timestamp < midnight_pkt_utc.midnight_time
+              AND sl2.rainfall IS NOT NULL
+              AND sl1.rainfall >= sl2.rainfall
+          )
       ),
       -- Today's valid data excluding stale sensors
       today_data AS (
