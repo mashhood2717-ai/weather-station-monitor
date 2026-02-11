@@ -8,6 +8,11 @@
 // Cache for JWT tokens (in-memory, will refresh on expiry)
 const tokenCache = new Map();
 
+// In-memory cache for HubService station data (shared across requests within same isolate)
+// This avoids duplicate fetches when multiple endpoints need the same data
+let hubStationCache = { data: null, fetchedAt: 0 };
+const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
+
 // Get JWT token from HubService using Basic auth
 async function getHubServiceToken(userCredentials) {
   try {
@@ -20,7 +25,7 @@ async function getHubServiceToken(userCredentials) {
 
     // Parse user credentials (format: "phone:password")
     const [loginParam, password] = userCredentials.split(':');
-    
+
     // Generate dynamic Basic Auth (as per HubService web app pattern)
     const dynamicUsername = `we@therwalay-${Date.now()}`;
     const dynamicPassword = 'we@therwalay_dev#7780';
@@ -45,7 +50,7 @@ async function getHubServiceToken(userCredentials) {
 
     const data = await response.json();
     const token = data.token;
-    
+
     if (!token) {
       console.error('No token in response');
       return null;
@@ -64,19 +69,19 @@ async function getHubServiceToken(userCredentials) {
               .join('')
           )
         );
-        
+
         // Store token with expiry (subtract 5 minutes as buffer)
         const expiresAt = (payload.exp * 1000) - (5 * 60 * 1000);
         tokenCache.set('hubservice_jwt', { token, expiresAt });
-        
+
         console.log(`✅ Got new JWT token, expires in ${Math.floor((expiresAt - Date.now()) / 1000)}s`);
         return token;
       }
     } catch (e) {
       console.warn('Could not parse JWT expiry:', e);
       // Store without expiry knowledge - will try again next time
-      tokenCache.set('hubservice_jwt', { 
-        token, 
+      tokenCache.set('hubservice_jwt', {
+        token,
         expiresAt: Date.now() + (24 * 60 * 60 * 1000) // Assume 24 hours
       });
       return token;
@@ -103,11 +108,11 @@ function useProvidedJWTToken(jwtToken) {
             .join('')
         )
       );
-      
+
       // Store token with expiry (subtract 5 minutes as buffer)
       const expiresAt = (payload.exp * 1000) - (5 * 60 * 1000);
       tokenCache.set('hubservice_jwt', { token: jwtToken, expiresAt });
-      
+
       console.log(`✅ Cached provided JWT token, expires in ${Math.floor((expiresAt - Date.now()) / 1000)}s`);
       return true;
     }
@@ -127,7 +132,7 @@ function fahrenheitToCelsius(fahrenheit) {
 async function fetchAllStationsFromHubService(env) {
   try {
     let token = null;
-    
+
     // First, try to use cached token (if not expired)
     const cached = tokenCache.get('hubservice_jwt');
     if (cached && cached.expiresAt > Date.now()) {
@@ -143,17 +148,21 @@ async function fetchAllStationsFromHubService(env) {
       useProvidedJWTToken(env.HUBSERVICE_JWT);
       token = env.HUBSERVICE_JWT;
     }
-    
+
     if (!token) {
       throw new Error('No valid JWT token available');
     }
 
     const allStations = [];
-    
-    // Fetch all pages from your API with all required fields including temp for live readings
+
+    // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={})
+    const neededFields = JSON.stringify({
+      stationID: 1, stationName: 1, poi: 1, lat: 1, long: 1,
+      status: 1, apiSource: 1, socketLastUpdate: 1
+    });
     for (let page = 1; page <= 6; page++) {
       const response = await fetch(
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={}&globalSearch=`,
+        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -171,19 +180,19 @@ async function fetchAllStationsFromHubService(env) {
           let temperature = null;
           let rainfall = null;
           let windSpeed = null;
-          
+
           // Get temp from socketLastUpdate (already in Celsius)
           if (station.socketLastUpdate && station.socketLastUpdate.temp !== undefined && station.socketLastUpdate.temp !== null && station.socketLastUpdate.temp !== 'N/A') {
             temperature = parseFloat(station.socketLastUpdate.temp);
             if (isNaN(temperature)) temperature = null;
           }
-          
+
           // Try to get rainfall and wind speed from socketLastUpdate.servicesResponses if available
           if (station.socketLastUpdate && station.socketLastUpdate.servicesResponses && Array.isArray(station.socketLastUpdate.servicesResponses) && station.socketLastUpdate.servicesResponses.length > 0) {
             // Check last entry first (most recent data)
             for (let i = station.socketLastUpdate.servicesResponses.length - 1; i >= 0 && (rainfall === null || windSpeed === null); i--) {
               const svcResp = station.socketLastUpdate.servicesResponses[i];
-              
+
               // Davis format: response is an array with rainfall_daily_mm and wind_speed_hi_last_10_min
               if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
                 const reading = svcResp.response[0];
@@ -195,7 +204,7 @@ async function fetchAllStationsFromHubService(env) {
                   windSpeed = parseFloat((reading.wind_speed_hi_last_10_min * 1.60934).toFixed(1)); // mph to km/h
                 }
               }
-              
+
               // WU format: response.observations[0].imperial.precipTotal and windGust
               if ((rainfall === null || windSpeed === null) && svcResp.response && svcResp.response.observations && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
                 const obs = svcResp.response.observations[0];
@@ -212,7 +221,7 @@ async function fetchAllStationsFromHubService(env) {
               }
             }
           }
-          
+
           return {
             ...station,
             temperature,
@@ -236,26 +245,38 @@ async function fetchAllStationsFromHubService(env) {
   }
 }
 
+// Cached wrapper - reuses data within TTL to avoid redundant HubService calls
+async function fetchAllStationsFromHubServiceCached(env) {
+  const now = Date.now();
+  if (hubStationCache.data && (now - hubStationCache.fetchedAt) < HUB_CACHE_TTL_MS) {
+    console.log(`📦 Using cached HubService data (age: ${Math.floor((now - hubStationCache.fetchedAt) / 1000)}s, ${hubStationCache.data.length} stations)`);
+    return hubStationCache.data;
+  }
+  const data = await fetchAllStationsFromHubService(env);
+  hubStationCache = { data: data, fetchedAt: Date.now() };
+  return data;
+}
+
 
 
 // Sync stations from HubService API
 async function syncNewStations(env) {
   try {
     // Get all stations from HubService API (no token required)
-    const apiStations = await fetchAllStationsFromHubService(env);
-    
+    const apiStations = await fetchAllStationsFromHubServiceCached(env);
+
     if (apiStations.length === 0) {
       console.log('No stations found from HubService API');
       return { added: 0, stations: [] };
     }
-    
+
     // Get existing stations from database
     const existingStations = await env.DB.prepare(`
       SELECT station_id FROM stations
     `).all();
-    
+
     const existingIds = new Set(existingStations.results.map(s => s.station_id.toString()));
-    
+
     // Transform HubService stations to our format (using new field names: lat, long, temperature, rainfall, status, apiSource, stationName, stationID)
     const newStations = apiStations
       .filter(s => !existingIds.has(s.stationID.toString()))
@@ -269,14 +290,14 @@ async function syncNewStations(env) {
         rainfall: s.rainfall,
         apiSource: s.apiSource
       }));
-    
+
     if (newStations.length === 0) {
       console.log('No new stations to add');
       return { added: 0, stations: [] };
     }
-    
+
     console.log(`Found ${newStations.length} new stations to add`);
-    
+
     // Insert all new stations
     const addedStations = [];
     for (const station of newStations) {
@@ -292,13 +313,13 @@ async function syncNewStations(env) {
           parseFloat(station.lng) || 0,
           new Date().toISOString().split('T')[0]
         ).run();
-        
+
         addedStations.push({ id: station.stationID, name: station.stationName });
       } catch (err) {
         console.warn(`Failed to insert station ${station.stationID}:`, err);
       }
     }
-    
+
     return {
       added: addedStations.length,
       stations: addedStations
@@ -391,7 +412,7 @@ export default {
       } else if (path === '/api/test-fetch') {
         // Test the fetchAllStationsFromHubService function
         try {
-          const stations = await fetchAllStationsFromHubService(env);
+          const stations = await fetchAllStationsFromHubServiceCached(env);
           // Find stations with temperature
           const withTemp = stations.filter(s => s.temperature !== null && s.temperature !== undefined);
           const sample = stations.slice(0, 10).map(s => ({
@@ -401,10 +422,10 @@ export default {
             temperature: s.temperature,
             rainfall: s.rainfall
           }));
-          return new Response(JSON.stringify({ 
-            total: stations.length, 
+          return new Response(JSON.stringify({
+            total: stations.length,
             withTempCount: withTemp.length,
-            sample 
+            sample
           }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         } catch (e) {
           return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -545,6 +566,9 @@ export default {
       } else if (path === '/api/send-daily-report') {
         // Manually trigger sending daily email report
         return await handleSendDailyReport(env, corsHeaders);
+      } else if (env.ASSETS) {
+        // Serve static assets (dashboard SPA)
+        return env.ASSETS.fetch(request);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -557,15 +581,15 @@ export default {
     }
   },
 
-  // Cron trigger - runs every 15 minutes + daily report at 8 AM PKT
+  // Cron trigger - runs every 30 minutes (reduced from 15 min to save D1 writes)
   async scheduled(event, env, ctx) {
     const now = new Date();
     console.log('Cron triggered:', now.toISOString());
-    
+
     // Check if it's time for daily report (8 AM PKT = 3:00 UTC)
     const utcHour = now.getUTCHours();
     const utcMinute = now.getUTCMinutes();
-    if (utcHour === 3 && utcMinute < 15) {
+    if (utcHour === 3 && utcMinute < 30) {
       console.log('Sending daily email report...');
       try {
         await sendDailyEmailReport(env);
@@ -574,24 +598,28 @@ export default {
         console.error('Failed to send daily email report:', e.message);
       }
     }
-    
-    // Sync stations
+
+    // Sync stations (now uses D1 batch for ~10x fewer DB round-trips)
     await syncAllStations(env);
-    
-    // Ingest samples (runs every hour)
-    try {
-      console.log('Ingesting samples...');
-      await handleIngestStationSamples(env, {});
-    } catch (e) {
-      console.warn('Scheduled ingest failed:', e.message);
+
+    // Ingest samples only at the top of each hour (:07 trigger only)
+    if (utcMinute < 15) {
+      try {
+        console.log('Ingesting samples (hourly)...');
+        await handleIngestStationSamples(env, {});
+      } catch (e) {
+        console.warn('Scheduled ingest failed:', e.message);
+      }
     }
-    
-    // Keep 15 months of data (456 days) - cleanup runs with each cron
-    try {
-      console.log('Cleaning up old logs (keeping 15 months)...');
-      await cleanupOldLogs(env, 456);
-    } catch (e) {
-      console.warn('Cleanup failed:', e.message);
+
+    // Cleanup old data only once per day (at 4 AM UTC / 9 AM PKT)
+    if (utcHour === 4 && utcMinute < 30) {
+      try {
+        console.log('Cleaning up old logs (keeping 15 months)...');
+        await cleanupOldLogs(env, 456);
+      } catch (e) {
+        console.warn('Cleanup failed:', e.message);
+      }
     }
   },
 };
@@ -606,19 +634,19 @@ async function cleanupOldLogs(env, daysToKeep = 30) {
       DELETE FROM status_logs 
       WHERE timestamp < datetime('now', '-${daysToKeep} days')
     `).run();
-    
+
     // Delete station_samples older than N days
     const samplesResult = await env.DB.prepare(`
       DELETE FROM station_samples 
       WHERE sample_time < datetime('now', '-${daysToKeep} days')
     `).run();
-    
+
     // Delete downtime_records older than N days
     const downtimeResult = await env.DB.prepare(`
       DELETE FROM downtime_records 
       WHERE start_time < datetime('now', '-${daysToKeep} days')
     `).run();
-    
+
     const totalDeleted = (logsResult.meta?.changes || 0) + (samplesResult.meta?.changes || 0) + (downtimeResult.meta?.changes || 0);
     if (totalDeleted > 0) {
       console.log(`Cleaned up ${totalDeleted} old records (logs: ${logsResult.meta?.changes || 0}, samples: ${samplesResult.meta?.changes || 0}, downtime: ${downtimeResult.meta?.changes || 0})`);
@@ -639,14 +667,14 @@ async function handleStorageStats(env, corsHeaders = {}) {
     const samplesCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM station_samples`).first();
     const stationsCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM stations`).first();
     const downtimeCount = await env.DB.prepare(`SELECT COUNT(*) as count FROM downtime_records`).first();
-    
+
     const dateRange = await env.DB.prepare(`
       SELECT MIN(timestamp) as oldest, MAX(timestamp) as newest FROM status_logs
     `).first();
-    
+
     // Estimate size (rough: ~150 bytes per log row)
     const estimatedSizeMB = ((logsCount?.count || 0) * 150 + (samplesCount?.count || 0) * 100) / (1024 * 1024);
-    
+
     return new Response(JSON.stringify({
       success: true,
       counts: {
@@ -751,8 +779,8 @@ const STATION_CATEGORIES = {
 
 async function generateDailyReportData(env) {
   // Fetch all stations with current status
-  const hubStations = await fetchAllStationsFromHubService(env);
-  
+  const hubStations = await fetchAllStationsFromHubServiceCached(env);
+
   // Get 24h uptime data from database
   const uptimeQuery = await env.DB.prepare(`
     SELECT 
@@ -764,7 +792,7 @@ async function generateDailyReportData(env) {
     WHERE timestamp > datetime('now', '-24 hours')
     GROUP BY station_id
   `).all();
-  
+
   const uptimeMap = {};
   (uptimeQuery.results || []).forEach(row => {
     uptimeMap[row.station_id] = {
@@ -773,7 +801,7 @@ async function generateDailyReportData(env) {
       avgTemp: row.avg_temp
     };
   });
-  
+
   // Process stations
   const stations = hubStations.map(s => {
     const upData = uptimeMap[s.stationID] || { uptime: 0, checks: 0, avgTemp: null };
@@ -794,12 +822,12 @@ async function generateDailyReportData(env) {
       last_seen: s.lastUpdated || null
     };
   });
-  
+
   // Calculate summary stats
   const online = stations.filter(s => s.status === 'Active').length;
   const offline = stations.filter(s => s.status !== 'Active').length;
   const total = stations.length;
-  
+
   // Category breakdown
   const categories = ['corporate', 'community', 'reference', 'wu'];
   const categoryStats = {};
@@ -813,7 +841,7 @@ async function generateDailyReportData(env) {
       uptime_pct: catStations.length > 0 ? ((catOnline / catStations.length) * 100).toFixed(1) : '0.0'
     };
   });
-  
+
   // Source breakdown
   const sources = ['Davis', 'Misol', 'WU'];
   const sourceStats = {};
@@ -827,13 +855,13 @@ async function generateDailyReportData(env) {
       uptime_pct: srcStations.length > 0 ? ((srcOnline / srcStations.length) * 100).toFixed(1) : '0.0'
     };
   });
-  
+
   // Find MAX temperature with station name (only from stations online in last 24h)
   const stationsWithTemp = stations
     .filter(s => s.status === 'Active' && s.temperature !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
     .map(s => ({ name: s.poi || s.station_name, temp: parseFloat(s.temperature) }))
     .filter(s => !isNaN(s.temp));
-  
+
   let maxTemp = null;
   let maxTempStation = null;
   if (stationsWithTemp.length > 0) {
@@ -841,13 +869,13 @@ async function generateDailyReportData(env) {
     maxTemp = maxTempObj.temp.toFixed(1);
     maxTempStation = maxTempObj.name;
   }
-  
+
   // Find MAX rainfall with station name (only from stations that had at least 1 online check in last 24h)
   const stationsWithRain = stations
     .filter(s => s.rainfall !== null && s.checks_24h > 0 && parseFloat(s.uptime_24h) > 0)
     .map(s => ({ name: s.poi || s.station_name, rain: parseFloat(s.rainfall) }))
     .filter(s => !isNaN(s.rain) && s.rain > 0);
-  
+
   let maxRainfall = '0.0';
   let maxRainfallStation = 'No rainfall';
   if (stationsWithRain.length > 0) {
@@ -855,7 +883,7 @@ async function generateDailyReportData(env) {
     maxRainfall = maxRainObj.rain.toFixed(1);
     maxRainfallStation = maxRainObj.name;
   }
-  
+
   // Offline stations list
   const offlineStations = stations
     .filter(s => s.status !== 'Active')
@@ -866,7 +894,7 @@ async function generateDailyReportData(env) {
       category: s.category,
       last_seen: s.last_seen
     }));
-  
+
   const now = new Date();
   const reportDate = now.toLocaleString('en-US', {
     timeZone: 'Asia/Karachi',
@@ -876,7 +904,7 @@ async function generateDailyReportData(env) {
     hour: '2-digit',
     minute: '2-digit'
   });
-  
+
   return {
     report_date: reportDate,
     generated_at: now.toISOString(),
@@ -914,7 +942,7 @@ async function handleDailyReportRequest(env, corsHeaders) {
 async function handleDailyReportExcel(env, corsHeaders) {
   try {
     const report = await generateDailyReportData(env);
-    
+
     // Category colors for styling
     const categoryColors = {
       'Corporate': { bg: '#dbeafe', text: '#1e40af' },
@@ -923,20 +951,20 @@ async function handleDailyReportExcel(env, corsHeaders) {
       'WU': { bg: '#ffe4e6', text: '#be123c' },
       'Unknown': { bg: '#f1f5f9', text: '#475569' }
     };
-    
+
     // Get status color
     const getStatusStyle = (status) => {
-      return status === 'Active' 
+      return status === 'Active'
         ? 'background-color:#dcfce7; color:#166534; font-weight:bold;'
         : 'background-color:#fee2e2; color:#dc2626; font-weight:bold;';
     };
-    
+
     // Get category style
     const getCategoryStyle = (category) => {
       const cat = categoryColors[category] || categoryColors['Unknown'];
       return `background-color:${cat.bg}; color:${cat.text}; font-weight:500;`;
     };
-    
+
     // Get uptime color
     const getUptimeStyle = (uptime) => {
       const val = parseFloat(uptime) || 0;
@@ -944,7 +972,7 @@ async function handleDailyReportExcel(env, corsHeaders) {
       if (val >= 80) return 'background-color:#fef3c7; color:#92400e;';
       return 'background-color:#fee2e2; color:#dc2626;';
     };
-    
+
     // Build HTML Excel file
     const html = `
 <!DOCTYPE html>
@@ -1076,10 +1104,10 @@ async function handleDailyReportExcel(env, corsHeaders) {
   </table>
 </body>
 </html>`;
-    
+
     const now = new Date();
     const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
-    
+
     return new Response(html, {
       headers: {
         ...corsHeaders,
@@ -1117,17 +1145,17 @@ async function sendDailyEmailReport(env) {
     console.log('RESEND_API_KEY not configured, skipping email');
     return { success: false, error: 'Email not configured' };
   }
-  
+
   // Get email recipients from env (comma-separated)
   const recipients = (env.REPORT_EMAILS || '').split(',').map(e => e.trim()).filter(e => e);
   if (recipients.length === 0) {
     console.log('No REPORT_EMAILS configured');
     return { success: false, error: 'No recipients configured' };
   }
-  
+
   // Generate report data
   const report = await generateDailyReportData(env);
-  
+
   // Build HTML email
   const html = `
 <!DOCTYPE html>
@@ -1248,11 +1276,11 @@ async function sendDailyEmailReport(env) {
 </body>
 </html>
   `;
-  
+
   // Send via Resend API
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
-  
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -1266,13 +1294,13 @@ async function sendDailyEmailReport(env) {
       html: html
     })
   });
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Resend API error:', errorText);
     return { success: false, error: errorText };
   }
-  
+
   const result = await response.json();
   console.log('Email sent successfully:', result);
   return { success: true, messageId: result.id, recipients: recipients };
@@ -1288,19 +1316,33 @@ async function sendDailyEmailReport(env) {
 
 const BATCH_SIZE = 29; // Process 29 stations per batch for optimal performance
 
-// Helper function to process a single station
-async function syncSingleStation(env, station) {
+// Helper function to prepare station data without executing DB calls
+function prepareStationData(station) {
   const stationId = String(station.stationID);
-  
-  // Skip logging for Disabled stations - they shouldn't count toward uptime/downtime
-  // Only Active and Inactive stations affect availability metrics
-  if (station.status === 'Disabled') {
-    // Still upsert station metadata but don't log status
-    const displayName = station.poi || station.stationName || 'Unknown';
-    const stationName = station.stationName || 'Unknown';
-    const apiSource = station.apiSource || null;
-    
-    await env.DB.prepare(`
+  const isDisabled = station.status === 'Disabled';
+  const isOnline = station.status === 'Active' ? 1 : 0;
+  const displayName = station.poi || station.stationName || 'Unknown';
+  const stationName = station.stationName || 'Unknown';
+  const apiSource = station.apiSource || null;
+
+  let temperature = null;
+  if (station.temperature !== undefined && station.temperature !== null && station.temperature !== 'N/A') {
+    temperature = parseFloat(station.temperature);
+    if (isNaN(temperature)) temperature = null;
+  }
+  let rainfall = station.rainfall !== undefined && station.rainfall !== null ? parseFloat(station.rainfall) : null;
+  let windSpeed = station.windSpeed !== undefined && station.windSpeed !== null ? parseFloat(station.windSpeed) : null;
+
+  return { stationId, isDisabled, isOnline, displayName, stationName, apiSource, temperature, rainfall, windSpeed };
+}
+
+// Process ALL stations using D1 batch() to minimize round-trips
+// Instead of 3-5 DB calls per station (750-1250 total), this does ~3 batch calls total
+async function syncAllStationsBatched(env, apiStations) {
+  // Phase 1: Batch upsert all stations
+  const upsertStatements = apiStations.map(station => {
+    const d = prepareStationData(station);
+    return env.DB.prepare(`
       INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
       VALUES (?, ?, ?, ?, ?, ?, date('now'))
       ON CONFLICT(station_id) DO UPDATE SET
@@ -1308,109 +1350,100 @@ async function syncSingleStation(env, station) {
         latitude = excluded.latitude,
         longitude = excluded.longitude,
         api_source = excluded.api_source
-    `).bind(
-      stationId,
-      displayName,
-      stationName,
-      parseFloat(station.lat) || 0,
-      parseFloat(station.long) || 0,
-      apiSource
-    ).run();
-    
-    return stationId; // Skip status logging for Disabled stations
-  }
-  
-  const isOnline = station.status === 'Active' ? 1 : 0;
-  // Prefer poi (user-friendly name) over stationName (technical name)
-  const displayName = station.poi || station.stationName || 'Unknown';
-  const stationName = station.stationName || 'Unknown';
-  const apiSource = station.apiSource || null;
-  
-  // Ensure station exists in stations table (upsert) - use poi as station_name for display
-  await env.DB.prepare(`
-    INSERT INTO stations (station_id, station_name, location, latitude, longitude, api_source, install_date)
-    VALUES (?, ?, ?, ?, ?, ?, date('now'))
-    ON CONFLICT(station_id) DO UPDATE SET
-      station_name = excluded.station_name,
-      latitude = excluded.latitude,
-      longitude = excluded.longitude,
-      api_source = excluded.api_source
-  `).bind(
-    stationId,
-    displayName,
-    stationName,
-    parseFloat(station.lat) || 0,
-    parseFloat(station.long) || 0,
-    apiSource
-  ).run();
-  
-  // Use temperature directly from API
-  let temperature = null;
-  if (station.temperature !== undefined && station.temperature !== null && station.temperature !== 'N/A') {
-    temperature = parseFloat(station.temperature);
-  }
-  
-  // Get rainfall if available
-  let rainfall = station.rainfall !== undefined && station.rainfall !== null ? parseFloat(station.rainfall) : null;
-  
-  // Get wind speed if available
-  let windSpeed = station.windSpeed !== undefined && station.windSpeed !== null ? parseFloat(station.windSpeed) : null;
+    `).bind(d.stationId, d.displayName, d.stationName, parseFloat(station.lat) || 0, parseFloat(station.long) || 0, d.apiSource);
+  });
 
-  // Insert status log with all sensor data
-  await env.DB.prepare(`
-    INSERT INTO status_logs 
-    (station_id, timestamp, is_online, temperature, rainfall, wind_speed, response_time_ms)
-    VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
-  `).bind(
-    stationId,
-    isOnline,
-    temperature,
-    rainfall,
-    windSpeed,
-    0
-  ).run();
-  
-  // Track downtime events
-  if (!isOnline) {
-    await handleStationOffline(env, stationId);
-  } else {
-    await handleStationOnline(env, stationId);
-  }
-  
-  return stationId;
-}
+  // Phase 2: Batch insert status_logs (skip Disabled stations)
+  const logStatements = apiStations
+    .filter(s => s.status !== 'Disabled')
+    .map(station => {
+      const d = prepareStationData(station);
+      return env.DB.prepare(`
+        INSERT INTO status_logs (station_id, timestamp, is_online, temperature, rainfall, wind_speed, response_time_ms)
+        VALUES (?, datetime('now'), ?, ?, ?, ?, 0)
+      `).bind(d.stationId, d.isOnline, d.temperature, d.rainfall, d.windSpeed);
+    });
 
-// Process a batch of stations in parallel
-async function processBatch(env, stations) {
-  const results = await Promise.allSettled(
-    stations.map(station => syncSingleStation(env, station))
-  );
-  
-  let success = 0;
-  let failed = 0;
-  
-  results.forEach((result, index) => {
-    if (result.status === 'fulfilled') {
-      success++;
-    } else {
-      failed++;
-      if (failed <= 3) {
-        console.error(`Failed to sync ${stations[index]?.stationID}: ${result.reason?.message}`);
+  // Execute in batches of 100 (D1 batch limit)
+  const D1_BATCH_LIMIT = 100;
+  let totalSuccess = 0;
+  let totalFailed = 0;
+
+  // Batch upserts
+  for (let i = 0; i < upsertStatements.length; i += D1_BATCH_LIMIT) {
+    const chunk = upsertStatements.slice(i, i + D1_BATCH_LIMIT);
+    try {
+      await env.DB.batch(chunk);
+      totalSuccess += chunk.length;
+    } catch (e) {
+      console.warn(`Upsert batch ${Math.floor(i / D1_BATCH_LIMIT) + 1} failed:`, e.message);
+      totalFailed += chunk.length;
+    }
+  }
+
+  // Batch status logs
+  for (let i = 0; i < logStatements.length; i += D1_BATCH_LIMIT) {
+    const chunk = logStatements.slice(i, i + D1_BATCH_LIMIT);
+    try {
+      await env.DB.batch(chunk);
+    } catch (e) {
+      console.warn(`Status log batch ${Math.floor(i / D1_BATCH_LIMIT) + 1} failed:`, e.message);
+    }
+  }
+
+  // Phase 3: Handle downtime tracking in batch
+  // Get current active downtimes in one query
+  const activeDowntimes = await env.DB.prepare(`
+    SELECT station_id, id, start_time FROM downtime_records WHERE status = 'active'
+  `).all();
+  const activeDowntimeMap = {};
+  (activeDowntimes.results || []).forEach(r => { activeDowntimeMap[String(r.station_id)] = r; });
+
+  const downtimeStatements = [];
+  for (const station of apiStations) {
+    if (station.status === 'Disabled') continue;
+    const stationId = String(station.stationID);
+    const isOnline = station.status === 'Active';
+    const hasActiveDowntime = activeDowntimeMap[stationId];
+
+    if (!isOnline && !hasActiveDowntime) {
+      // Station offline with no active downtime → create new record
+      downtimeStatements.push(
+        env.DB.prepare(`INSERT INTO downtime_records (station_id, start_time, status) VALUES (?, datetime('now'), 'active')`).bind(stationId)
+      );
+    } else if (isOnline && hasActiveDowntime) {
+      // Station online with active downtime → resolve it
+      const startTime = new Date(hasActiveDowntime.start_time);
+      const durationMinutes = Math.floor((Date.now() - startTime.getTime()) / 1000 / 60);
+      downtimeStatements.push(
+        env.DB.prepare(`UPDATE downtime_records SET end_time = datetime('now'), duration_minutes = ?, status = 'resolved' WHERE id = ?`).bind(durationMinutes, hasActiveDowntime.id)
+      );
+    }
+  }
+
+  // Execute downtime updates in batch
+  if (downtimeStatements.length > 0) {
+    for (let i = 0; i < downtimeStatements.length; i += D1_BATCH_LIMIT) {
+      const chunk = downtimeStatements.slice(i, i + D1_BATCH_LIMIT);
+      try {
+        await env.DB.batch(chunk);
+      } catch (e) {
+        console.warn(`Downtime batch failed:`, e.message);
       }
     }
-  });
-  
-  return { success, failed };
+  }
+
+  return { totalSuccess, totalFailed };
 }
 
 async function syncAllStations(env, corsHeaders = {}) {
-  console.log('Starting station sync with batch processing...');
+  console.log('Starting station sync with D1 batch processing...');
   const startTime = Date.now();
 
   try {
-    // Fetch ALL stations from HubService API in one go
-    const apiStations = await fetchAllStationsFromHubService(env);
-    
+    // Fetch ALL stations from HubService API in one go (uses cache if available)
+    const apiStations = await fetchAllStationsFromHubServiceCached(env);
+
     if (!apiStations || apiStations.length === 0) {
       console.warn('No stations fetched from HubService');
       return new Response(JSON.stringify({
@@ -1424,27 +1457,10 @@ async function syncAllStations(env, corsHeaders = {}) {
       });
     }
 
-    console.log(`Fetched ${apiStations.length} stations from HubService for sync`);
+    console.log(`Fetched ${apiStations.length} stations, syncing with D1 batch...`);
 
-    let totalSuccess = 0;
-    let totalFailed = 0;
-    const totalBatches = Math.ceil(apiStations.length / BATCH_SIZE);
-
-    // Process stations in batches
-    for (let i = 0; i < apiStations.length; i += BATCH_SIZE) {
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      const batch = apiStations.slice(i, i + BATCH_SIZE);
-      
-      console.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} stations)...`);
-      
-      const { success, failed } = await processBatch(env, batch);
-      totalSuccess += success;
-      totalFailed += failed;
-      
-      console.log(`Batch ${batchNum} complete: ${success} success, ${failed} failed`);
-    }
-
-    console.log(`Sync result: ${totalSuccess} success, ${totalFailed} failed`);
+    // Use batched D1 operations instead of individual queries
+    const { totalSuccess, totalFailed } = await syncAllStationsBatched(env, apiStations);
 
     const duration = Date.now() - startTime;
     const result = {
@@ -1452,13 +1468,11 @@ async function syncAllStations(env, corsHeaders = {}) {
       synced: totalSuccess,
       failed: totalFailed,
       total: apiStations.length,
-      batches: totalBatches,
-      batch_size: BATCH_SIZE,
       duration_ms: duration,
       timestamp: new Date().toISOString(),
     };
 
-    console.log('Sync completed:', result);
+    console.log('Sync completed:', JSON.stringify(result));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1477,10 +1491,10 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
   try {
     // Simplified query - just fetch from HubService and add basic uptime from a single query
     let stations = [];
-    
+
     // Fetch live data from HubService
     try {
-      const hubStations = await fetchAllStationsFromHubService(env);
+      const hubStations = await fetchAllStationsFromHubServiceCached(env);
       stations = hubStations.map(s => ({
         station_id: s.stationID,
         station_name: s.stationName,
@@ -1529,7 +1543,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       WHERE timestamp >= datetime('now', '-24 hours')
       GROUP BY station_id
     `;
-    
+
     const uptimeMap = {};
     try {
       const uptimeRes = await env.DB.prepare(uptimeSQL).all();
@@ -1570,7 +1584,7 @@ async function syncSingleStationById(env, stationId) {
 
   try {
     let token = null;
-    
+
     // First, try to use cached token (if not expired)
     const cached = tokenCache.get('hubservice_jwt');
     if (cached && cached.expiresAt > Date.now()) {
@@ -1583,7 +1597,7 @@ async function syncSingleStationById(env, stationId) {
       useProvidedJWTToken(env.HUBSERVICE_JWT);
       token = env.HUBSERVICE_JWT;
     }
-    
+
     if (!token) {
       console.warn(`Cannot sync station ${stationId}: No valid JWT token`);
       return { success: false, error: 'No JWT token available' };
@@ -1604,14 +1618,14 @@ async function syncSingleStationById(env, stationId) {
 
     const data = await response.json();
     const station = data.record && data.record[0];
-    
+
     if (!station) {
       throw new Error(`Station ${stationId} not found`);
     }
 
     // Determine online status
     const isOnline = station.status === 'Active' ? 1 : 0;
-    
+
     // Extract temperature if available
     let temperature = null;
     if (station.socketLastUpdate && station.socketLastUpdate.temp && station.socketLastUpdate.temp !== 'N/A') {
@@ -1734,7 +1748,7 @@ async function handleStationsRequest(env, corsHeaders) {
 
   // Get alerts
   const alerts = await getAlerts(env);
-  
+
   // Convert temperatures to Celsius
   const stationsWithCelsius = stations.results.map(station => ({
     ...station,
@@ -1817,7 +1831,7 @@ async function handleStationDetailRequest(env, stationId, corsHeaders) {
 
 async function getStats(env) {
   const total = await env.DB.prepare('SELECT COUNT(*) as count FROM stations').first();
-  
+
   // Get current online/offline count from latest status per station
   const online = await env.DB.prepare(`
     SELECT COUNT(*) as count
@@ -1961,13 +1975,13 @@ async function handleUptimeTrendRequest(env, corsHeaders) {
 async function handleUptimePercentagesRequest(env, request, corsHeaders) {
   try {
     let stationIds = [];
-    
+
     // Get time range from query parameter
     const url = new URL(request.url);
     const range = url.searchParams.get('range') || '24h';
     const startDate = url.searchParams.get('start'); // For custom range
     const endDate = url.searchParams.get('end'); // For custom range
-    
+
     // Calculate time filter based on range
     let timeFilter = "datetime('now', '-24 hours')";
     if (range === 'daily') {
@@ -1981,7 +1995,7 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
     } else if (range === 'custom' && startDate && endDate) {
       timeFilter = `'${startDate}'`;
     }
-    
+
     // Check if this is a POST request with station IDs
     if (request.method === 'POST') {
       try {
@@ -1991,54 +2005,27 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
         console.warn('Could not parse POST body');
       }
     }
-    
-    // Fetch from HubService to get all stations with their status
+
+    // Fetch from HubService to get all stations with their status (uses cache)
     try {
-      let token = null;
-      
-      // First, try to use cached token (if not expired)
-      const cached = tokenCache.get('hubservice_jwt');
-      if (cached && cached.expiresAt > Date.now()) {
-        token = cached.token;
-        console.log('🔑 Using cached JWT token');
-      } else if (env.HUBSERVICE_BASIC_AUTH) {
-        // Prefer basic auth - it auto-refreshes tokens
-        console.log('🔐 Refreshing JWT token via Basic Auth...');
-        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-      } else if (env.HUBSERVICE_JWT) {
-        // Fall back to static JWT token (won't auto-refresh!)
-        console.log('⚠️ Using static JWT token (may be expired)');
-        useProvidedJWTToken(env.HUBSERVICE_JWT);
-        token = env.HUBSERVICE_JWT;
-      }
-      
-      if (!token) {
-        throw new Error('No valid JWT token available');
-      }
+      const allHubStations = await fetchAllStationsFromHubServiceCached(env);
 
-      // Fetch all pages from HubService
-      const allStations = [];
-      for (let page = 1; page <= 6; page++) {
-        const response = await fetch(
-          `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields={"stationID":1,"poi":1,"stationName":1,"status":1,"socketLastUpdate":1,"latitude":1,"longitude":1}&globalSearch=`,
-          {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }
-        );
+      // Map to a consistent format (the cached data has stationID, stationName, poi, status, etc.)
+      const allStations = allHubStations.map(s => ({
+        stationID: s.stationID,
+        poi: s.poi,
+        stationName: s.stationName,
+        status: s.status,
+        socketLastUpdate: s.socketLastUpdate || null,
+        latitude: s.lat,
+        longitude: s.long
+      }));
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.record && Array.isArray(data.record)) {
-            allStations.push(...data.record);
-          }
-        }
-      }
-
-      console.log(`✅ Fetched ${allStations.length} total stations from HubService`);
+      console.log(`📦 Using ${allStations.length} stations for uptime-percentages`);
 
       // If station IDs provided, filter; otherwise return all
       let result = [];
-      
+
       if (stationIds.length > 0) {
         const stationIdSet = new Set(stationIds.map(id => String(id)));
         result = allStations.filter(s => stationIdSet.has(String(s.stationID)));
@@ -2057,7 +2044,7 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
         WHERE timestamp >= ${timeFilter}
         GROUP BY station_id
       `;
-      
+
       // For custom range, add end date filter
       if (range === 'custom' && startDate && endDate) {
         uptimeSQL = `
@@ -2071,9 +2058,9 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
           GROUP BY station_id
         `;
       }
-      
+
       const uptimeQuery = await env.DB.prepare(uptimeSQL).all();
-      
+
       const uptimeMap = {};
       for (const row of (uptimeQuery.results || [])) {
         uptimeMap[String(row.station_id)] = {
@@ -2088,13 +2075,13 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
       const responseData = result.map(s => {
         const stationId = String(s.stationID);
         const uptimeInfo = uptimeMap[stationId];
-        
+
         // Calculate uptime: use database if available, otherwise based on current status
         let uptimePercentage = s.status === 'Active' ? 100 : 0;
         if (uptimeInfo && uptimeInfo.total > 0) {
           uptimePercentage = parseFloat(uptimeInfo.percentage);
         }
-        
+
         return {
           station_id: s.stationID,
           station_name: s.poi || s.stationName,
@@ -2111,9 +2098,9 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
       });
 
       console.log(`📍 Returning data for ${responseData.length} stations`);
-      
+
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           uptime_data: responseData,
           total: responseData.length,
           timestamp: new Date().toISOString()
@@ -2124,7 +2111,7 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
       console.error('Error fetching from HubService:', err);
       // Return error response
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: err.message,
           uptime_data: [],
           timestamp: new Date().toISOString()
@@ -2162,50 +2149,28 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     else if (days >= 90) granularity = 'month';
     else if (days >= 7) granularity = 'day';
 
-    // Get station info from HubService (best-effort)
+    // Get station info from cached HubService data (avoids extra API call)
     let stationInfo = null;
     try {
-      let token = null;
-      const cached = tokenCache.get('hubservice_jwt');
-      if (cached && cached.expiresAt > Date.now()) {
-        token = cached.token;
-      } else if (env.HUBSERVICE_BASIC_AUTH) {
-        // Prefer basic auth - it auto-refreshes tokens
-        token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-      } else if (env.HUBSERVICE_JWT) {
-        // Fall back to static JWT token (won't auto-refresh!)
-        useProvidedJWTToken(env.HUBSERVICE_JWT);
-        token = env.HUBSERVICE_JWT;
-      }
-
-      if (token) {
-        const response = await fetch(
-          `https://hubservice.weatherwalay.com/wms/stations?filter={"stationID":"${stationId}"}&fields={"stationID":1,"poi":1,"stationName":1,"status":1,"socketLastUpdate":1,"latitude":1,"longitude":1,"ownedBy":1}&limit=1`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.record && data.record[0]) {
-            const s = data.record[0];
-            stationInfo = {
-              station_id: s.stationID,
-              station_name: s.poi || s.stationName,
-              status: s.status,
-              is_active: s.status === 'Active' ? 1 : 0,
-              temperature: s.socketLastUpdate?.temp || null,
-              humidity: s.socketLastUpdate?.hum || null,
-              wind_speed: s.socketLastUpdate?.ws || null,
-              pressure: s.socketLastUpdate?.bp || null,
-              latitude: s.latitude,
-              longitude: s.longitude,
-              owned_by: s.ownedBy
-            };
-          }
-        }
+      const allStations = await fetchAllStationsFromHubServiceCached(env);
+      const s = allStations.find(st => String(st.stationID) === String(stationId));
+      if (s) {
+        stationInfo = {
+          station_id: s.stationID,
+          station_name: s.poi || s.stationName,
+          status: s.status,
+          is_active: s.status === 'Active' ? 1 : 0,
+          temperature: s.temperature || (s.socketLastUpdate?.temp || null),
+          humidity: s.socketLastUpdate?.hum || null,
+          wind_speed: s.windSpeed || (s.socketLastUpdate?.ws || null),
+          pressure: s.socketLastUpdate?.bp || null,
+          latitude: s.lat,
+          longitude: s.long,
+          owned_by: s.ownedBy
+        };
       }
     } catch (e) {
-      console.warn('Could not fetch station info from HubService:', e.message);
+      console.warn('Could not fetch station info from HubService cache:', e.message);
     }
 
     // Choose SQL grouping expression and time filter
@@ -2256,10 +2221,10 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
         period = now.toISOString().slice(0, 13) + ':00:00';
         period_label = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Karachi' });
       } else if (granularity === 'day') {
-        period = now.toISOString().slice(0,10);
+        period = now.toISOString().slice(0, 10);
         period_label = period;
       } else if (granularity === 'month') {
-        period = now.toISOString().slice(0,7);
+        period = now.toISOString().slice(0, 7);
         period_label = period;
       } else if (granularity === 'year') {
         period = String(now.getFullYear());
@@ -2284,7 +2249,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
           const dt = new Date(Date.now() - i * 60 * 60 * 1000);
           const bucket = dt.toISOString().slice(0, 13) + ':00:00'; // YYYY-MM-DDTHH:00:00Z
           // Find matching row (aggRows bucket is in format YYYY-MM-DD HH:00:00)
-          const match = aggRows.find(r => r.bucket.replace(' ', 'T') === bucket.replace('Z', '')) || aggRows.find(r => r.bucket === bucket.replace('T',' '));
+          const match = aggRows.find(r => r.bucket.replace(' ', 'T') === bucket.replace('Z', '')) || aggRows.find(r => r.bucket === bucket.replace('T', ' '));
           const total = match ? match.total_checks : 0;
           const online = match ? match.online_checks : 0;
           const uptime = total > 0 ? (online / total) * 100 : null;
@@ -2301,7 +2266,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       } else if (granularity === 'day') {
         for (let i = days - 1; i >= 0; i--) {
           const dt = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-          const bucket = dt.toISOString().slice(0,10); // YYYY-MM-DD
+          const bucket = dt.toISOString().slice(0, 10); // YYYY-MM-DD
           const match = aggRows.find(r => r.bucket === bucket);
           const total = match ? match.total_checks : 0;
           const online = match ? match.online_checks : 0;
@@ -2329,7 +2294,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
           cur.setMonth(cur.getMonth() + 1);
         }
         months.forEach(dt => {
-          const bucket = dt.toISOString().slice(0,7); // YYYY-MM
+          const bucket = dt.toISOString().slice(0, 7); // YYYY-MM
           const match = aggRows.find(r => r.bucket === bucket);
           const total = match ? match.total_checks : 0;
           const online = match ? match.online_checks : 0;
@@ -2372,7 +2337,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     `).bind(stationId).all();
 
     const logs = statusLogs.results || [];
-    
+
     // If the first log shows station offline, assume it was offline from the start of the period
     if (logs.length > 0 && logs[0].is_online === 0) {
       const periodStart = new Date(Date.now() - (hoursToFetch * 60 * 60 * 1000));
@@ -2414,8 +2379,8 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     const recentDowntimes = downtimeResult.results || [];
 
     // Overall uptime based on aggregated checks if available
-    const overallTotal = aggRows.reduce((a,b) => a + (b.total_checks||0), 0);
-    const overallOnline = aggRows.reduce((a,b) => a + (b.online_checks||0), 0);
+    const overallTotal = aggRows.reduce((a, b) => a + (b.total_checks || 0), 0);
+    const overallOnline = aggRows.reduce((a, b) => a + (b.online_checks || 0), 0);
     const overallUptime = overallTotal > 0 ? ((overallOnline / overallTotal) * 100).toFixed(2) : 0;
 
     // Get first log timestamp (when tracking started)
@@ -2452,32 +2417,32 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
 async function handleRemove404Stations(env, corsHeaders) {
   // Stations that return 404 - no API access
   const stations404 = [130584, 160726, 162130]; // As integers, not strings
-  
+
   try {
     let removed = 0;
-    
+
     for (const stationId of stations404) {
       // Delete status logs
       await env.DB.prepare(`
         DELETE FROM status_logs WHERE station_id = ?
       `).bind(stationId).run();
-      
+
       // Delete downtime records
       await env.DB.prepare(`
         DELETE FROM downtime_records WHERE station_id = ?
       `).bind(stationId).run();
-      
+
       // Delete station
       const result = await env.DB.prepare(`
         DELETE FROM stations WHERE station_id = ?
       `).bind(stationId).run();
-      
+
       if (result.meta.changes > 0) removed++;
     }
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         removed: removed,
         station_ids: stations404,
         message: `Removed ${removed} stations with 404 errors`
@@ -2591,7 +2556,7 @@ async function handleBackfillStationSamples(env, url, corsHeaders = {}) {
       // move end to next day 00:00:00 to make it exclusive
       const endNext = new Date(endParam + 'T00:00:00Z');
       endNext.setUTCDate(endNext.getUTCDate() + 1);
-      const endNextStr = endNext.toISOString().slice(0,19).replace('T',' ');
+      const endNextStr = endNext.toISOString().slice(0, 19).replace('T', ' ');
       binds.push(endNextStr);
     } else if (days > 0) {
       whereClause = `timestamp >= datetime('now', '-${days} days') AND timestamp < datetime('now')`;
@@ -2637,26 +2602,26 @@ async function handleBackfillStationSamples(env, url, corsHeaders = {}) {
 
 async function handleCleanupBlacklistedStations(env, corsHeaders) {
   const BLACKLISTED_STATIONS = ['130584', '160726', '162130'];
-  
+
   try {
     // Delete status logs
     await env.DB.prepare(`
       DELETE FROM status_logs WHERE station_id IN (?, ?, ?)
     `).bind(...BLACKLISTED_STATIONS).run();
-    
+
     // Delete downtime records
     await env.DB.prepare(`
       DELETE FROM downtime_records WHERE station_id IN (?, ?, ?)
     `).bind(...BLACKLISTED_STATIONS).run();
-    
+
     // Delete stations
     await env.DB.prepare(`
       DELETE FROM stations WHERE station_id IN (?, ?, ?)
     `).bind(...BLACKLISTED_STATIONS).run();
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         removed: BLACKLISTED_STATIONS,
         message: 'Blacklisted stations removed successfully'
       }),
@@ -2680,21 +2645,33 @@ async function handleCleanupBlacklistedStations(env, corsHeaders) {
 // ============================================================
 async function handleDashboardStats(env, corsHeaders) {
   try {
-    // Get midnight PKT (UTC+5) in UTC format
+    // Get midnight PKT (UTC+5) in UTC format - correctly handle timezone conversion
     const now = new Date();
-    const pktNow = new Date(now.getTime() + (5 * 60 * 60 * 1000)); // PKT is UTC+5
-    const midnightPKT = new Date(pktNow);
-    midnightPKT.setUTCHours(0, 0, 0, 0);
-    const midnightUTC = new Date(midnightPKT.getTime() - (5 * 60 * 60 * 1000)); // Convert back to UTC
+    const PKT_OFFSET = 5 * 60 * 60 * 1000; // 5 hours in milliseconds
+    
+    // Get current time in PKT
+    const pktNow = new Date(now.getTime() + PKT_OFFSET);
+    
+    // Get the date components in PKT (year, month, day)
+    const pktYear = pktNow.getUTCFullYear();
+    const pktMonth = pktNow.getUTCMonth();
+    const pktDay = pktNow.getUTCDate();
+    
+    // Create midnight at start of today in PKT timezone, then convert back to UTC
+    // Midnight PKT = Date.UTC(year, month, day, 0, 0, 0) - 5 hours
+    const midnightPKT_UTC = Date.UTC(pktYear, pktMonth, pktDay, 0, 0, 0);
+    const midnightUTC_ms = midnightPKT_UTC - PKT_OFFSET;
+    const midnightUTC = new Date(midnightUTC_ms);
+    
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
     const sixHoursBeforeMidnight = new Date(midnightUTC.getTime() - (6 * 60 * 60 * 1000)).toISOString().slice(0, 19).replace('T', ' ');
-    
+
     // Seasonal temperature validation for Pakistan
     const currentMonth = now.getMonth() + 1;
     const isSummer = currentMonth >= 4 && currentMonth <= 9;
     const MIN_VALID_TEMP = isSummer ? 5 : -15;
     const MAX_VALID_TEMP = isSummer ? 52 : 40;
-    
+
     // OPTIMIZED: Single query with stale detection + extremes using CTEs
     const extremesQuery = await env.DB.prepare(`
       WITH 
@@ -2769,13 +2746,13 @@ async function handleDashboardStats(env, corsHeaders) {
       UNION ALL SELECT * FROM max_rain_result
       UNION ALL SELECT * FROM max_wind_result
     `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
-    
+
     // Parse results
     let maxTemp = null, maxTempStation = null;
     let minTemp = null, minTempStation = null;
     let maxRainfall = '0.0', maxRainfallStation = 'No rainfall';
     let maxWind = '0.0', maxWindStation = 'No wind data';
-    
+
     for (const row of (extremesQuery.results || [])) {
       if (row.metric === 'max_temp' && row.value !== null) {
         maxTemp = parseFloat(row.value).toFixed(1);
@@ -2791,7 +2768,7 @@ async function handleDashboardStats(env, corsHeaders) {
         maxWindStation = row.display_name || 'Unknown';
       }
     }
-    
+
     // OPTIMIZED: Single query for uptime stats (combined count + uptime)
     const uptimeQuery = await env.DB.prepare(`
       SELECT 
@@ -2802,15 +2779,15 @@ async function handleDashboardStats(env, corsHeaders) {
       FROM status_logs 
       WHERE timestamp >= datetime('now', '-24 hours')
     `).bind(midnightStr).first();
-    
+
     const stationCount = uptimeQuery?.station_count || 0;
     const totalChecks = uptimeQuery?.total_checks || 0;
     const onlineChecks = uptimeQuery?.online_checks || 0;
     const recordCount = uptimeQuery?.records_since_midnight || 0;
-    
+
     const avgUptimePct = totalChecks > 0 ? (onlineChecks / totalChecks) * 100 : 0;
     const avgDowntimePct = 100 - avgUptimePct;
-    
+
     return new Response(JSON.stringify({
       success: true,
       daily_extremes: {
@@ -2835,9 +2812,9 @@ async function handleDashboardStats(env, corsHeaders) {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error in dashboard stats:', error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { 
-      status: 500, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 }
@@ -2849,7 +2826,7 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
   try {
     // Get time range from query params (default: 7d)
     const range = url.searchParams.get('range') || '7d';
-    
+
     // Determine SQL time offset and aggregation based on range
     let timeOffset, granularity, groupFormat;
     switch (range) {
@@ -2878,7 +2855,7 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
         granularity = 'hourly';
         groupFormat = '%Y-%m-%d %H:00:00';
     }
-    
+
     // Get aggregated uptime for all stations
     const trendQuery = await env.DB.prepare(`
       SELECT 
@@ -2890,7 +2867,7 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
       GROUP BY period
       ORDER BY period ASC
     `).all();
-    
+
     const rows = trendQuery.results || [];
     const trendData = rows.map(row => ({
       period: row.period,
@@ -2898,7 +2875,7 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
       total_checks: row.total_checks,
       online_checks: row.online_checks
     }));
-    
+
     // Calculate overall average uptime for the period
     let totalOnline = 0, totalChecks = 0;
     for (const row of rows) {
@@ -2906,7 +2883,7 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
       totalChecks += row.total_checks;
     }
     const overallUptime = totalChecks > 0 ? parseFloat(((totalOnline / totalChecks) * 100).toFixed(1)) : 0;
-    
+
     return new Response(JSON.stringify({
       success: true,
       range: range,
@@ -2918,9 +2895,9 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Error in uptime trend chart:', error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { 
-      status: 500, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 }

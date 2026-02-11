@@ -24,6 +24,11 @@ binding = "DB"
 database_name = "weatherlink-monitor-staging"
 database_id = "c86a9395-05a8-4dee-9d6e-acf000bd11ea"
 
+# Static Assets (Serve dashboard from Worker)
+[assets]
+directory = "dashboard-react/dist"
+binding = "ASSETS"
+
 # Cron Triggers - DISABLED for staging (manual testing only)
 [triggers]
 crons = []
@@ -47,9 +52,8 @@ database_name = "weatherlink-monitor"
 database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"
 
 [env.production.triggers]
-# Cloudflare cron as FALLBACK - runs 7 min after cron-job.org
-# cron-job.org: :00, :15, :30, :45 (times out at 30s)
-# Cloudflare:   :07, :22, :37, :52 (no timeout, catches missed updates)
+# Cloudflare cron - runs every 15 min (4x/hour)
+# D1 batching keeps writes well within free tier limits
 crons = ["7,22,37,52 * * * *"]
 
 [env.production.vars]
@@ -67,10 +71,16 @@ ENVIRONMENT = "production"
 # pattern = "monitor.yourdomain.com/*"
 # zone_name = "yourdomain.com"
 
+# Static Assets (Serve dashboard from Worker)
+[env.production.assets]
+directory = "dashboard-react/dist"
+binding = "ASSETS"
+
 # Build Configuration
 [build]
-command = ""
+command = "cd dashboard-react && npm run build"
 
 # Limits (Free Tier)
-[limits]
-cpu_ms = 10
+# Note: cpu_ms removed; free tier allows 10ms CPU time per invocation by default.
+# The explicit limit was causing failures on heavy sync operations.
+# Cloudflare enforces the free tier limit automatically.
