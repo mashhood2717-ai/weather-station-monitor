@@ -2687,28 +2687,20 @@ async function handleDashboardStats(env, corsHeaders) {
           AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
           AND COUNT(*) >= 4
       ),
-      -- Detect stale rainfall sensors: high reading at midnight boundary with zeros after
+      -- Detect stale rainfall sensors: high reading at midnight with all zeros after
       stale_rain_stations AS (
-        SELECT DISTINCT station_id
+        SELECT station_id
         FROM (
-          -- Find stations with >10mm in first minute after midnight
-          SELECT station_id, rainfall
-          FROM status_logs
-          WHERE timestamp >= ? AND timestamp <= datetime(?, '+1 minute')
-            AND rainfall > 10
-        ) boundary_high
-        WHERE station_id IN (
-          -- That have all zeros in next readings
-          SELECT station_id FROM status_logs
-          WHERE timestamp > datetime(?, '+1 minute') AND rainfall = 0
-          GROUP BY station_id
-          HAVING COUNT(*) >= 2
+          SELECT 
+            sl1.station_id,
+            MAX(CASE WHEN sl1.timestamp >= ? AND sl1.timestamp <= datetime(?, '+1 minute') 
+                     AND sl1.rainfall > 10 THEN sl1.rainfall ELSE NULL END) as boundary_reading,
+            COUNT(CASE WHEN sl1.timestamp > datetime(?, '+1 minute') AND sl1.rainfall = 0 THEN 1 END) as zero_count,
+            COUNT(CASE WHEN sl1.timestamp < ? AND sl1.rainfall > 10 THEN 1 END) as pre_midnight_high
+          FROM status_logs sl1
+          GROUP BY sl1.station_id
         )
-        AND station_id IN (
-          -- And same high value existed before midnight
-          SELECT station_id FROM status_logs
-          WHERE timestamp < ? AND rainfall = boundary_high.rainfall
-        )
+        WHERE boundary_reading > 10 AND zero_count >= 2 AND pre_midnight_high > 0
       ),
       -- Today's valid data excluding stale sensors
       today_data AS (
