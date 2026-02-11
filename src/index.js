@@ -2691,20 +2691,30 @@ async function handleDashboardStats(env, corsHeaders) {
       midnight_pkt_utc AS (
         SELECT ? as midnight_time
       ),
-      -- Detect stale rainfall: reading at midnight >= any reading in last 15 min before midnight (sensor didn't reset)
+      -- Detect stale rainfall: reading at midnight = reading before midnight AND no change after (frozen sensor)
       stale_rain_stations AS (
         SELECT DISTINCT sl1.station_id
         FROM status_logs sl1, midnight_pkt_utc
         WHERE sl1.timestamp >= midnight_pkt_utc.midnight_time 
           AND sl1.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+1 minute')
           AND sl1.rainfall IS NOT NULL
+          AND sl1.rainfall > 2
           AND EXISTS (
+            -- Same value before midnight
             SELECT 1 FROM status_logs sl2
             WHERE sl2.station_id = sl1.station_id
               AND sl2.timestamp >= datetime(midnight_pkt_utc.midnight_time, '-15 minutes')
               AND sl2.timestamp < midnight_pkt_utc.midnight_time
-              AND sl2.rainfall IS NOT NULL
-              AND sl1.rainfall >= sl2.rainfall
+              AND sl2.rainfall = sl1.rainfall
+          )
+          AND EXISTS (
+            -- All zeros or same value after midnight (no new rainfall)
+            SELECT 1 FROM status_logs sl3
+            WHERE sl3.station_id = sl1.station_id
+              AND sl3.timestamp > datetime(midnight_pkt_utc.midnight_time, '+1 minute')
+              AND sl3.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 hours')
+            GROUP BY sl3.station_id
+            HAVING MAX(sl3.rainfall) <= COALESCE(MAX(CASE WHEN sl3.rainfall = 0 THEN 0 ELSE sl1.rainfall END), sl1.rainfall)
           )
       ),
       -- Today's valid data excluding stale sensors
