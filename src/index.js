@@ -2708,15 +2708,29 @@ async function handleDashboardStats(env, corsHeaders) {
           )
           AND EXISTS (
             -- All zeros after midnight (sensor reporting 0, not missing data)
-            SELECT 1 FROM status_logs sl3
-            WHERE sl3.station_id = sl1.station_id
-              AND sl3.timestamp > datetime(midnight_pkt_utc.midnight_time, '+1 minute')
-              AND sl3.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 hours')
-              AND sl3.rainfall IS NOT NULL
-            HAVING MAX(sl3.rainfall) = 0 AND COUNT(*) >= 3
+            SELECT 1 FROM (
+              SELECT MAX(sl3.rainfall) as max_rain, COUNT(*) as cnt
+              FROM status_logs sl3
+              WHERE sl3.station_id = sl1.station_id
+                AND sl3.timestamp > datetime(midnight_pkt_utc.midnight_time, '+1 minute')
+                AND sl3.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 hours')
+                AND sl3.rainfall IS NOT NULL
+            )
+            WHERE max_rain = 0 AND cnt >= 3
           )
       ),
-      -- Today's valid data excluding stale sensors
+      -- Get currently online stations (most recent status within 2 hours)
+      currently_online_stations AS (
+        SELECT DISTINCT station_id
+        FROM (
+          SELECT station_id, is_online, 
+                 ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) as rn
+          FROM status_logs
+          WHERE timestamp >= datetime('now', '-2 hours')
+        )
+        WHERE rn = 1 AND is_online = 1
+      ),
+      -- Today's valid data excluding stale sensors and offline stations
       today_data AS (
         SELECT 
           sl.station_id,
@@ -2729,6 +2743,7 @@ async function handleDashboardStats(env, corsHeaders) {
         LEFT JOIN stations s ON sl.station_id = s.station_id
         WHERE sl.timestamp >= ?
           AND sl.is_online = 1
+          AND sl.station_id IN (SELECT station_id FROM currently_online_stations)
       ),
       -- Max temp (excluding stale)
       max_temp_result AS (
