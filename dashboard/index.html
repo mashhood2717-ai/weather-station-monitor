@@ -2331,6 +2331,12 @@
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
             updateMapTiles(); // Update map tiles for new theme
+            // Redraw bar chart so percentage label color updates
+            if (typeof categoryUptimeChart !== 'undefined' && categoryUptimeChart) {
+                if (chartGroupMode === 'source') initSourceUptimeChart();
+                else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                else initCategoryUptimeChart();
+            }
         }
         
         function updateThemeIcon(theme) {
@@ -2567,6 +2573,42 @@
         let categoryUptimeChart = null;
         let categoryChartType = 'bar';
         let chartGroupMode = 'category'; // 'category', 'source', or 'province'
+
+        function getChartLabelColor() {
+            const color = getComputedStyle(document.documentElement).getPropertyValue('--text-primary');
+            return color ? color.trim() : '#f1f5f9';
+        }
+
+        const barValueLabelPlugin = {
+            id: 'barValueLabels',
+            afterDatasetsDraw(chart, args, pluginOptions) {
+                const meta = chart.getDatasetMeta(0);
+                if (!meta || meta.hidden || meta.type !== 'bar') return;
+
+                const { ctx } = chart;
+                // Read color at draw time so it reflects current theme
+                const color = (pluginOptions && pluginOptions.color) ? pluginOptions.color : getChartLabelColor();
+                const fontSize = (pluginOptions && pluginOptions.fontSize) ? pluginOptions.fontSize : 12;
+                const fontWeight = (pluginOptions && pluginOptions.fontWeight) ? pluginOptions.fontWeight : 700;
+
+                ctx.save();
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`;
+
+                meta.data.forEach((bar, index) => {
+                    const value = chart.data.datasets[0].data[index];
+                    if (value === null || value === undefined || isNaN(value)) return;
+
+                    const label = `${Number(value).toFixed(1)}%`;
+                    // Always place label above the bar top
+                    ctx.fillText(label, bar.x, bar.y - 6);
+                });
+
+                ctx.restore();
+            }
+        };
         
         function initCategoryUptimeChart() {
             const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
@@ -2633,16 +2675,18 @@
                         labels: categoryNames,
                         datasets: [{
                             ...commonDataset,
-                            backgroundColor: categoryColors.map(c => c + '80'),
+                            backgroundColor: categoryColors,
                             borderColor: categoryColors,
                             borderWidth: 2,
                             borderRadius: 6,
                             minBarLength: 2
                         }]
                     },
+                    plugins: [barValueLabelPlugin],
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        layout: { padding: { top: 22 } },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -2776,16 +2820,18 @@
                         labels: sourceNames,
                         datasets: [{
                             ...commonDataset,
-                            backgroundColor: sourceColors.map(c => c + '80'),
+                            backgroundColor: sourceColors,
                             borderColor: sourceColors,
                             borderWidth: 2,
                             borderRadius: 6,
                             minBarLength: 2
                         }]
                     },
+                    plugins: [barValueLabelPlugin],
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        layout: { padding: { top: 22 } },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -2928,16 +2974,18 @@
                         labels: provinceNames,
                         datasets: [{
                             ...commonDataset,
-                            backgroundColor: provinceColors.map(c => c + '80'),
+                            backgroundColor: provinceColors,
                             borderColor: provinceColors,
                             borderWidth: 2,
                             borderRadius: 6,
                             minBarLength: 2
                         }]
                     },
+                    plugins: [barValueLabelPlugin],
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        layout: { padding: { top: 22 } },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
@@ -3137,21 +3185,8 @@
             markerClusterGroup.clearLayers();
             markers = [];
             
-            let stations = [...allStations];
-            
-            // Filter by category
-            if (currentCategory !== 'all') {
-                stations = stations.filter(s => s.category === currentCategory);
-            }
-            
-            // Filter by network (WW, WU)
-            if (currentNetworkFilter !== 'all') {
-                if (currentNetworkFilter === 'ww') {
-                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
-                } else if (currentNetworkFilter === 'wu') {
-                    stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
-                }
-            }
+            // Use the shared filter function so map matches table exactly
+            let stations = getFilteredStations();
             
             stations.forEach(station => {
                 // Use latitude/longitude fields
@@ -3649,8 +3684,8 @@
             }
         }
         
-        // Render table
-        function renderTable() {
+        // Get filtered stations based on current filters (shared by table, PDF, CSV)
+        function getFilteredStations() {
             let stations = [...allStations];
             
             // Filter by category
@@ -3692,6 +3727,25 @@
                     (s.category && s.category.toLowerCase().includes(searchTerm))
                 );
             }
+            
+            return stations;
+        }
+        
+        // Get a human-readable description of active filters
+        function getActiveFiltersDescription() {
+            const filters = [];
+            if (currentCategory !== 'all') filters.push(`Category: ${currentCategory}`);
+            if (currentFilter !== 'all') filters.push(`Status: ${currentFilter}`);
+            if (currentSourceFilter !== 'all') filters.push(`Source: ${currentSourceFilter}`);
+            if (currentNetworkFilter !== 'all') filters.push(`Network: ${currentNetworkFilter.toUpperCase()}`);
+            const searchTerm = document.getElementById('searchBox').value;
+            if (searchTerm) filters.push(`Search: "${searchTerm}"`);
+            return filters.length > 0 ? filters.join(' | ') : 'None (showing all stations)';
+        }
+
+        // Render table
+        function renderTable() {
+            let stations = getFilteredStations();
             
             // Sort
             stations.sort((a, b) => {
@@ -4283,6 +4337,7 @@
         function filterByStatus(status) {
             currentFilter = status;
             renderTable();
+            updateMapMarkers();
         }
         
         // Handle uptime period dropdown
@@ -4305,11 +4360,12 @@
             }
         }
         
-        // Export stations to CSV
+        // Export stations to CSV - respects active filters
         function exportToCSV() {
+            const stations = getFilteredStations();
             const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Availability (%)', 'Location', 'Latitude', 'Longitude', 'Last Update'];
             
-            const rows = allStations.map(s => [
+            const rows = stations.map(s => [
                 s.station_id,
                 s.station_name || '',
                 s.api_source || '',
@@ -4346,18 +4402,23 @@
             showNotification('CSV exported successfully!', 'success');
         }
         
-        // Export report to PDF (generates printable HTML)
+        // Export report to PDF (generates printable HTML) - respects active filters
         function exportToPDF() {
-            const online = allStations.filter(s => s.status === 'Active').length;
-            const offline = allStations.filter(s => s.status !== 'Active').length;
-            const total = allStations.length;
+            const stations = getFilteredStations();
+            const online = stations.filter(s => s.status === 'Active').length;
+            const offline = stations.filter(s => s.status !== 'Active').length;
+            const total = stations.length;
             const upPct = total > 0 ? ((online / total) * 100).toFixed(1) : 0;
             
-            const temps = allStations
+            const temps = stations
                 .filter(s => s.status === 'Active' && s.temperature !== null)
                 .map(s => parseFloat(s.temperature))
                 .filter(t => !isNaN(t));
             const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : 'N/A';
+            
+            const activeFilters = getActiveFiltersDescription();
+            const rangeLabels = { '24h': '24 Hours', 'daily': 'Today', '7d': '7 Days', '30d': '30 Days', '1y': '1 Year', 'custom': 'Custom' };
+            const currentPeriodLabel = rangeLabels[currentTimeRange] || currentTimeRange;
             
             const now = new Date();
             const reportDate = now.toLocaleString('en-US', {
@@ -4397,6 +4458,8 @@
                 <body>
                     <h1>🌤️ Weather Station Monitoring Report</h1>
                     <p><strong>Generated:</strong> ${reportDate} PKT</p>
+                    <p><strong>Uptime Period:</strong> ${currentPeriodLabel}</p>
+                    <p><strong>Filters Applied:</strong> ${activeFilters}</p>
                     
                     <div class="summary">
                         <div class="stat-box online">
@@ -4431,7 +4494,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${allStations.map(s => `
+                            ${stations.map(s => `
                                 <tr>
                                     <td>${s.station_name || 'Unknown'}</td>
                                     <td>${s.api_source || 'N/A'}</td>
@@ -4447,7 +4510,7 @@
                     
                     <div class="footer">
                         <p>© Weatherwalay - Weather Station Monitoring System</p>
-                        <p>Report generated automatically. Total stations: ${total}</p>
+                        <p>Report generated automatically. Total stations: ${total} (of ${allStations.length} total)</p>
                     </div>
                 </body>
                 </html>
@@ -4519,8 +4582,6 @@
         // Load uptime data from Worker API
         async function loadUptimePercentages() {
             try {
-                console.log('📊 Loading real-time station status from Worker...');
-                
                 // POST with empty body to get ALL stations - no need to send IDs
                 const response = await fetch(`${WORKER_API}/api/uptime-percentages`, {
                     method: 'POST',
@@ -4532,7 +4593,6 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log(`✅ Received ${data.total} stations from API`);
                     
                     if (data.uptime_data && Array.isArray(data.uptime_data)) {
                         // Create a map of station_id -> full station data
@@ -4575,7 +4635,6 @@
                             }
                         });
                         
-                        console.log(`✅ Updated ${matched} stations with real-time status`);
                         renderTable();
                         updateMapMarkers();
                         
@@ -4598,10 +4657,10 @@
                         }
                     }
                 } else {
-                    console.error('❌ Failed to load uptime percentages:', response.statusText);
+                    console.warn('Failed to load uptime percentages:', response.statusText);
                 }
             } catch (error) {
-                console.error('❌ Error loading uptime percentages:', error);
+                console.warn('Error loading uptime percentages:', error);
             }
         }
 
@@ -4797,6 +4856,16 @@
                 // Load uptime percentages from Worker
                 await loadUptimePercentages();
 
+                // If user has selected a time range other than 24h, re-fetch that range
+                // so the auto-refresh doesn't reset their selected period
+                if (currentTimeRange && currentTimeRange !== '24h') {
+                    await loadUptimeData(currentTimeRange);
+                }
+
+                // Restore the uptimePeriod dropdown to the user's selection
+                const uptimePeriodEl = document.getElementById('uptimePeriod');
+                if (uptimePeriodEl) uptimePeriodEl.value = currentTimeRange;
+
                 // Rebuild chart after realtime uptimes applied based on saved mode
                 try {
                     if (chartGroupMode === 'source') initSourceUptimeChart();
@@ -4814,7 +4883,10 @@
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
             
             // Search
-            document.getElementById('searchBox').addEventListener('input', renderTable);
+            document.getElementById('searchBox').addEventListener('input', () => {
+                renderTable();
+                updateMapMarkers();
+            });
             
             // Source filter dropdown
             document.getElementById('sourceFilter')?.addEventListener('change', (e) => {
@@ -4833,6 +4905,7 @@
                     btn.classList.add('active');
                     currentFilter = btn.dataset.filter;
                     renderTable();
+                    updateMapMarkers();
                 });
             });
             
