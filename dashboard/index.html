@@ -1,30 +1,33 @@
 <!DOCTYPE html>
 <!-- v2.6 - Moved Last Sync to header, fixed mobile responsiveness -->
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weatherwalay Stations Monitoring Dashboard</title>
-    
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap"
+        rel="stylesheet">
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-    
+
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
+
     <style>
         /* Loading overlay and progress */
         #loadingOverlay {
             position: fixed;
             inset: 0;
-            background: rgba(2,6,23,0.6);
+            background: rgba(2, 6, 23, 0.6);
             display: none;
             align-items: center;
             justify-content: center;
@@ -32,30 +35,47 @@
             color: #e2e8f0;
             font-family: inherit;
         }
+
         #loadingBox {
             width: 320px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             padding: 18px;
             border-radius: 8px;
             text-align: center;
         }
-        #loadingTitle { font-weight: 600; margin-bottom: 8px; }
-        #loadingMessage { font-size: 13px; color: #cbd5e1; margin-bottom: 12px; }
+
+        #loadingTitle {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        #loadingMessage {
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+        }
+
         #loadingProgress {
             height: 10px;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.08);
             border-radius: 6px;
             overflow: hidden;
         }
+
         #loadingProgressBar {
             height: 100%;
             width: 0%;
             background: linear-gradient(90deg, #06b6d4, #3b82f6);
             transition: width 300ms ease;
         }
-        #loadingPercent { margin-top: 8px; font-size: 12px; color: #cbd5e1; }
-        
+
+        #loadingPercent {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+
         :root {
             --primary: #0ea5e9;
             --primary-dark: #0284c7;
@@ -69,7 +89,7 @@
             --text-secondary: #94a3b8;
             --border: #334155;
         }
-        
+
         /* Light theme - Professional modern look */
         [data-theme="light"] {
             --primary: #0284c7;
@@ -81,7 +101,7 @@
             --text-secondary: #64748b;
             --border: #cbd5e1;
         }
-        
+
         /* Light theme specific adjustments */
         [data-theme="light"] .stat-card,
         [data-theme="light"] .chart-card,
@@ -93,62 +113,86 @@
             border: 1px solid var(--border);
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        
+
         [data-theme="light"] .ring-background {
             stroke: #e2e8f0;
         }
-        
+
         [data-theme="light"] th {
             background: #f1f5f9;
             color: var(--text-secondary);
         }
-        
+
         [data-theme="light"] tr:hover {
             background: #f8fafc;
         }
-        
+
         [data-theme="light"] .search-box,
         [data-theme="light"] .filter-btn,
         [data-theme="light"] .source-filter {
             background: white;
             border-color: var(--border);
         }
-        
+
         [data-theme="light"] .leaflet-popup-content-wrapper {
             background: rgba(255, 255, 255, 0.98) !important;
             border: 1px solid var(--border) !important;
         }
-        
+
         [data-theme="light"] .leaflet-popup-tip {
             background: rgba(255, 255, 255, 0.98) !important;
         }
-        
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        
+
         @keyframes slideIn {
-            from { transform: translateX(-100%); }
-            to { transform: translateX(0); }
+            from {
+                transform: translateX(-100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
         }
-        
+
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
-        
+
         @keyframes countUp {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
-        
+
         /* Notification Toast */
         .notification-toast {
             position: fixed;
@@ -167,38 +211,40 @@
             transform: translateX(120%);
             transition: transform 0.3s ease;
         }
-        
+
         .notification-toast.show {
             transform: translateX(0);
         }
-        
+
         .notification-toast.success {
             border-color: var(--success);
             color: var(--success);
         }
-        
+
         .notification-toast.error {
             border-color: var(--danger);
             color: var(--danger);
         }
-        
+
         @keyframes ripple {
             0% {
                 box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7),
-                           0 0 0 10px rgba(239, 68, 68, 0.7),
-                           0 0 0 20px rgba(239, 68, 68, 0.7);
+                    0 0 0 10px rgba(239, 68, 68, 0.7),
+                    0 0 0 20px rgba(239, 68, 68, 0.7);
             }
+
             100% {
                 box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.7),
-                           0 0 0 20px rgba(239, 68, 68, 0.7),
-                           0 0 0 30px rgba(239, 68, 68, 0);
+                    0 0 0 20px rgba(239, 68, 68, 0.7),
+                    0 0 0 30px rgba(239, 68, 68, 0);
             }
         }
-        
-        body, body * {
+
+        body,
+        body * {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
         }
-        
+
         body {
             background: var(--bg-dark);
             min-height: 100vh;
@@ -208,7 +254,7 @@
             overflow-x: hidden;
             transition: background 0.3s ease, color 0.3s ease;
         }
-        
+
         body::before {
             content: '';
             position: fixed;
@@ -216,32 +262,32 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: 
+            background:
                 radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.1) 0%, transparent 50%),
                 radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
             pointer-events: none;
             z-index: 0;
             transition: opacity 0.3s ease;
         }
-        
+
         [data-theme="light"] body {
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
         }
-        
+
         [data-theme="light"] body::before {
             opacity: 0.5;
-            background: 
+            background:
                 radial-gradient(circle at 20% 50%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
                 radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
         }
-        
+
         .container {
             max-width: 1600px;
             margin: 0 auto;
             position: relative;
             z-index: 1;
         }
-        
+
         /* Header */
         header {
             background: rgba(30, 41, 59, 0.8);
@@ -256,29 +302,29 @@
             animation: fadeIn 0.6s ease;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
-        
+
         .header-logo {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        
+
         .header-logo .logo-light {
             display: none;
         }
-        
+
         .header-logo .logo-dark {
             display: block;
         }
-        
+
         [data-theme="light"] .header-logo .logo-light {
             display: block;
         }
-        
+
         [data-theme="light"] .header-logo .logo-dark {
             display: none;
         }
-        
+
         .header-logo .system-name {
             font-family: 'Orbitron', monospace;
             font-size: 16px;
@@ -289,23 +335,24 @@
             border-left: 2px solid rgba(255, 255, 255, 0.3);
             padding-left: 12px;
         }
-        
+
         /* Hide system name on mobile */
         @media (max-width: 768px) {
             .header-logo .system-name {
                 display: none;
             }
+
             .header-logo svg {
                 width: 180px;
                 height: auto;
             }
         }
-        
+
         [data-theme="light"] .header-logo .system-name {
             color: #011B60;
             border-left-color: rgba(1, 27, 96, 0.3);
         }
-        
+
         .header-sync {
             display: flex;
             flex-direction: column;
@@ -313,27 +360,27 @@
             font-size: 12px;
             color: var(--text-secondary);
         }
-        
+
         .header-sync .sync-label {
             font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-secondary);
         }
-        
+
         .header-sync .sync-time {
             font-family: 'Orbitron', monospace;
             font-size: 14px;
             font-weight: 600;
             color: var(--primary);
         }
-        
+
         @media (max-width: 480px) {
             .header-sync {
                 display: none;
             }
         }
-        
+
         h1 {
             font-family: 'Orbitron', monospace;
             font-size: 32px;
@@ -344,13 +391,13 @@
             background-clip: text;
             letter-spacing: -1px;
         }
-        
+
         .header-right {
             display: flex;
             align-items: center;
             gap: 20px;
         }
-        
+
         .theme-toggle {
             background: rgba(14, 165, 233, 0.1);
             border: 1px solid var(--primary);
@@ -363,17 +410,17 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .theme-toggle:hover {
             background: var(--primary);
             transform: scale(1.1);
         }
-        
+
         .theme-icon {
             font-size: 20px;
             transition: transform 0.3s ease;
         }
-        
+
         .theme-toggle:hover .theme-icon {
             transform: rotate(20deg);
         }
@@ -388,12 +435,12 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .logout-btn:hover {
             background: var(--danger);
             color: white;
         }
-        
+
         .live-indicator {
             display: flex;
             align-items: center;
@@ -403,7 +450,7 @@
             border: 1px solid var(--success);
             border-radius: 20px;
         }
-        
+
         .live-dot {
             width: 8px;
             height: 8px;
@@ -411,7 +458,7 @@
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
-        
+
         .live-text {
             font-family: 'Orbitron', monospace;
             font-size: 13px;
@@ -420,13 +467,13 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        
+
         .last-update {
             color: var(--text-secondary);
             font-size: 14px;
             font-weight: 300;
         }
-        
+
         /* Stats Grid - Compact 9 tiles in one row */
         .stats-grid {
             display: grid;
@@ -435,7 +482,7 @@
             margin-bottom: 20px;
             animation: fadeIn 0.8s ease 0.2s backwards;
         }
-        
+
         .stat-card {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(20px);
@@ -447,7 +494,7 @@
             overflow: hidden;
             min-width: 0;
         }
-        
+
         .stat-card::before {
             content: '';
             position: absolute;
@@ -460,17 +507,17 @@
             transform-origin: left;
             transition: transform 0.5s ease;
         }
-        
+
         .stat-card:hover::before {
             transform: scaleX(1);
         }
-        
+
         .stat-card:hover {
             transform: translateY(-2px);
             border-color: var(--primary);
             box-shadow: 0 8px 25px rgba(14, 165, 233, 0.2);
         }
-        
+
         .stat-label {
             font-size: 10px;
             color: var(--text-secondary);
@@ -482,55 +529,55 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        
+
         .stat-value {
             font-family: 'Orbitron', monospace;
             font-size: 20px;
             font-weight: 900;
             color: var(--text-primary);
         }
-        
+
         .stat-card.online .stat-value {
             color: var(--success);
         }
-        
+
         .stat-card.offline .stat-value {
             color: var(--danger);
             animation: pulse 2s infinite;
         }
-        
+
         /* New stat card styles */
         .stat-trend {
             font-size: 9px;
             margin-top: 4px;
             font-weight: 600;
         }
-        
+
         .stat-trend.up {
             color: var(--success);
         }
-        
+
         .stat-trend.down {
             color: var(--danger);
         }
-        
+
         .stat-trend.neutral {
             color: var(--text-secondary);
         }
-        
+
         .stat-card.temp .stat-value {
             color: #f59e0b;
         }
-        
+
         .stat-card.rain .stat-value {
             color: #3b82f6;
         }
-        
+
         .stat-card.sync .stat-value {
             color: #8b5cf6;
             font-size: 1.1rem;
         }
-        
+
         .stat-station {
             font-size: 9px;
             color: var(--text-secondary);
@@ -540,7 +587,7 @@
             text-overflow: ellipsis;
             max-width: 100%;
         }
-        
+
         /* Charts Container */
         .charts-container {
             display: grid;
@@ -549,7 +596,7 @@
             margin-bottom: 25px;
             animation: fadeIn 1s ease 0.4s backwards;
         }
-        
+
         .chart-card {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(20px);
@@ -557,7 +604,7 @@
             border-radius: 16px;
             border: 1px solid var(--border);
         }
-        
+
         .chart-title {
             font-family: 'Orbitron', monospace;
             font-size: 16px;
@@ -568,11 +615,11 @@
             align-items: center;
             gap: 10px;
         }
-        
+
         .chart-icon {
             font-size: 20px;
         }
-        
+
         /* Ring Chart */
         .ring-chart-wrapper {
             display: flex;
@@ -580,24 +627,24 @@
             align-items: center;
             gap: 20px;
         }
-        
+
         .ring-chart {
             position: relative;
             width: 250px;
             height: 250px;
         }
-        
+
         .ring-svg {
             transform: rotate(-90deg);
             filter: drop-shadow(0 0 20px rgba(14, 165, 233, 0.3));
         }
-        
+
         .ring-background {
             fill: none;
             stroke: rgba(51, 65, 85, 0.5);
             stroke-width: 25;
         }
-        
+
         .ring-online {
             fill: none;
             stroke: var(--success);
@@ -605,7 +652,7 @@
             stroke-linecap: round;
             transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
+
         .ring-offline {
             fill: none;
             stroke: var(--danger);
@@ -613,7 +660,7 @@
             stroke-linecap: round;
             transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
+
         .ring-disabled {
             fill: none;
             stroke: #6b7280;
@@ -621,7 +668,7 @@
             stroke-linecap: round;
             transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
+
         .ring-center {
             position: absolute;
             top: 50%;
@@ -629,7 +676,7 @@
             transform: translate(-50%, -50%);
             text-align: center;
         }
-        
+
         .ring-total {
             font-family: 'Orbitron', monospace;
             font-size: 48px;
@@ -639,7 +686,7 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .ring-label {
             font-size: 14px;
             color: var(--text-secondary);
@@ -647,56 +694,56 @@
             letter-spacing: 1px;
             margin-top: 5px;
         }
-        
+
         .ring-legend {
             display: flex;
             gap: 30px;
         }
-        
+
         .legend-item {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        
+
         .legend-dot {
             width: 12px;
             height: 12px;
             border-radius: 50%;
         }
-        
+
         .legend-dot.online {
             background: var(--success);
             box-shadow: 0 0 10px var(--success);
         }
-        
+
         .legend-dot.offline {
             background: var(--danger);
             box-shadow: 0 0 10px var(--danger);
         }
-        
+
         .legend-dot.disabled {
             background: #6b7280;
             box-shadow: 0 0 10px #6b7280;
         }
-        
+
         .legend-label {
             font-size: 14px;
             color: var(--text-secondary);
         }
-        
+
         .legend-count {
             font-family: 'Orbitron', monospace;
             font-weight: 700;
             color: var(--text-primary);
             margin-left: 5px;
         }
-        
+
         /* Uptime Chart */
         #uptimeChart {
             height: 250px !important;
         }
-        
+
         /* Map Container */
         .map-container {
             background: rgba(30, 41, 59, 0.8);
@@ -707,24 +754,24 @@
             margin-bottom: 25px;
             animation: fadeIn 1.2s ease 0.6s backwards;
         }
-        
+
         .map-header {
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .map-title {
             font-family: 'Orbitron', monospace;
             font-size: 18px;
             font-weight: 700;
             color: var(--text-primary);
         }
-        
+
         #map {
             height: 500px;
             width: 100%;
         }
-        
+
         /* Station List */
         .station-list-wrapper {
             display: grid;
@@ -732,7 +779,7 @@
             gap: 20px;
             animation: fadeIn 1.4s ease 0.8s backwards;
         }
-        
+
         .station-list {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(20px);
@@ -740,7 +787,7 @@
             border: 1px solid var(--border);
             overflow: hidden;
         }
-        
+
         .list-header {
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
@@ -749,19 +796,19 @@
             align-items: center;
             gap: 12px;
         }
-        
+
         .list-title {
             font-family: 'Orbitron', monospace;
             font-size: 18px;
             font-weight: 700;
             color: var(--text-primary);
         }
-        
+
         .controls {
             display: flex;
             gap: 10px;
         }
-        
+
         .search-box {
             padding: 10px 16px;
             background: rgba(15, 23, 42, 0.5);
@@ -772,13 +819,13 @@
             width: 250px;
             transition: all 0.3s ease;
         }
-        
+
         .search-box:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
-        
+
         .source-filter {
             padding: 10px 16px;
             background: rgba(15, 23, 42, 0.5);
@@ -789,18 +836,18 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .source-filter:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
-        
+
         .source-filter option {
             background: var(--bg-card);
             color: var(--text-primary);
         }
-        
+
         .filter-btn {
             padding: 10px 16px;
             background: rgba(15, 23, 42, 0.5);
@@ -812,20 +859,20 @@
             transition: all 0.3s ease;
             font-weight: 600;
         }
-        
+
         .filter-btn:hover,
         .filter-btn.active {
             background: var(--primary);
             color: white;
             border-color: var(--primary);
         }
-        
+
         .export-buttons {
             display: flex;
             gap: 8px;
             margin-left: 12px;
         }
-        
+
         .export-btn {
             padding: 8px 14px;
             border-radius: 6px;
@@ -837,33 +884,33 @@
             font-weight: 600;
             transition: all 0.2s;
         }
-        
+
         .export-btn:hover {
             background: var(--success);
             color: white;
             transform: translateY(-1px);
         }
-        
+
         .export-btn.excel {
             background: rgba(16, 185, 129, 0.25);
             border-color: #10b981;
             color: #10b981;
         }
-        
+
         .export-btn.excel:hover {
             background: #10b981;
             color: white;
         }
-        
+
         .table-container {
             overflow-x: auto;
         }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
-        
+
         th {
             text-align: left;
             padding: 16px 25px;
@@ -877,33 +924,33 @@
             user-select: none;
             transition: all 0.3s ease;
         }
-        
+
         th:hover {
             background: rgba(14, 165, 233, 0.1);
             color: var(--primary);
         }
-        
+
         td {
             padding: 16px 25px;
             border-top: 1px solid var(--border);
             color: var(--text-primary);
             font-size: 14px;
         }
-        
+
         tr {
             transition: all 0.3s ease;
             cursor: pointer;
         }
-        
+
         tr:hover {
             background: rgba(14, 165, 233, 0.05);
         }
-        
+
         tr.selected {
             background: rgba(14, 165, 233, 0.1);
             border-left: 3px solid var(--primary);
         }
-        
+
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -915,70 +962,70 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+
         .status-badge.online {
             background: rgba(16, 185, 129, 0.1);
             color: var(--success);
             border: 1px solid var(--success);
         }
-        
+
         .status-badge.offline {
             background: rgba(239, 68, 68, 0.1);
             color: var(--danger);
             border: 1px solid var(--danger);
             animation: pulse 2s infinite;
         }
-        
+
         .status-badge.active {
             background: rgba(16, 185, 129, 0.1);
             color: var(--success);
             border: 1px solid var(--success);
         }
-        
+
         .status-badge.inactive {
             background: rgba(245, 158, 11, 0.1);
             color: var(--warning);
             border: 1px solid var(--warning);
             animation: pulse 2s infinite;
         }
-        
+
         .status-badge.disabled {
             background: rgba(156, 163, 175, 0.1);
             color: #9ca3af;
             border: 1px solid #9ca3af;
         }
-        
+
         .status-dot {
             width: 6px;
             height: 6px;
             border-radius: 50%;
         }
-        
+
         .status-dot.online {
             background: var(--success);
             box-shadow: 0 0 6px var(--success);
         }
-        
+
         .status-dot.offline {
             background: var(--danger);
             box-shadow: 0 0 6px var(--danger);
         }
-        
+
         .status-dot.active {
             background: var(--success);
             box-shadow: 0 0 6px var(--success);
         }
-        
+
         .status-dot.inactive {
             background: var(--warning);
             box-shadow: 0 0 6px var(--warning);
         }
-        
+
         .status-dot.disabled {
             background: #9ca3af;
             box-shadow: 0 0 6px #9ca3af;
         }
-        
+
         /* Category Dropdown */
         .category-dropdown {
             padding: 10px 16px;
@@ -991,13 +1038,13 @@
             transition: all 0.3s ease;
             min-width: 180px;
         }
-        
+
         .category-dropdown:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
-        
+
         /* Time Range Toggle */
         .time-range-toggle {
             display: flex;
@@ -1007,7 +1054,7 @@
             border-radius: 8px;
             padding: 4px;
         }
-        
+
         .time-range-btn {
             padding: 6px 12px;
             border: none;
@@ -1019,17 +1066,17 @@
             font-weight: 500;
             transition: all 0.2s;
         }
-        
+
         .time-range-btn:hover {
             background: rgba(14, 165, 233, 0.1);
             color: var(--text-primary);
         }
-        
+
         .time-range-btn.active {
             background: var(--primary);
             color: white;
         }
-        
+
         .date-input {
             padding: 6px 10px;
             background: rgba(15, 23, 42, 0.5);
@@ -1039,12 +1086,12 @@
             font-size: 12px;
             cursor: pointer;
         }
-        
+
         .date-input:focus {
             outline: none;
             border-color: var(--primary);
         }
-        
+
         .apply-btn {
             padding: 6px 14px;
             background: var(--success);
@@ -1056,11 +1103,11 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .apply-btn:hover {
             background: #059669;
         }
-        
+
         .list-filters {
             display: flex;
             align-items: center;
@@ -1070,7 +1117,7 @@
             border-bottom: 1px solid var(--border);
             flex-wrap: wrap;
         }
-        
+
         .filter-label {
             font-size: 12px;
             color: var(--text-secondary);
@@ -1089,37 +1136,37 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+
         .category-badge.corporate {
             background: rgba(139, 92, 246, 0.15);
             color: #8b5cf6;
             border: 1px solid rgba(139, 92, 246, 0.3);
         }
-        
+
         .category-badge.community {
             background: rgba(59, 130, 246, 0.15);
             color: #3b82f6;
             border: 1px solid rgba(59, 130, 246, 0.3);
         }
-        
+
         .category-badge.wu {
             background: rgba(236, 72, 153, 0.15);
             color: #ec4899;
             border: 1px solid rgba(236, 72, 153, 0.3);
         }
-        
+
         .category-badge.reference {
             background: rgba(20, 184, 166, 0.15);
             color: #14b8a6;
             border: 1px solid rgba(20, 184, 166, 0.3);
         }
-        
+
         .category-badge.wow {
             background: rgba(245, 158, 11, 0.15);
             color: #f59e0b;
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
-        
+
         /* Offline Panel */
         .offline-panel {
             background: rgba(30, 41, 59, 0.8);
@@ -1128,13 +1175,13 @@
             border: 1px solid var(--border);
             overflow: hidden;
         }
-        
+
         .panel-header {
             padding: 20px 25px;
             border-bottom: 1px solid var(--border);
             background: rgba(239, 68, 68, 0.05);
         }
-        
+
         .panel-title {
             font-family: 'Orbitron', monospace;
             font-size: 16px;
@@ -1144,11 +1191,11 @@
             align-items: center;
             gap: 10px;
         }
-        
+
         .panel-content {
             padding: 20px;
         }
-        
+
         .offline-item {
             padding: 16px;
             background: rgba(239, 68, 68, 0.05);
@@ -1157,40 +1204,40 @@
             margin-bottom: 12px;
             transition: all 0.3s ease;
         }
-        
+
         .offline-item:hover {
             background: rgba(239, 68, 68, 0.1);
             border-color: var(--danger);
             transform: translateX(4px);
         }
-        
+
         .offline-item:last-child {
             margin-bottom: 0;
         }
-        
+
         .offline-name {
             font-weight: 600;
             color: var(--text-primary);
             margin-bottom: 8px;
         }
-        
+
         .offline-since {
             font-size: 13px;
             color: var(--text-secondary);
         }
-        
+
         .no-offline {
             text-align: center;
             padding: 40px 20px;
             color: var(--text-secondary);
         }
-        
+
         .no-offline-icon {
             font-size: 48px;
             margin-bottom: 16px;
             opacity: 0.5;
         }
-        
+
         /* Custom Map Markers */
         .pulse-marker {
             width: 20px;
@@ -1198,37 +1245,37 @@
             border-radius: 50%;
             position: relative;
         }
-        
+
         .pulse-marker.online {
             background: var(--success);
             box-shadow: 0 0 0 0 rgba(16, 185, 129, 1);
         }
-        
+
         .pulse-marker.offline {
             background: var(--danger);
             animation: ripple 1.5s infinite;
         }
-        
+
         .pulse-marker.inactive {
             background: var(--warning);
             animation: ripple 1.5s infinite;
         }
-        
+
         .pulse-marker.disabled {
             background: #6b7280;
             opacity: 0.7;
         }
-        
+
         .popup-status.inactive {
             color: var(--warning);
             font-weight: 600;
         }
-        
+
         .popup-status.disabled {
             color: #6b7280;
             font-weight: 600;
         }
-        
+
         /* Leaflet Popup Custom */
         .leaflet-popup-content-wrapper {
             background: rgba(30, 41, 59, 0.95) !important;
@@ -1237,16 +1284,16 @@
             border-radius: 12px !important;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
         }
-        
+
         .leaflet-popup-content {
             margin: 16px !important;
             color: var(--text-primary) !important;
         }
-        
+
         .leaflet-popup-tip {
             background: rgba(30, 41, 59, 0.95) !important;
         }
-        
+
         .popup-title {
             font-family: 'Orbitron', monospace;
             font-weight: 700;
@@ -1254,32 +1301,32 @@
             color: var(--text-primary);
             margin-bottom: 10px;
         }
-        
+
         .popup-info {
             font-size: 13px;
             color: var(--text-secondary);
             margin-bottom: 6px;
         }
-        
+
         .popup-uptime {
             font-size: 13px;
             color: var(--text-secondary);
             margin-bottom: 6px;
             font-weight: 600;
         }
-        
+
         .popup-uptime-good {
             color: var(--success);
         }
-        
+
         .popup-uptime-warning {
             color: var(--warning);
         }
-        
+
         .popup-uptime-bad {
             color: var(--danger);
         }
-        
+
         .popup-status {
             margin-top: 12px;
             padding: 6px 12px;
@@ -1290,281 +1337,283 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+
         .popup-status.online {
             background: rgba(16, 185, 129, 0.2);
             color: var(--success);
             border: 1px solid var(--success);
         }
-        
+
         .popup-status.offline {
             background: rgba(239, 68, 68, 0.2);
             color: var(--danger);
             border: 1px solid var(--danger);
         }
-        
+
         /* Responsive */
         @media (max-width: 1200px) {
-        @media (max-width: 1400px) {
-            .stats-grid {
-                grid-template-columns: repeat(5, 1fr);
+            @media (max-width: 1400px) {
+                .stats-grid {
+                    grid-template-columns: repeat(5, 1fr);
+                }
             }
-        }
-        
-        @media (max-width: 1024px) {
-            .stats-grid {
-                grid-template-columns: repeat(3, 1fr);
+
+            @media (max-width: 1024px) {
+                .stats-grid {
+                    grid-template-columns: repeat(3, 1fr);
+                }
+
+                .charts-container {
+                    grid-template-columns: 1fr;
+                }
+
+                .station-list-wrapper {
+                    grid-template-columns: 1fr;
+                }
             }
-            
-            .charts-container {
-                grid-template-columns: 1fr;
+
+            @media (max-width: 768px) {
+                body {
+                    padding: 10px;
+                }
+
+                .stats-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
+                }
+
+                .stat-card {
+                    padding: 10px 8px;
+                }
+
+                .stat-value {
+                    font-size: 1.2rem;
+                }
+
+                .stat-label {
+                    font-size: 9px;
+                }
+
+                .stat-station {
+                    font-size: 8px;
+                }
+
+                header {
+                    flex-direction: column;
+                    gap: 15px;
+                    padding: 15px;
+                    text-align: center;
+                }
+
+                .header-logo svg {
+                    width: 200px;
+                    height: auto;
+                }
+
+                h1 {
+                    font-size: 18px;
+                }
+
+                .header-right {
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    gap: 10px;
+                }
+
+                .last-update {
+                    font-size: 12px;
+                }
+
+                .logout-btn {
+                    padding: 6px 12px;
+                    font-size: 12px;
+                }
+
+                .search-box {
+                    width: 100%;
+                }
+
+                .controls {
+                    flex-direction: column;
+                    width: 100%;
+                    gap: 8px;
+                }
+
+                .category-dropdown {
+                    width: 100%;
+                }
+
+                .category-tabs {
+                    flex-wrap: wrap;
+                    gap: 5px;
+                }
+
+                .category-tab {
+                    padding: 6px 10px;
+                    font-size: 11px;
+                }
+
+                .filter-btn {
+                    padding: 8px 12px;
+                    font-size: 12px;
+                }
+
+                /* Custom date picker mobile styles */
+                #customDateRange {
+                    flex-direction: column;
+                    align-items: stretch !important;
+                    gap: 10px !important;
+                }
+
+                #customDateRange .date-input {
+                    width: 100%;
+                    padding: 12px;
+                    font-size: 14px;
+                }
+
+                #customDateRange .apply-btn {
+                    width: 100%;
+                    padding: 12px;
+                    font-size: 14px;
+                }
+
+                .export-buttons {
+                    width: 100%;
+                    justify-content: center;
+                    margin-left: 0;
+                    margin-top: 8px;
+                }
+
+                .export-btn {
+                    flex: 1;
+                    text-align: center;
+                }
+
+                .chart-card {
+                    padding: 15px;
+                }
+
+                .ring-chart-wrapper {
+                    flex-direction: column;
+                }
+
+                .ring-chart {
+                    transform: scale(0.75);
+                    transform-origin: center;
+                }
+
+                .ring-center {
+                    font-size: 12px;
+                }
+
+                .ring-total {
+                    font-size: 28px;
+                }
+
+                #map {
+                    height: 300px;
+                }
+
+                .list-header {
+                    flex-direction: column;
+                    gap: 10px;
+                }
+
+                .list-title {
+                    font-size: 16px;
+                }
+
+                table {
+                    font-size: 11px;
+                    min-width: 500px;
+                }
+
+                th,
+                td {
+                    padding: 6px 4px;
+                }
+
+                /* Hide Source (2nd) column on mobile */
+                th:nth-child(2),
+                td:nth-child(2) {
+                    display: none;
+                }
+
+                /* Hide station ID on mobile to save space */
+                td:first-child small {
+                    display: none;
+                }
+
+                /* Compact status badge on mobile */
+                .status-badge {
+                    padding: 3px 6px;
+                    font-size: 9px;
+                }
+
+                .table-container {
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                .offline-panel {
+                    margin-top: 15px;
+                }
+
+                .panel-header {
+                    padding: 12px;
+                }
+
+                .offline-item {
+                    padding: 10px 12px;
+                }
+
+                .source-filter {
+                    width: 100%;
+                }
             }
-            
-            .station-list-wrapper {
-                grid-template-columns: 1fr;
+
+            @media (max-width: 480px) {
+                .stats-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
+                }
+
+                .stat-card {
+                    padding: 12px;
+                }
+
+                .stat-value {
+                    font-size: 1.3rem;
+                }
+
+                h1 {
+                    font-size: 15px;
+                }
+
+                .category-tab {
+                    padding: 5px 8px;
+                    font-size: 10px;
+                }
+
+                .cat-count {
+                    display: none;
+                }
+
+                table th:nth-child(6),
+                table td:nth-child(6),
+                table th:nth-child(7),
+                table td:nth-child(7) {
+                    display: none;
+                }
+
+                .ring-chart {
+                    transform: scale(0.65);
+                    transform-origin: center;
+                }
             }
-        }
-        
-        @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 8px;
-            }
-            
-            .stat-card {
-                padding: 10px 8px;
-            }
-            
-            .stat-value {
-                font-size: 1.2rem;
-            }
-            
-            .stat-label {
-                font-size: 9px;
-            }
-            
-            .stat-station {
-                font-size: 8px;
-            }
-            
-            header {
-                flex-direction: column;
-                gap: 15px;
-                padding: 15px;
-                text-align: center;
-            }
-            
-            .header-logo svg {
-                width: 200px;
-                height: auto;
-            }
-            
-            h1 {
-                font-size: 18px;
-            }
-            
-            .header-right {
-                flex-wrap: wrap;
-                justify-content: center;
-                gap: 10px;
-            }
-            
-            .last-update {
-                font-size: 12px;
-            }
-            
-            .logout-btn {
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-            
-            .search-box {
-                width: 100%;
-            }
-            
-            .controls {
-                flex-direction: column;
-                width: 100%;
-                gap: 8px;
-            }
-            
-            .category-dropdown {
-                width: 100%;
-            }
-            
-            .category-tabs {
-                flex-wrap: wrap;
-                gap: 5px;
-            }
-            
-            .category-tab {
-                padding: 6px 10px;
-                font-size: 11px;
-            }
-            
-            .filter-btn {
-                padding: 8px 12px;
-                font-size: 12px;
-            }
-            
-            /* Custom date picker mobile styles */
-            #customDateRange {
-                flex-direction: column;
-                align-items: stretch !important;
-                gap: 10px !important;
-            }
-            
-            #customDateRange .date-input {
-                width: 100%;
-                padding: 12px;
-                font-size: 14px;
-            }
-            
-            #customDateRange .apply-btn {
-                width: 100%;
-                padding: 12px;
-                font-size: 14px;
-            }
-            
-            .export-buttons {
-                width: 100%;
-                justify-content: center;
-                margin-left: 0;
-                margin-top: 8px;
-            }
-            
-            .export-btn {
-                flex: 1;
-                text-align: center;
-            }
-            
-            .chart-card {
-                padding: 15px;
-            }
-            
-            .ring-chart-wrapper {
-                flex-direction: column;
-            }
-            
-            .ring-chart {
-                transform: scale(0.75);
-                transform-origin: center;
-            }
-            
-            .ring-center {
-                font-size: 12px;
-            }
-            
-            .ring-total {
-                font-size: 28px;
-            }
-            
-            #map {
-                height: 300px;
-            }
-            
-            .list-header {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .list-title {
-                font-size: 16px;
-            }
-            
-            table {
-                font-size: 11px;
-                min-width: 500px;
-            }
-            
-            th, td {
-                padding: 6px 4px;
-            }
-            
-            /* Hide Source (2nd) and POI (7th) columns on mobile */
-            th:nth-child(2), td:nth-child(2),
-            th:nth-child(7), td:nth-child(7) {
-                display: none;
-            }
-            
-            /* Hide station ID on mobile to save space */
-            td:first-child small {
-                display: none;
-            }
-            
-            /* Compact status badge on mobile */
-            .status-badge {
-                padding: 3px 6px;
-                font-size: 9px;
-            }
-            
-            .table-container {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-            
-            .offline-panel {
-                margin-top: 15px;
-            }
-            
-            .panel-header {
-                padding: 12px;
-            }
-            
-            .offline-item {
-                padding: 10px 12px;
-            }
-            
-            .source-filter {
-                width: 100%;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 8px;
-            }
-            
-            .stat-card {
-                padding: 12px;
-            }
-            
-            .stat-value {
-                font-size: 1.3rem;
-            }
-            
-            h1 {
-                font-size: 15px;
-            }
-            
-            .category-tab {
-                padding: 5px 8px;
-                font-size: 10px;
-            }
-            
-            .cat-count {
-                display: none;
-            }
-            
-            table th:nth-child(6),
-            table td:nth-child(6),
-            table th:nth-child(7),
-            table td:nth-child(7) {
-                display: none;
-            }
-            
-            .ring-chart {
-                transform: scale(0.65);
-                transform-origin: center;
-            }
-        }
     </style>
 </head>
+
 <body>
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay">
@@ -1580,40 +1629,98 @@
         <header>
             <div class="header-logo">
                 <!-- Light theme logo (blue text) -->
-                <svg class="logo-light" width="280" height="47" viewBox="0 0 661 111" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M277.89 37.0889L268.108 70.5312H258.993L252.897 47.1738L246.8 70.5312H237.626L227.785 37.0889H236.361L242.28 62.5627L248.681 37.0889H257.61L263.892 62.5037L269.812 37.0889H277.898H277.89Z" fill="#011B60"/>
-                    <path d="M312.724 56.1621H288.279C288.439 58.6159 289.266 60.5469 290.75 61.9551C292.242 63.3633 294.089 64.0716 296.307 64.0716C299.443 64.0716 301.678 62.7224 303.01 60.0241H312.126C311.164 63.2452 309.309 65.893 306.569 67.9589C303.828 70.0332 300.472 71.0704 296.492 71.0704C293.271 71.0704 290.387 70.3536 287.832 68.9286C285.277 67.5035 283.287 65.4798 281.854 62.8658C280.429 60.2518 279.712 57.233 279.712 53.8095C279.712 50.386 280.412 47.3083 281.828 44.6943C283.237 42.0803 285.21 40.065 287.748 38.6568C290.286 37.2486 293.204 36.5403 296.501 36.5403C299.798 36.5403 302.53 37.2233 305.042 38.5893C307.555 39.9553 309.512 41.8863 310.894 44.3823C312.286 46.8782 312.977 49.7536 312.977 53.0169C312.977 54.1468 312.893 55.1924 312.733 56.1537L312.724 56.1621ZM304.216 51.0353C304.174 48.6996 303.398 46.8614 301.889 45.5122C300.379 44.163 298.499 43.4885 296.248 43.4885C294.114 43.4885 292.327 44.163 290.876 45.5122C289.426 46.8614 288.566 48.6996 288.279 51.0353H304.216Z" fill="#011B60"/>
-                    <path d="M318.365 44.6943C319.714 42.0803 321.544 40.065 323.855 38.6568C326.165 37.2486 328.754 36.5403 331.612 36.5403C334.108 36.5403 336.292 37.0462 338.164 38.0497C340.036 39.0531 341.537 40.3264 342.659 41.8526V37.0799H351.167V70.5223H342.659V65.6316C341.571 67.2 340.07 68.4985 338.164 69.5273C336.25 70.556 334.049 71.0704 331.553 71.0704C328.737 71.0704 326.174 70.3452 323.855 68.8948C321.544 67.4445 319.706 65.4039 318.365 62.7646C317.016 60.1253 316.342 57.0981 316.342 53.6831C316.342 50.268 317.016 47.3083 318.365 44.6858V44.6943ZM341.453 48.531C340.643 47.0637 339.564 45.9338 338.19 45.1496C336.824 44.3654 335.356 43.9691 333.779 43.9691C332.203 43.9691 330.761 44.3486 329.437 45.1159C328.113 45.8832 327.034 46.9963 326.207 48.4635C325.381 49.9307 324.968 51.6762 324.968 53.6831C324.968 55.6899 325.381 57.4523 326.207 58.9616C327.034 60.471 328.121 61.6262 329.471 62.4357C330.82 63.2452 332.253 63.6416 333.788 63.6416C335.323 63.6416 336.824 63.2452 338.198 62.461C339.564 61.6768 340.652 60.5469 341.461 59.0797C342.262 57.6125 342.667 55.8502 342.667 53.8011C342.667 51.7521 342.262 49.9897 341.461 48.5225L341.453 48.531Z" fill="#011B60"/>
-                    <path d="M368.68 44.0367V60.2098C368.68 61.3397 368.95 62.1492 369.498 62.6552C370.038 63.1611 370.957 63.4056 372.247 63.4056H376.168V70.5309H370.856C363.73 70.5309 360.172 67.0737 360.172 60.1508V44.0367H356.192V37.097H360.172V28.825H368.68V37.097H376.168V44.0367H368.68Z" fill="#011B60"/>
-                    <path d="M407.25 38.2698C409.223 39.3744 410.758 41.0103 411.871 43.1605C412.975 45.3107 413.532 47.8994 413.532 50.9182V70.5316H405.083V52.065C405.083 49.4088 404.416 47.3682 403.093 45.9347C401.769 44.5097 399.956 43.7929 397.662 43.7929C395.369 43.7929 393.488 44.5097 392.139 45.9347C390.79 47.3598 390.115 49.4088 390.115 52.065V70.5316H381.666V25.866H390.115V41.2548C391.203 39.8045 392.654 38.6661 394.458 37.8482C396.271 37.0218 398.278 36.6087 400.496 36.6087C403.034 36.6087 405.285 37.1652 407.258 38.2698H407.25Z" fill="#011B60"/>
-                    <path d="M451.797 56.1621H427.352C427.512 58.6159 428.338 60.5469 429.822 61.9551C431.315 63.3633 433.162 64.0716 435.379 64.0716C438.516 64.0716 440.751 62.7224 442.083 60.0241H451.198C450.237 63.2452 448.382 65.893 445.641 67.9589C442.901 70.0332 439.545 71.0704 435.565 71.0704C432.344 71.0704 429.46 70.3536 426.905 68.9286C424.35 67.5035 422.36 65.4798 420.926 62.8658C419.501 60.2518 418.785 57.233 418.785 53.8095C418.785 50.386 419.485 47.3083 420.901 44.6943C422.309 42.0803 424.282 40.065 426.821 38.6568C429.359 37.2486 432.276 36.5403 435.573 36.5403C438.87 36.5403 441.602 37.2233 444.115 38.5893C446.628 39.9553 448.584 41.8863 449.967 44.3823C451.358 46.8782 452.05 49.7536 452.05 53.0169C452.05 54.1468 451.966 55.1924 451.805 56.1537L451.797 56.1621ZM443.289 51.0353C443.247 48.6996 442.471 46.8614 440.961 45.5122C439.452 44.163 437.572 43.4885 435.32 43.4885C433.187 43.4885 431.399 44.163 429.949 45.5122C428.499 46.8614 427.639 48.6996 427.352 51.0353H443.289Z" fill="#011B60"/>
-                    <path d="M470.289 38.3036C472.043 37.1737 474.041 36.6172 476.293 36.6172V45.4879H474.058C471.402 45.4879 469.403 46.1119 468.054 47.3599C466.705 48.6079 466.031 50.7834 466.031 53.878V70.5402H457.581V37.0894H466.031V43.0088C467.118 40.9935 468.535 39.4251 470.289 38.3036Z" fill="#011B60"/>
-                    <path d="M527.73 37.0889L517.949 70.5312H508.833L502.737 47.1738L496.64 70.5312H487.466L477.625 37.0889H486.201L492.121 62.5627L498.521 37.0889H507.45L513.732 62.5037L519.652 37.0889H527.738H527.73Z" fill="#011B60"/>
-                    <path d="M531.558 44.6943C532.907 42.0803 534.737 40.065 537.048 38.6568C539.358 37.2486 541.947 36.5403 544.805 36.5403C547.301 36.5403 549.485 37.0462 551.357 38.0497C553.229 39.0531 554.73 40.3264 555.851 41.8526V37.0799H564.36V70.5223H555.851V65.6316C554.764 67.2 553.263 68.4985 551.357 69.5273C549.443 70.556 547.242 71.0704 544.746 71.0704C541.93 71.0704 539.366 70.3452 537.048 68.8948C534.737 67.4445 532.899 65.4039 531.558 62.7646C530.209 60.1253 529.534 57.0981 529.534 53.6831C529.534 50.268 530.209 47.3083 531.558 44.6858V44.6943ZM554.646 48.531C553.836 47.0637 552.757 45.9338 551.382 45.1496C550.016 44.3654 548.549 43.9691 546.972 43.9691C545.395 43.9691 543.954 44.3486 542.63 45.1159C541.306 45.8832 540.227 46.9963 539.4 48.4635C538.574 49.9307 538.161 51.6762 538.161 53.6831C538.161 55.6899 538.574 57.4523 539.4 58.9616C540.227 60.471 541.314 61.6262 542.663 62.4357C544.013 63.2452 545.446 63.6416 546.981 63.6416C548.515 63.6416 550.016 63.2452 551.391 62.461C552.757 61.6768 553.845 60.5469 554.654 59.0797C555.455 57.6125 555.86 55.8502 555.86 53.8011C555.86 51.7521 555.455 49.9897 554.654 48.5225L554.646 48.531Z" fill="#011B60"/>
-                    <path d="M580.481 25.866V70.5316H572.032V25.866H580.481Z" fill="#011B60"/>
-                    <path d="M588.054 44.6943C589.403 42.0803 591.233 40.065 593.543 38.6568C595.854 37.2486 598.442 36.5403 601.301 36.5403C603.797 36.5403 605.981 37.0462 607.853 38.0497C609.725 39.0531 611.226 40.3264 612.347 41.8526V37.0799H620.855V70.5223H612.347V65.6316C611.259 67.2 609.759 68.4985 607.853 69.5273C605.939 70.556 603.738 71.0704 601.242 71.0704C598.426 71.0704 595.862 70.3452 593.543 68.8948C591.233 67.4445 589.395 65.4039 588.054 62.7646C586.705 60.1253 586.03 57.0981 586.03 53.6831C586.03 50.268 586.705 47.3083 588.054 44.6858V44.6943ZM611.141 48.531C610.332 47.0637 609.253 45.9338 607.878 45.1496C606.512 44.3654 605.045 43.9691 603.468 43.9691C601.891 43.9691 600.449 44.3486 599.125 45.1159C597.802 45.8832 596.722 46.9963 595.896 48.4635C595.07 49.9307 594.656 51.6762 594.656 53.6831C594.656 55.6899 595.07 57.4523 595.896 58.9616C596.722 60.471 597.81 61.6262 599.159 62.4357C600.508 63.2452 601.942 63.6416 603.476 63.6416C605.011 63.6416 606.512 63.2452 607.887 62.461C609.253 61.6768 610.34 60.5469 611.15 59.0797C611.951 57.6125 612.356 55.8502 612.356 53.8011C612.356 51.7521 611.951 49.9897 611.15 48.5225L611.141 48.531Z" fill="#011B60"/>
-                    <path d="M634.144 37.0888L642.779 60.4461L651.532 37.0888H660.529L639.828 86.3416H630.831L638.074 69.6794L624.675 37.0803H634.153L634.144 37.0888Z" fill="#011B60"/>
-                    <path d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z" fill="#397DFF"/>
-                    <path d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z" fill="#0952DF"/>
-                    <path d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z" fill="#FFB000"/>
+                <svg class="logo-light" width="280" height="47" viewBox="0 0 661 111" fill="none"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M277.89 37.0889L268.108 70.5312H258.993L252.897 47.1738L246.8 70.5312H237.626L227.785 37.0889H236.361L242.28 62.5627L248.681 37.0889H257.61L263.892 62.5037L269.812 37.0889H277.898H277.89Z"
+                        fill="#011B60" />
+                    <path
+                        d="M312.724 56.1621H288.279C288.439 58.6159 289.266 60.5469 290.75 61.9551C292.242 63.3633 294.089 64.0716 296.307 64.0716C299.443 64.0716 301.678 62.7224 303.01 60.0241H312.126C311.164 63.2452 309.309 65.893 306.569 67.9589C303.828 70.0332 300.472 71.0704 296.492 71.0704C293.271 71.0704 290.387 70.3536 287.832 68.9286C285.277 67.5035 283.287 65.4798 281.854 62.8658C280.429 60.2518 279.712 57.233 279.712 53.8095C279.712 50.386 280.412 47.3083 281.828 44.6943C283.237 42.0803 285.21 40.065 287.748 38.6568C290.286 37.2486 293.204 36.5403 296.501 36.5403C299.798 36.5403 302.53 37.2233 305.042 38.5893C307.555 39.9553 309.512 41.8863 310.894 44.3823C312.286 46.8782 312.977 49.7536 312.977 53.0169C312.977 54.1468 312.893 55.1924 312.733 56.1537L312.724 56.1621ZM304.216 51.0353C304.174 48.6996 303.398 46.8614 301.889 45.5122C300.379 44.163 298.499 43.4885 296.248 43.4885C294.114 43.4885 292.327 44.163 290.876 45.5122C289.426 46.8614 288.566 48.6996 288.279 51.0353H304.216Z"
+                        fill="#011B60" />
+                    <path
+                        d="M318.365 44.6943C319.714 42.0803 321.544 40.065 323.855 38.6568C326.165 37.2486 328.754 36.5403 331.612 36.5403C334.108 36.5403 336.292 37.0462 338.164 38.0497C340.036 39.0531 341.537 40.3264 342.659 41.8526V37.0799H351.167V70.5223H342.659V65.6316C341.571 67.2 340.07 68.4985 338.164 69.5273C336.25 70.556 334.049 71.0704 331.553 71.0704C328.737 71.0704 326.174 70.3452 323.855 68.8948C321.544 67.4445 319.706 65.4039 318.365 62.7646C317.016 60.1253 316.342 57.0981 316.342 53.6831C316.342 50.268 317.016 47.3083 318.365 44.6858V44.6943ZM341.453 48.531C340.643 47.0637 339.564 45.9338 338.19 45.1496C336.824 44.3654 335.356 43.9691 333.779 43.9691C332.203 43.9691 330.761 44.3486 329.437 45.1159C328.113 45.8832 327.034 46.9963 326.207 48.4635C325.381 49.9307 324.968 51.6762 324.968 53.6831C324.968 55.6899 325.381 57.4523 326.207 58.9616C327.034 60.471 328.121 61.6262 329.471 62.4357C330.82 63.2452 332.253 63.6416 333.788 63.6416C335.323 63.6416 336.824 63.2452 338.198 62.461C339.564 61.6768 340.652 60.5469 341.461 59.0797C342.262 57.6125 342.667 55.8502 342.667 53.8011C342.667 51.7521 342.262 49.9897 341.461 48.5225L341.453 48.531Z"
+                        fill="#011B60" />
+                    <path
+                        d="M368.68 44.0367V60.2098C368.68 61.3397 368.95 62.1492 369.498 62.6552C370.038 63.1611 370.957 63.4056 372.247 63.4056H376.168V70.5309H370.856C363.73 70.5309 360.172 67.0737 360.172 60.1508V44.0367H356.192V37.097H360.172V28.825H368.68V37.097H376.168V44.0367H368.68Z"
+                        fill="#011B60" />
+                    <path
+                        d="M407.25 38.2698C409.223 39.3744 410.758 41.0103 411.871 43.1605C412.975 45.3107 413.532 47.8994 413.532 50.9182V70.5316H405.083V52.065C405.083 49.4088 404.416 47.3682 403.093 45.9347C401.769 44.5097 399.956 43.7929 397.662 43.7929C395.369 43.7929 393.488 44.5097 392.139 45.9347C390.79 47.3598 390.115 49.4088 390.115 52.065V70.5316H381.666V25.866H390.115V41.2548C391.203 39.8045 392.654 38.6661 394.458 37.8482C396.271 37.0218 398.278 36.6087 400.496 36.6087C403.034 36.6087 405.285 37.1652 407.258 38.2698H407.25Z"
+                        fill="#011B60" />
+                    <path
+                        d="M451.797 56.1621H427.352C427.512 58.6159 428.338 60.5469 429.822 61.9551C431.315 63.3633 433.162 64.0716 435.379 64.0716C438.516 64.0716 440.751 62.7224 442.083 60.0241H451.198C450.237 63.2452 448.382 65.893 445.641 67.9589C442.901 70.0332 439.545 71.0704 435.565 71.0704C432.344 71.0704 429.46 70.3536 426.905 68.9286C424.35 67.5035 422.36 65.4798 420.926 62.8658C419.501 60.2518 418.785 57.233 418.785 53.8095C418.785 50.386 419.485 47.3083 420.901 44.6943C422.309 42.0803 424.282 40.065 426.821 38.6568C429.359 37.2486 432.276 36.5403 435.573 36.5403C438.87 36.5403 441.602 37.2233 444.115 38.5893C446.628 39.9553 448.584 41.8863 449.967 44.3823C451.358 46.8782 452.05 49.7536 452.05 53.0169C452.05 54.1468 451.966 55.1924 451.805 56.1537L451.797 56.1621ZM443.289 51.0353C443.247 48.6996 442.471 46.8614 440.961 45.5122C439.452 44.163 437.572 43.4885 435.32 43.4885C433.187 43.4885 431.399 44.163 429.949 45.5122C428.499 46.8614 427.639 48.6996 427.352 51.0353H443.289Z"
+                        fill="#011B60" />
+                    <path
+                        d="M470.289 38.3036C472.043 37.1737 474.041 36.6172 476.293 36.6172V45.4879H474.058C471.402 45.4879 469.403 46.1119 468.054 47.3599C466.705 48.6079 466.031 50.7834 466.031 53.878V70.5402H457.581V37.0894H466.031V43.0088C467.118 40.9935 468.535 39.4251 470.289 38.3036Z"
+                        fill="#011B60" />
+                    <path
+                        d="M527.73 37.0889L517.949 70.5312H508.833L502.737 47.1738L496.64 70.5312H487.466L477.625 37.0889H486.201L492.121 62.5627L498.521 37.0889H507.45L513.732 62.5037L519.652 37.0889H527.738H527.73Z"
+                        fill="#011B60" />
+                    <path
+                        d="M531.558 44.6943C532.907 42.0803 534.737 40.065 537.048 38.6568C539.358 37.2486 541.947 36.5403 544.805 36.5403C547.301 36.5403 549.485 37.0462 551.357 38.0497C553.229 39.0531 554.73 40.3264 555.851 41.8526V37.0799H564.36V70.5223H555.851V65.6316C554.764 67.2 553.263 68.4985 551.357 69.5273C549.443 70.556 547.242 71.0704 544.746 71.0704C541.93 71.0704 539.366 70.3452 537.048 68.8948C534.737 67.4445 532.899 65.4039 531.558 62.7646C530.209 60.1253 529.534 57.0981 529.534 53.6831C529.534 50.268 530.209 47.3083 531.558 44.6858V44.6943ZM554.646 48.531C553.836 47.0637 552.757 45.9338 551.382 45.1496C550.016 44.3654 548.549 43.9691 546.972 43.9691C545.395 43.9691 543.954 44.3486 542.63 45.1159C541.306 45.8832 540.227 46.9963 539.4 48.4635C538.574 49.9307 538.161 51.6762 538.161 53.6831C538.161 55.6899 538.574 57.4523 539.4 58.9616C540.227 60.471 541.314 61.6262 542.663 62.4357C544.013 63.2452 545.446 63.6416 546.981 63.6416C548.515 63.6416 550.016 63.2452 551.391 62.461C552.757 61.6768 553.845 60.5469 554.654 59.0797C555.455 57.6125 555.86 55.8502 555.86 53.8011C555.86 51.7521 555.455 49.9897 554.654 48.5225L554.646 48.531Z"
+                        fill="#011B60" />
+                    <path d="M580.481 25.866V70.5316H572.032V25.866H580.481Z" fill="#011B60" />
+                    <path
+                        d="M588.054 44.6943C589.403 42.0803 591.233 40.065 593.543 38.6568C595.854 37.2486 598.442 36.5403 601.301 36.5403C603.797 36.5403 605.981 37.0462 607.853 38.0497C609.725 39.0531 611.226 40.3264 612.347 41.8526V37.0799H620.855V70.5223H612.347V65.6316C611.259 67.2 609.759 68.4985 607.853 69.5273C605.939 70.556 603.738 71.0704 601.242 71.0704C598.426 71.0704 595.862 70.3452 593.543 68.8948C591.233 67.4445 589.395 65.4039 588.054 62.7646C586.705 60.1253 586.03 57.0981 586.03 53.6831C586.03 50.268 586.705 47.3083 588.054 44.6858V44.6943ZM611.141 48.531C610.332 47.0637 609.253 45.9338 607.878 45.1496C606.512 44.3654 605.045 43.9691 603.468 43.9691C601.891 43.9691 600.449 44.3486 599.125 45.1159C597.802 45.8832 596.722 46.9963 595.896 48.4635C595.07 49.9307 594.656 51.6762 594.656 53.6831C594.656 55.6899 595.07 57.4523 595.896 58.9616C596.722 60.471 597.81 61.6262 599.159 62.4357C600.508 63.2452 601.942 63.6416 603.476 63.6416C605.011 63.6416 606.512 63.2452 607.887 62.461C609.253 61.6768 610.34 60.5469 611.15 59.0797C611.951 57.6125 612.356 55.8502 612.356 53.8011C612.356 51.7521 611.951 49.9897 611.15 48.5225L611.141 48.531Z"
+                        fill="#011B60" />
+                    <path
+                        d="M634.144 37.0888L642.779 60.4461L651.532 37.0888H660.529L639.828 86.3416H630.831L638.074 69.6794L624.675 37.0803H634.153L634.144 37.0888Z"
+                        fill="#011B60" />
+                    <path
+                        d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z"
+                        fill="#397DFF" />
+                    <path
+                        d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z"
+                        fill="#0952DF" />
+                    <path
+                        d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z"
+                        fill="#FFB000" />
                 </svg>
                 <!-- Dark theme logo (white text) -->
-                <svg class="logo-dark" width="280" height="47" viewBox="0 0 661 111" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M277.89 37.0891L268.109 70.5314H258.993L252.897 47.1741L246.8 70.5314H237.626L227.786 37.0891H236.361L242.281 62.563L248.681 37.0891H257.611L263.893 62.5039L269.812 37.0891H277.899H277.89Z" fill="white"/>
-                    <path d="M312.724 56.1624H288.279C288.439 58.6162 289.266 60.5472 290.75 61.9553C292.242 63.3635 294.089 64.0718 296.307 64.0718C299.443 64.0718 301.678 62.7227 303.01 60.0244H312.126C311.164 63.2455 309.309 65.8932 306.569 67.9591C303.828 70.0334 300.472 71.0706 296.492 71.0706C293.271 71.0706 290.387 70.3539 287.832 68.9288C285.277 67.5038 283.287 65.48 281.854 62.866C280.429 60.252 279.712 57.2333 279.712 53.8098C279.712 50.3863 280.412 47.3085 281.828 44.6945C283.237 42.0805 285.21 40.0652 287.748 38.657C290.286 37.2488 293.204 36.5405 296.501 36.5405C299.798 36.5405 302.53 37.2235 305.042 38.5896C307.555 39.9556 309.512 41.8866 310.894 44.3825C312.286 46.8785 312.977 49.7539 312.977 53.0172C312.977 54.1471 312.893 55.1927 312.733 56.154L312.724 56.1624ZM304.216 51.0356C304.174 48.6998 303.398 46.8616 301.889 45.5124C300.379 44.1633 298.499 43.4887 296.248 43.4887C294.114 43.4887 292.327 44.1633 290.876 45.5124C289.426 46.8616 288.566 48.6998 288.279 51.0356H304.216Z" fill="white"/>
-                    <path d="M318.365 44.6945C319.714 42.0805 321.544 40.0652 323.855 38.657C326.165 37.2488 328.754 36.5405 331.612 36.5405C334.108 36.5405 336.292 37.0465 338.164 38.0499C340.036 39.0533 341.537 40.3266 342.659 41.8528V37.0802H351.167V70.5225H342.659V65.6318C341.571 67.2002 340.07 68.4988 338.164 69.5275C336.25 70.5562 334.049 71.0706 331.553 71.0706C328.737 71.0706 326.174 70.3454 323.855 68.8951C321.544 67.4447 319.706 65.4041 318.365 62.7648C317.016 60.1255 316.342 57.0984 316.342 53.6833C316.342 50.2682 317.016 47.3085 318.365 44.6861V44.6945ZM341.453 48.5312C340.643 47.064 339.564 45.9341 338.19 45.1499C336.824 44.3657 335.356 43.9693 333.779 43.9693C332.203 43.9693 330.761 44.3488 329.437 45.1161C328.113 45.8835 327.034 46.9965 326.207 48.4637C325.381 49.9309 324.968 51.6764 324.968 53.6833C324.968 55.6902 325.381 57.4525 326.207 58.9619C327.034 60.4713 328.121 61.6265 329.471 62.436C330.82 63.2455 332.253 63.6418 333.788 63.6418C335.323 63.6418 336.824 63.2455 338.198 62.4613C339.564 61.6771 340.652 60.5472 341.461 59.0799C342.262 57.6127 342.667 55.8504 342.667 53.8014C342.667 51.7523 342.262 49.99 341.461 48.5228L341.453 48.5312Z" fill="white"/>
-                    <path d="M368.68 44.037V60.2101C368.68 61.34 368.95 62.1495 369.498 62.6554C370.038 63.1613 370.957 63.4059 372.247 63.4059H376.168V70.5311H370.856C363.73 70.5311 360.172 67.0739 360.172 60.151V44.037H356.192V37.0972H360.172V28.8252H368.68V37.0972H376.168V44.037H368.68Z" fill="white"/>
-                    <path d="M407.25 38.2701C409.223 39.3747 410.758 41.0105 411.871 43.1608C412.975 45.311 413.532 47.8997 413.532 50.9184V70.5319H405.083V52.0652C405.083 49.4091 404.416 47.3685 403.093 45.935C401.769 44.5099 399.956 43.7932 397.662 43.7932C395.369 43.7932 393.488 44.5099 392.139 45.935C390.79 47.36 390.115 49.4091 390.115 52.0652V70.5319H381.666V25.8662H390.115V41.2551C391.203 39.8047 392.654 38.6664 394.458 37.8484C396.271 37.0221 398.278 36.6089 400.496 36.6089C403.034 36.6089 405.285 37.1654 407.258 38.2701H407.25Z" fill="white"/>
-                    <path d="M451.797 56.1624H427.352C427.512 58.6162 428.338 60.5472 429.822 61.9553C431.315 63.3635 433.162 64.0718 435.379 64.0718C438.516 64.0718 440.751 62.7227 442.083 60.0244H451.198C450.237 63.2455 448.382 65.8932 445.641 67.9591C442.901 70.0334 439.545 71.0706 435.565 71.0706C432.344 71.0706 429.46 70.3539 426.905 68.9288C424.35 67.5038 422.36 65.48 420.926 62.866C419.501 60.252 418.785 57.2333 418.785 53.8098C418.785 50.3863 419.485 47.3085 420.901 44.6945C422.309 42.0805 424.282 40.0652 426.821 38.657C429.359 37.2488 432.276 36.5405 435.573 36.5405C438.87 36.5405 441.602 37.2235 444.115 38.5896C446.628 39.9556 448.584 41.8866 449.967 44.3825C451.358 46.8785 452.05 49.7539 452.05 53.0172C452.05 54.1471 451.966 55.1927 451.805 56.154L451.797 56.1624ZM443.289 51.0356C443.247 48.6998 442.471 46.8616 440.961 45.5124C439.452 44.1633 437.572 43.4887 435.32 43.4887C433.187 43.4887 431.399 44.1633 429.949 45.5124C428.499 46.8616 427.639 48.6998 427.352 51.0356H443.289Z" fill="white"/>
-                    <path d="M470.289 38.3039C472.043 37.174 474.041 36.6174 476.293 36.6174V45.4882H474.058C471.402 45.4882 469.403 46.1122 468.054 47.3601C466.705 48.6081 466.031 50.7836 466.031 53.8783V70.5404H457.581V37.0896H466.031V43.0091C467.118 40.9938 468.535 39.4254 470.289 38.3039Z" fill="white"/>
-                    <path d="M527.73 37.0891L517.949 70.5314H508.833L502.737 47.1741L496.64 70.5314H487.466L477.625 37.0891H486.201L492.121 62.563L498.521 37.0891H507.45L513.732 62.5039L519.652 37.0891H527.738H527.73Z" fill="white"/>
-                    <path d="M531.558 44.6945C532.907 42.0805 534.737 40.0652 537.048 38.657C539.358 37.2488 541.947 36.5405 544.805 36.5405C547.301 36.5405 549.485 37.0465 551.357 38.0499C553.229 39.0533 554.73 40.3266 555.851 41.8528V37.0802H564.36V70.5225H555.851V65.6318C554.764 67.2002 553.263 68.4988 551.357 69.5275C549.443 70.5562 547.242 71.0706 544.746 71.0706C541.93 71.0706 539.366 70.3454 537.048 68.8951C534.737 67.4447 532.899 65.4041 531.558 62.7648C530.209 60.1255 529.534 57.0984 529.534 53.6833C529.534 50.2682 530.209 47.3085 531.558 44.6861V44.6945ZM554.646 48.5312C553.836 47.064 552.757 45.9341 551.382 45.1499C550.016 44.3657 548.549 43.9693 546.972 43.9693C545.395 43.9693 543.954 44.3488 542.63 45.1161C541.306 45.8835 540.227 46.9965 539.4 48.4637C538.574 49.9309 538.161 51.6764 538.161 53.6833C538.161 55.6902 538.574 57.4525 539.4 58.9619C540.227 60.4713 541.314 61.6265 542.663 62.436C544.013 63.2455 545.446 63.6418 546.981 63.6418C548.515 63.6418 550.016 63.2455 551.391 62.4613C552.757 61.6771 553.845 60.5472 554.654 59.0799C555.455 57.6127 555.86 55.8504 555.86 53.8014C555.86 51.7523 555.455 49.99 554.654 48.5228L554.646 48.5312Z" fill="white"/>
-                    <path d="M580.481 25.8662V70.5319H572.032V25.8662H580.481Z" fill="white"/>
-                    <path d="M588.054 44.6945C589.403 42.0805 591.233 40.0652 593.543 38.657C595.854 37.2488 598.442 36.5405 601.301 36.5405C603.797 36.5405 605.981 37.0465 607.853 38.0499C609.725 39.0533 611.226 40.3266 612.347 41.8528V37.0802H620.855V70.5225H612.347V65.6318C611.259 67.2002 609.759 68.4988 607.853 69.5275C605.939 70.5562 603.738 71.0706 601.242 71.0706C598.426 71.0706 595.862 70.3454 593.543 68.8951C591.233 67.4447 589.395 65.4041 588.054 62.7648C586.705 60.1255 586.03 57.0984 586.03 53.6833C586.03 50.2682 586.705 47.3085 588.054 44.6861V44.6945ZM611.141 48.5312C610.332 47.064 609.253 45.9341 607.878 45.1499C606.512 44.3657 605.045 43.9693 603.468 43.9693C601.891 43.9693 600.449 44.3488 599.125 45.1161C597.802 45.8835 596.722 46.9965 595.896 48.4637C595.07 49.9309 594.656 51.6764 594.656 53.6833C594.656 55.6902 595.07 57.4525 595.896 58.9619C596.722 60.4713 597.81 61.6265 599.159 62.436C600.508 63.2455 601.942 63.6418 603.476 63.6418C605.011 63.6418 606.512 63.2455 607.887 62.4613C609.253 61.6771 610.34 60.5472 611.15 59.0799C611.951 57.6127 612.356 55.8504 612.356 53.8014C612.356 51.7523 611.951 49.99 611.15 48.5228L611.141 48.5312Z" fill="white"/>
-                    <path d="M634.145 37.0892L642.779 60.4466L651.532 37.0892H660.529L639.828 86.342H630.831L638.074 69.6799L624.675 37.0808H634.153L634.145 37.0892Z" fill="white"/>
-                    <path d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z" fill="#397DFF"/>
-                    <path d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z" fill="#0952DF"/>
-                    <path d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z" fill="#FFB000"/>
+                <svg class="logo-dark" width="280" height="47" viewBox="0 0 661 111" fill="none"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M277.89 37.0891L268.109 70.5314H258.993L252.897 47.1741L246.8 70.5314H237.626L227.786 37.0891H236.361L242.281 62.563L248.681 37.0891H257.611L263.893 62.5039L269.812 37.0891H277.899H277.89Z"
+                        fill="white" />
+                    <path
+                        d="M312.724 56.1624H288.279C288.439 58.6162 289.266 60.5472 290.75 61.9553C292.242 63.3635 294.089 64.0718 296.307 64.0718C299.443 64.0718 301.678 62.7227 303.01 60.0244H312.126C311.164 63.2455 309.309 65.8932 306.569 67.9591C303.828 70.0334 300.472 71.0706 296.492 71.0706C293.271 71.0706 290.387 70.3539 287.832 68.9288C285.277 67.5038 283.287 65.48 281.854 62.866C280.429 60.252 279.712 57.2333 279.712 53.8098C279.712 50.3863 280.412 47.3085 281.828 44.6945C283.237 42.0805 285.21 40.0652 287.748 38.657C290.286 37.2488 293.204 36.5405 296.501 36.5405C299.798 36.5405 302.53 37.2235 305.042 38.5896C307.555 39.9556 309.512 41.8866 310.894 44.3825C312.286 46.8785 312.977 49.7539 312.977 53.0172C312.977 54.1471 312.893 55.1927 312.733 56.154L312.724 56.1624ZM304.216 51.0356C304.174 48.6998 303.398 46.8616 301.889 45.5124C300.379 44.1633 298.499 43.4887 296.248 43.4887C294.114 43.4887 292.327 44.1633 290.876 45.5124C289.426 46.8616 288.566 48.6998 288.279 51.0356H304.216Z"
+                        fill="white" />
+                    <path
+                        d="M318.365 44.6945C319.714 42.0805 321.544 40.0652 323.855 38.657C326.165 37.2488 328.754 36.5405 331.612 36.5405C334.108 36.5405 336.292 37.0465 338.164 38.0499C340.036 39.0533 341.537 40.3266 342.659 41.8528V37.0802H351.167V70.5225H342.659V65.6318C341.571 67.2002 340.07 68.4988 338.164 69.5275C336.25 70.5562 334.049 71.0706 331.553 71.0706C328.737 71.0706 326.174 70.3454 323.855 68.8951C321.544 67.4447 319.706 65.4041 318.365 62.7648C317.016 60.1255 316.342 57.0984 316.342 53.6833C316.342 50.2682 317.016 47.3085 318.365 44.6861V44.6945ZM341.453 48.5312C340.643 47.064 339.564 45.9341 338.19 45.1499C336.824 44.3657 335.356 43.9693 333.779 43.9693C332.203 43.9693 330.761 44.3488 329.437 45.1161C328.113 45.8835 327.034 46.9965 326.207 48.4637C325.381 49.9309 324.968 51.6764 324.968 53.6833C324.968 55.6902 325.381 57.4525 326.207 58.9619C327.034 60.4713 328.121 61.6265 329.471 62.436C330.82 63.2455 332.253 63.6418 333.788 63.6418C335.323 63.6418 336.824 63.2455 338.198 62.4613C339.564 61.6771 340.652 60.5472 341.461 59.0799C342.262 57.6127 342.667 55.8504 342.667 53.8014C342.667 51.7523 342.262 49.99 341.461 48.5228L341.453 48.5312Z"
+                        fill="white" />
+                    <path
+                        d="M368.68 44.037V60.2101C368.68 61.34 368.95 62.1495 369.498 62.6554C370.038 63.1613 370.957 63.4059 372.247 63.4059H376.168V70.5311H370.856C363.73 70.5311 360.172 67.0739 360.172 60.151V44.037H356.192V37.0972H360.172V28.8252H368.68V37.0972H376.168V44.037H368.68Z"
+                        fill="white" />
+                    <path
+                        d="M407.25 38.2701C409.223 39.3747 410.758 41.0105 411.871 43.1608C412.975 45.311 413.532 47.8997 413.532 50.9184V70.5319H405.083V52.0652C405.083 49.4091 404.416 47.3685 403.093 45.935C401.769 44.5099 399.956 43.7932 397.662 43.7932C395.369 43.7932 393.488 44.5099 392.139 45.935C390.79 47.36 390.115 49.4091 390.115 52.0652V70.5319H381.666V25.8662H390.115V41.2551C391.203 39.8047 392.654 38.6664 394.458 37.8484C396.271 37.0221 398.278 36.6089 400.496 36.6089C403.034 36.6089 405.285 37.1654 407.258 38.2701H407.25Z"
+                        fill="white" />
+                    <path
+                        d="M451.797 56.1624H427.352C427.512 58.6162 428.338 60.5472 429.822 61.9553C431.315 63.3635 433.162 64.0718 435.379 64.0718C438.516 64.0718 440.751 62.7227 442.083 60.0244H451.198C450.237 63.2455 448.382 65.8932 445.641 67.9591C442.901 70.0334 439.545 71.0706 435.565 71.0706C432.344 71.0706 429.46 70.3539 426.905 68.9288C424.35 67.5038 422.36 65.48 420.926 62.866C419.501 60.252 418.785 57.2333 418.785 53.8098C418.785 50.3863 419.485 47.3085 420.901 44.6945C422.309 42.0805 424.282 40.0652 426.821 38.657C429.359 37.2488 432.276 36.5405 435.573 36.5405C438.87 36.5405 441.602 37.2235 444.115 38.5896C446.628 39.9556 448.584 41.8866 449.967 44.3825C451.358 46.8785 452.05 49.7539 452.05 53.0172C452.05 54.1471 451.966 55.1927 451.805 56.154L451.797 56.1624ZM443.289 51.0356C443.247 48.6998 442.471 46.8616 440.961 45.5124C439.452 44.1633 437.572 43.4887 435.32 43.4887C433.187 43.4887 431.399 44.1633 429.949 45.5124C428.499 46.8616 427.639 48.6998 427.352 51.0356H443.289Z"
+                        fill="white" />
+                    <path
+                        d="M470.289 38.3039C472.043 37.174 474.041 36.6174 476.293 36.6174V45.4882H474.058C471.402 45.4882 469.403 46.1122 468.054 47.3601C466.705 48.6081 466.031 50.7836 466.031 53.8783V70.5404H457.581V37.0896H466.031V43.0091C467.118 40.9938 468.535 39.4254 470.289 38.3039Z"
+                        fill="white" />
+                    <path
+                        d="M527.73 37.0891L517.949 70.5314H508.833L502.737 47.1741L496.64 70.5314H487.466L477.625 37.0891H486.201L492.121 62.563L498.521 37.0891H507.45L513.732 62.5039L519.652 37.0891H527.738H527.73Z"
+                        fill="white" />
+                    <path
+                        d="M531.558 44.6945C532.907 42.0805 534.737 40.0652 537.048 38.657C539.358 37.2488 541.947 36.5405 544.805 36.5405C547.301 36.5405 549.485 37.0465 551.357 38.0499C553.229 39.0533 554.73 40.3266 555.851 41.8528V37.0802H564.36V70.5225H555.851V65.6318C554.764 67.2002 553.263 68.4988 551.357 69.5275C549.443 70.5562 547.242 71.0706 544.746 71.0706C541.93 71.0706 539.366 70.3454 537.048 68.8951C534.737 67.4447 532.899 65.4041 531.558 62.7648C530.209 60.1255 529.534 57.0984 529.534 53.6833C529.534 50.2682 530.209 47.3085 531.558 44.6861V44.6945ZM554.646 48.5312C553.836 47.064 552.757 45.9341 551.382 45.1499C550.016 44.3657 548.549 43.9693 546.972 43.9693C545.395 43.9693 543.954 44.3488 542.63 45.1161C541.306 45.8835 540.227 46.9965 539.4 48.4637C538.574 49.9309 538.161 51.6764 538.161 53.6833C538.161 55.6902 538.574 57.4525 539.4 58.9619C540.227 60.4713 541.314 61.6265 542.663 62.436C544.013 63.2455 545.446 63.6418 546.981 63.6418C548.515 63.6418 550.016 63.2455 551.391 62.4613C552.757 61.6771 553.845 60.5472 554.654 59.0799C555.455 57.6127 555.86 55.8504 555.86 53.8014C555.86 51.7523 555.455 49.99 554.654 48.5228L554.646 48.5312Z"
+                        fill="white" />
+                    <path d="M580.481 25.8662V70.5319H572.032V25.8662H580.481Z" fill="white" />
+                    <path
+                        d="M588.054 44.6945C589.403 42.0805 591.233 40.0652 593.543 38.657C595.854 37.2488 598.442 36.5405 601.301 36.5405C603.797 36.5405 605.981 37.0465 607.853 38.0499C609.725 39.0533 611.226 40.3266 612.347 41.8528V37.0802H620.855V70.5225H612.347V65.6318C611.259 67.2002 609.759 68.4988 607.853 69.5275C605.939 70.5562 603.738 71.0706 601.242 71.0706C598.426 71.0706 595.862 70.3454 593.543 68.8951C591.233 67.4447 589.395 65.4041 588.054 62.7648C586.705 60.1255 586.03 57.0984 586.03 53.6833C586.03 50.2682 586.705 47.3085 588.054 44.6861V44.6945ZM611.141 48.5312C610.332 47.064 609.253 45.9341 607.878 45.1499C606.512 44.3657 605.045 43.9693 603.468 43.9693C601.891 43.9693 600.449 44.3488 599.125 45.1161C597.802 45.8835 596.722 46.9965 595.896 48.4637C595.07 49.9309 594.656 51.6764 594.656 53.6833C594.656 55.6902 595.07 57.4525 595.896 58.9619C596.722 60.4713 597.81 61.6265 599.159 62.436C600.508 63.2455 601.942 63.6418 603.476 63.6418C605.011 63.6418 606.512 63.2455 607.887 62.4613C609.253 61.6771 610.34 60.5472 611.15 59.0799C611.951 57.6127 612.356 55.8504 612.356 53.8014C612.356 51.7523 611.951 49.99 611.15 48.5228L611.141 48.5312Z"
+                        fill="white" />
+                    <path
+                        d="M634.145 37.0892L642.779 60.4466L651.532 37.0892H660.529L639.828 86.342H630.831L638.074 69.6799L624.675 37.0808H634.153L634.145 37.0892Z"
+                        fill="white" />
+                    <path
+                        d="M145.701 110.269C125.691 110.269 109.476 94.0534 109.476 74.0436V0C149.487 0 181.926 32.4389 181.926 72.45V74.0521C181.926 94.0618 165.711 110.277 145.701 110.277V110.269Z"
+                        fill="#397DFF" />
+                    <path
+                        d="M90.9667 110.269C70.9569 110.269 54.7417 94.0534 54.7417 74.0436V0C94.7528 0 127.192 32.4389 127.192 72.45V74.0521C127.192 94.0618 110.976 110.277 90.9667 110.277V110.269Z"
+                        fill="#0952DF" />
+                    <path
+                        d="M36.225 110.268C56.2315 110.268 72.4499 94.0498 72.4499 74.0433C72.4499 54.0368 56.2315 37.8184 36.225 37.8184C16.2185 37.8184 0 54.0368 0 74.0433C0 94.0498 16.2185 110.268 36.225 110.268Z"
+                        fill="#FFB000" />
                 </svg>
                 <span class="system-name">Stations Monitoring System</span>
             </div>
@@ -1642,49 +1749,49 @@
                 <div class="stat-value" id="onlineCount">0</div>
                 <div class="stat-trend up" id="onlineTrend"></div>
             </div>
-            
+
             <div class="stat-card offline">
                 <div class="stat-label">Inactive</div>
                 <div class="stat-value" id="offlineCount">0</div>
                 <div class="stat-trend down" id="offlineTrend"></div>
             </div>
-            
+
             <div class="stat-card" style="border-left: 3px solid #6b7280;">
                 <div class="stat-label">Disabled</div>
                 <div class="stat-value" id="disabledCount" style="color: #6b7280;">0</div>
                 <div class="stat-station" style="font-size: 10px; color: var(--text-secondary);">Not monitored</div>
             </div>
-            
+
             <div class="stat-card" style="border-left: 3px solid var(--success);">
                 <div class="stat-label">📈 Avg Uptime</div>
                 <div class="stat-value" id="avgUptime" style="color: var(--success);">0%</div>
                 <div class="stat-station" id="avgUptimeInfo">All stations avg</div>
             </div>
-            
+
             <div class="stat-card" style="border-left: 3px solid var(--danger);">
                 <div class="stat-label">📉 Avg Downtime</div>
                 <div class="stat-value" id="avgDowntime" style="color: var(--danger);">0%</div>
                 <div class="stat-station" id="avgDowntimeInfo">All stations avg</div>
             </div>
-            
+
             <div class="stat-card temp">
                 <div class="stat-label">🌡️ Max Temp</div>
                 <div class="stat-value" id="maxTemp">--°C</div>
                 <div class="stat-station" id="maxTempStation">--</div>
             </div>
-            
+
             <div class="stat-card" style="border-left: 3px solid #06b6d4;">
                 <div class="stat-label">❄️ Min Temp</div>
                 <div class="stat-value" id="minTemp" style="color: #06b6d4;">--°C</div>
                 <div class="stat-station" id="minTempStation">--</div>
             </div>
-            
+
             <div class="stat-card rain">
                 <div class="stat-label">🌧️ Max Rainfall</div>
                 <div class="stat-value" id="maxRain">-- mm</div>
                 <div class="stat-station" id="maxRainStation">--</div>
             </div>
-            
+
             <div class="stat-card" style="border-left: 3px solid #8b5cf6;">
                 <div class="stat-label">💨 Max Wind Gust</div>
                 <div class="stat-value" id="maxWindGust" style="color: #8b5cf6;">-- km/h</div>
@@ -1709,31 +1816,35 @@
                             <div class="ring-label">Stations</div>
                         </div>
                     </div>
-                    
+
                     <div class="ring-legend">
                         <div class="legend-item">
                             <div class="legend-dot online"></div>
-                            <span class="legend-label">Active: <span class="legend-count" id="legendOnline">0</span></span>
+                            <span class="legend-label">Active: <span class="legend-count"
+                                    id="legendOnline">0</span></span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-dot offline"></div>
-                            <span class="legend-label">Inactive: <span class="legend-count" id="legendOffline">0</span></span>
+                            <span class="legend-label">Inactive: <span class="legend-count"
+                                    id="legendOffline">0</span></span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-dot disabled"></div>
-                            <span class="legend-label">Disabled: <span class="legend-count" id="legendDisabled">0</span></span>
+                            <span class="legend-label">Disabled: <span class="legend-count"
+                                    id="legendDisabled">0</span></span>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Category/Source Uptime Summary -->
             <div class="chart-card">
                 <div class="chart-title">
                     <span class="chart-icon">📊</span>
                     <span id="categoryChartTitle">Category Availability Summary</span>
                 </div>
-                <div class="chart-controls" style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <div class="chart-controls"
+                    style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                     <div style="font-size:13px; color:var(--text-secondary);">Group:</div>
                     <button id="btnCategory" class="chart-toggle active" data-group="category">Category</button>
                     <button id="btnSource" class="chart-toggle" data-group="source">Source</button>
@@ -1743,7 +1854,8 @@
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
                     <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
                         <div style="font-size:13px; color:var(--text-secondary);">Network:</div>
-                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)" style="min-width: 140px;">
+                        <select id="networkFilter" class="source-filter" onchange="filterByNetwork(this.value)"
+                            style="min-width: 140px;">
                             <option value="all">🌐 All Networks</option>
                             <option value="ww">🏠 WeatherWalay</option>
                             <option value="wu">🌐 Weather Underground</option>
@@ -1755,14 +1867,16 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Overall Uptime Trend Chart -->
         <div class="chart-card" style="margin-bottom: 25px;">
-            <div class="chart-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div class="chart-title"
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span class="chart-icon">📈</span>
                     <span>Overall Uptime % Trend</span>
-                    <span id="uptimeTrendAvg" style="background: rgba(16,185,129,0.15); color: var(--success); padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">--</span>
+                    <span id="uptimeTrendAvg"
+                        style="background: rgba(16,185,129,0.15); color: var(--success); padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">--</span>
                 </div>
                 <div class="chart-controls" style="display:flex; gap:6px; align-items:center;">
                     <button class="uptime-range-btn active" data-range="24h">24H</button>
@@ -1790,11 +1904,13 @@
             <div class="station-list">
                 <div class="list-header">
                     <h2 class="list-title" style="margin: 0;">All Stations:</h2>
-                    
+
                     <!-- Controls Row -->
                     <div class="controls" style="gap: 8px;">
-                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 120px;">
-                        <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)" style="min-width: 120px;">
+                        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..."
+                            style="width: 120px;">
+                        <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)"
+                            style="min-width: 120px;">
                             <option value="all">📊 All Categories</option>
                             <option value="corporate">🏢 Corporate</option>
                             <option value="community">👥 Community</option>
@@ -1808,19 +1924,22 @@
                             <option value="Misol">Misol</option>
                             <option value="WU">WU</option>
                         </select>
-                        <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)" style="min-width: 110px;">
+                        <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)"
+                            style="min-width: 110px;">
                             <option value="all">🔘 All Status</option>
                             <option value="active">🟢 Active</option>
                             <option value="inactive">🔴 Inactive</option>
                             <option value="disabled">⚫ Disabled</option>
                         </select>
-                        <select id="exportDropdown" class="source-filter" onchange="handleExport(this.value)" style="min-width: 100px;">
+                        <select id="exportDropdown" class="source-filter" onchange="handleExport(this.value)"
+                            style="min-width: 100px;">
                             <option value="">📤 Export</option>
                             <option value="csv">📥 CSV</option>
                             <option value="excel">📊 Excel</option>
                             <option value="print">🖨️ Print</option>
                         </select>
-                        <select id="uptimePeriod" class="source-filter" onchange="handleUptimePeriod(this.value)" style="min-width: 120px;">
+                        <select id="uptimePeriod" class="source-filter" onchange="handleUptimePeriod(this.value)"
+                            style="min-width: 120px;">
                             <option value="24h">⏱️ 24h</option>
                             <option value="daily">⏱️ Today</option>
                             <option value="7d">⏱️ 7D</option>
@@ -1829,9 +1948,10 @@
                             <option value="custom">⏱️ Custom</option>
                         </select>
                     </div>
-                    
+
                     <!-- Custom Date Range Row (hidden by default) -->
-                    <div id="customDateRange" style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div id="customDateRange"
+                        style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
                         <span style="color: var(--text-secondary); font-size: 13px;">Custom Range:</span>
                         <input type="date" id="startDate" class="date-input" title="Start Date">
                         <span style="color: var(--text-secondary);">to</span>
@@ -1839,7 +1959,7 @@
                         <button class="apply-btn" onclick="applyCustomRange()">Apply</button>
                     </div>
                 </div>
-                
+
                 <div class="table-container">
                     <table>
                         <thead>
@@ -1849,8 +1969,9 @@
                                 <th onclick="sortTable('status')">Status ↕</th>
                                 <th onclick="sortTable('temperature')">Temp ↕</th>
                                 <th onclick="sortTable('rainfall')">Rain ↕</th>
-                                <th onclick="sortTable('uptime')"><span id="availabilityHeader">Availability</span> ↕</th>
-                                <th onclick="sortTable('location')">POI ↕</th>
+                                <th onclick="sortTable('uptime')"><span id="availabilityHeader">Availability</span> ↕
+                                </th>
+                                <th onclick="sortTable('last_seen')">Last Online ↕</th>
                             </tr>
                         </thead>
                         <tbody id="stationsTable">
@@ -1868,11 +1989,16 @@
                         Recent Offline Stations
                     </h3>
                 </div>
-                <div class="offline-filters" style="padding: 8px 16px; display: flex; gap: 6px; border-bottom: 1px solid var(--border-color);">
-                    <button class="offline-filter-btn active" data-source="all" onclick="filterOfflineBySource('all')">All</button>
-                    <button class="offline-filter-btn" data-source="Davis" onclick="filterOfflineBySource('Davis')">Davis</button>
-                    <button class="offline-filter-btn" data-source="Misol" onclick="filterOfflineBySource('Misol')">Misol</button>
-                    <button class="offline-filter-btn" data-source="WU" onclick="filterOfflineBySource('WU')">WU</button>
+                <div class="offline-filters"
+                    style="padding: 8px 16px; display: flex; gap: 6px; border-bottom: 1px solid var(--border-color);">
+                    <button class="offline-filter-btn active" data-source="all"
+                        onclick="filterOfflineBySource('all')">All</button>
+                    <button class="offline-filter-btn" data-source="Davis"
+                        onclick="filterOfflineBySource('Davis')">Davis</button>
+                    <button class="offline-filter-btn" data-source="Misol"
+                        onclick="filterOfflineBySource('Misol')">Misol</button>
+                    <button class="offline-filter-btn" data-source="WU"
+                        onclick="filterOfflineBySource('WU')">WU</button>
                 </div>
                 <div class="panel-content" id="offlinePanel">
                     <!-- Populated by JS -->
@@ -1954,7 +2080,7 @@
             padding: 20px;
             animation: fadeIn 0.3s ease;
         }
-        
+
         .modal-content {
             background: var(--bg-card);
             border-radius: 16px;
@@ -1966,7 +2092,7 @@
             border: 1px solid var(--border);
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
-        
+
         .modal-close {
             position: absolute;
             top: 15px;
@@ -1979,11 +2105,11 @@
             z-index: 10;
             transition: color 0.2s;
         }
-        
+
         .modal-close:hover {
             color: var(--danger);
         }
-        
+
         .modal-header {
             padding: 25px 30px;
             border-bottom: 1px solid var(--border);
@@ -1992,23 +2118,25 @@
             gap: 15px;
             flex-wrap: wrap;
         }
-        
+
         .modal-header h2 {
             font-family: 'Orbitron', monospace;
             font-size: 22px;
             color: var(--text-primary);
             margin: 0;
         }
-        
+
         .modal-badges {
             display: flex;
             gap: 10px;
             align-items: center;
             flex-wrap: wrap;
         }
+
         .modal-intervals {
             gap: 6px;
         }
+
         .modal-interval-btn {
             background: transparent;
             border: 1px solid var(--border);
@@ -2018,11 +2146,13 @@
             cursor: pointer;
             font-size: 13px;
         }
+
         .modal-interval-btn.active {
             background: var(--primary);
             color: #fff;
             border-color: var(--primary-dark);
         }
+
         .chart-toggle {
             background: transparent;
             border: 1px solid var(--border);
@@ -2032,11 +2162,13 @@
             cursor: pointer;
             font-size: 13px;
         }
+
         .chart-toggle.active {
             background: var(--primary);
             color: #fff;
             border-color: var(--primary-dark);
         }
+
         .uptime-range-btn {
             background: transparent;
             border: 1px solid var(--border);
@@ -2048,16 +2180,19 @@
             font-weight: 600;
             transition: all 0.2s;
         }
+
         .uptime-range-btn:hover {
             background: rgba(14, 165, 233, 0.1);
             border-color: var(--primary);
             color: var(--primary);
         }
+
         .uptime-range-btn.active {
             background: var(--primary);
             color: #fff;
             border-color: var(--primary);
         }
+
         .offline-filter-btn {
             background: transparent;
             border: 1px solid var(--border);
@@ -2068,26 +2203,28 @@
             font-size: 12px;
             transition: all 0.2s;
         }
+
         .offline-filter-btn:hover {
             background: var(--bg-hover);
         }
+
         .offline-filter-btn.active {
             background: var(--primary);
             color: #fff;
             border-color: var(--primary-dark);
         }
-        
+
         .modal-body {
             padding: 25px 30px;
         }
-        
+
         .modal-stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 15px;
             margin-bottom: 25px;
         }
-        
+
         .modal-stat {
             background: var(--bg-dark);
             padding: 20px;
@@ -2095,7 +2232,7 @@
             text-align: center;
             border: 1px solid var(--border);
         }
-        
+
         .modal-stat-label {
             font-size: 12px;
             color: var(--text-secondary);
@@ -2103,18 +2240,26 @@
             letter-spacing: 1px;
             margin-bottom: 8px;
         }
-        
+
         .modal-stat-value {
             font-family: 'Orbitron', monospace;
             font-size: 24px;
             font-weight: 700;
             color: var(--primary);
         }
-        
-        .modal-stat-value.good { color: var(--success); }
-        .modal-stat-value.warning { color: var(--warning); }
-        .modal-stat-value.bad { color: var(--danger); }
-        
+
+        .modal-stat-value.good {
+            color: var(--success);
+        }
+
+        .modal-stat-value.warning {
+            color: var(--warning);
+        }
+
+        .modal-stat-value.bad {
+            color: var(--danger);
+        }
+
         .modal-info-row {
             display: flex;
             gap: 30px;
@@ -2125,35 +2270,35 @@
             font-size: 14px;
             color: var(--text-secondary);
         }
-        
+
         .modal-chart-container {
             margin-bottom: 25px;
         }
-        
+
         .modal-chart-container h3 {
             font-size: 16px;
             color: var(--text-primary);
             margin-bottom: 15px;
         }
-        
+
         .modal-chart-container canvas {
             background: var(--bg-dark);
             border-radius: 12px;
             padding: 15px;
             max-height: 250px;
         }
-        
+
         .modal-chart-container {
             height: 280px;
             position: relative;
         }
-        
+
         .modal-downtime-section h3 {
             font-size: 16px;
             color: var(--text-primary);
             margin-bottom: 15px;
         }
-        
+
         #downtimeRecords {
             background: var(--bg-dark);
             border-radius: 12px;
@@ -2161,7 +2306,7 @@
             font-size: 14px;
             color: var(--text-secondary);
         }
-        
+
         .downtime-record {
             padding: 12px;
             border-bottom: 1px solid var(--border);
@@ -2169,25 +2314,25 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .downtime-record:last-child {
             border-bottom: none;
         }
-        
+
         .downtime-time {
             color: var(--text-primary);
         }
-        
+
         .downtime-duration {
             color: var(--danger);
             font-weight: 600;
         }
-        
+
         @media (max-width: 768px) {
             .modal-stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
-            
+
             .modal-info-row {
                 flex-direction: column;
                 gap: 10px;
@@ -2198,12 +2343,12 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-    
+
     <script>
         // Configuration
         const API_BASE = 'https://hubservice.weatherwalay.com';
         const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
-        
+
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
             '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',
@@ -2280,7 +2425,7 @@
             '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
             '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow'
         };
-        
+
         // Category display names and colors
         const CATEGORY_CONFIG = {
             'community': { name: 'Community', color: '#3b82f6', icon: '👥' },
@@ -2289,23 +2434,23 @@
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' },
             'wow': { name: 'WOW', color: '#f59e0b', icon: '🛣️' }
         };
-        
+
         // Source overrides for stations with missing/incorrect api_source from HubService
         const SOURCE_OVERRIDES = {
             '216612': 'Davis', '221544': 'Davis', '221563': 'Davis', '221555': 'Davis', '221695': 'Davis',
             '221726': 'Davis', '221703': 'Davis', '221746': 'Davis', '221873': 'Davis',
             '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis'
         };
-        
+
         // Current category filter
         let currentCategory = 'all';
-        
+
         // Check authentication
         const token = localStorage.getItem('ww_token');
         if (!token) {
             window.location.href = 'login.html';
         }
-        
+
         // Logout function
         function logout() {
             // Clear all ww_ related storage
@@ -2316,14 +2461,14 @@
             // Use replace to prevent going back
             window.location.replace('login.html');
         }
-        
+
         // Theme management
         function initTheme() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', savedTheme);
             updateThemeIcon(savedTheme);
         }
-        
+
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -2338,12 +2483,12 @@
                 else initCategoryUptimeChart();
             }
         }
-        
+
         function updateThemeIcon(theme) {
             const icon = document.querySelector('.theme-icon');
             icon.textContent = theme === 'dark' ? '☀️' : '🌙';
         }
-        
+
         // Global data
         let allStations = [];
         let currentFilter = 'all';
@@ -2355,7 +2500,7 @@
         let markerClusterGroup = null;
         let markers = [];
         let tileLayer = null;
-        
+
         // Get tile URL based on theme
         function getTileUrl() {
             const theme = document.documentElement.getAttribute('data-theme');
@@ -2364,19 +2509,19 @@
             }
             return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
         }
-        
+
         // Initialize map
         function initMap() {
             map = L.map('map', {
                 zoomControl: true,
                 scrollWheelZoom: true
             }).setView([30.3753, 69.3451], 6);
-            
+
             tileLayer = L.tileLayer(getTileUrl(), {
                 attribution: '© OpenStreetMap, © CartoDB',
                 maxZoom: 18
             }).addTo(map);
-            
+
             markerClusterGroup = L.markerClusterGroup({
                 maxClusterRadius: 50,
                 spiderfyOnMaxZoom: true,
@@ -2384,7 +2529,7 @@
             });
             map.addLayer(markerClusterGroup);
         }
-        
+
         // Update map tiles when theme changes
         function updateMapTiles() {
             if (tileLayer && map) {
@@ -2395,25 +2540,25 @@
                 }).addTo(map);
             }
         }
-        
+
         // Overall Uptime Trend Line Chart
         let uptimeTrendLineChart = null;
         let currentUptimeRange = '24h';
-        
+
         async function initUptimeTrendLineChart(range = '24h') {
             try {
                 currentUptimeRange = range;
                 const response = await fetch(`${WORKER_API}/api/uptime-trend-chart?range=${range}`);
                 if (!response.ok) {
-                    console.warn('Failed to fetch uptime trend data');
+                    // silenced
                     return;
                 }
                 const data = await response.json();
                 if (!data.success || !data.trend || data.trend.length === 0) {
-                    console.warn('No uptime trend data available');
+                    // silenced
                     return;
                 }
-                
+
                 // Update the average uptime display
                 const avgEl = document.getElementById('uptimeTrendAvg');
                 if (avgEl) {
@@ -2430,24 +2575,24 @@
                         avgEl.style.color = 'var(--danger)';
                     }
                 }
-                
+
                 // Also update the avg uptime/downtime stat cards
                 document.getElementById('avgUptime').textContent = data.overall_uptime + '%';
                 document.getElementById('avgDowntime').textContent = data.overall_downtime + '%';
                 const rangeLabel = range === '24h' ? '24 hours' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : '1 year';
                 document.getElementById('avgUptimeInfo').textContent = rangeLabel + ' avg';
                 document.getElementById('avgDowntimeInfo').textContent = rangeLabel + ' avg';
-                
+
                 const ctx = document.getElementById('uptimeTrendLineChart').getContext('2d');
-                
+
                 if (uptimeTrendLineChart) {
                     uptimeTrendLineChart.destroy();
                 }
-                
+
                 // Process data based on granularity
                 let labels = [];
                 let uptimeValues = [];
-                
+
                 if (data.granularity === 'hourly') {
                     // Group hourly data by day for 7d, or show hours for 24h
                     if (range === '24h') {
@@ -2468,7 +2613,7 @@
                             dailyData[day].sum += item.uptime_pct;
                             dailyData[day].count++;
                         });
-                        
+
                         const days = Object.keys(dailyData).sort();
                         labels = days.map(d => {
                             const date = new Date(d);
@@ -2491,7 +2636,7 @@
                     });
                     uptimeValues = data.trend.map(item => item.uptime_pct);
                 }
-                
+
                 uptimeTrendLineChart = new Chart(ctx, {
                     type: 'line',
                     data: {
@@ -2523,39 +2668,39 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         return `Uptime: ${context.parsed.y.toFixed(1)}%`;
                                     }
                                 }
                             }
                         },
                         scales: {
-                            x: { 
-                                grid: { display: false, color: 'rgba(51, 65, 85, 0.3)' }, 
-                                ticks: { 
+                            x: {
+                                grid: { display: false, color: 'rgba(51, 65, 85, 0.3)' },
+                                ticks: {
                                     color: '#94a3b8',
                                     maxRotation: range === '1y' ? 45 : 0,
                                     autoSkip: true,
                                     maxTicksLimit: range === '1y' ? 12 : (range === '30d' ? 10 : 8)
-                                } 
+                                }
                             },
-                            y: { 
-                                min: 0, 
-                                max: 100, 
-                                grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, 
-                                ticks: { 
-                                    color: '#94a3b8', 
-                                    callback: function(v) { return v + '%'; }
+                            y: {
+                                min: 0,
+                                max: 100,
+                                grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    callback: function (v) { return v + '%'; }
                                 }
                             }
                         }
                     }
                 });
             } catch (e) {
-                console.warn('Error initializing uptime trend chart:', e);
+                // silenced
             }
         }
-        
+
         // Setup uptime range toggle buttons
         function setupUptimeRangeToggles() {
             document.querySelectorAll('.uptime-range-btn').forEach(btn => {
@@ -2568,7 +2713,7 @@
                 });
             });
         }
-        
+
         // Category Uptime Chart
         let categoryUptimeChart = null;
         let categoryChartType = 'bar';
@@ -2609,7 +2754,7 @@
                 ctx.restore();
             }
         };
-        
+
         function initCategoryUptimeChart() {
             const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
 
@@ -2697,7 +2842,7 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
                                         return [
                                             `Uptime: ${context.parsed.y.toFixed(1)}%`,
@@ -2709,7 +2854,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -2743,16 +2888,16 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
-                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`, `Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -2842,7 +2987,7 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
                                         return [
                                             `Availability: ${context.parsed.y.toFixed(1)}%`,
@@ -2854,7 +2999,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -2888,16 +3033,16 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
-                                        return [`Availability: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                        return [`Availability: ${context.parsed.y.toFixed(1)}%`, `Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -2996,7 +3141,7 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
                                         return [
                                             `Uptime: ${context.parsed.y.toFixed(1)}%`,
@@ -3008,7 +3153,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3042,16 +3187,16 @@
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const idx = context.dataIndex;
-                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`,`Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`, `Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function(v){return v + '%';} } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3114,7 +3259,7 @@
                     initCategoryUptimeChart();
                 }
             } catch (e) {
-                console.warn('refreshCategoryUptimeChart error:', e.message);
+                // silenced
             }
         }
 
@@ -3126,18 +3271,18 @@
             } else {
                 const catConfig = CATEGORY_CONFIG[currentCategory];
                 document.getElementById('categoryChartTitle').textContent = `${catConfig.name} Stations Uptime`;
-                
+
                 // Show single category stats
                 const catStations = allStations.filter(s => s.category === currentCategory);
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
                 const inactive = catStations.filter(s => s.status === 'Inactive').length;
                 const disabled = catStations.filter(s => s.status === 'Disabled').length;
-                
+
                 if (categoryUptimeChart) {
                     categoryUptimeChart.destroy();
                 }
-                
+
                 const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
                 categoryUptimeChart = new Chart(ctx, {
                     type: 'doughnut',
@@ -3168,7 +3313,7 @@
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
                                 callbacks: {
-                                    label: function(context) {
+                                    label: function (context) {
                                         const pct = ((context.parsed / total) * 100).toFixed(1);
                                         return `${context.label}: ${context.parsed} (${pct}%)`;
                                     }
@@ -3179,22 +3324,22 @@
                 });
             }
         }
-        
+
         // Update map markers
         function updateMapMarkers() {
             markerClusterGroup.clearLayers();
             markers = [];
-            
+
             // Use the shared filter function so map matches table exactly
             let stations = getFilteredStations();
-            
+
             stations.forEach(station => {
                 // Use latitude/longitude fields
                 const lat = station.latitude;
                 const lng = station.longitude;
-                
+
                 if (!lat || !lng || lat === 0 || lng === 0) return;
-                
+
                 // Color-code by status: Active=green, Inactive=yellow, Disabled=gray
                 let markerClass = 'offline';
                 if (station.status === 'Active') {
@@ -3204,16 +3349,16 @@
                 } else if (station.status === 'Disabled') {
                     markerClass = 'disabled';
                 }
-                
+
                 const uptime = station.uptime !== undefined ? parseFloat(station.uptime) : 0;
                 const category = station.category || 'community';
                 const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
-                
+
                 // Determine uptime color
                 let uptimeClass = 'popup-uptime-bad';
                 if (uptime >= 95) uptimeClass = 'popup-uptime-good';
                 else if (uptime >= 80) uptimeClass = 'popup-uptime-warning';
-                
+
                 const icon = L.divIcon({
                     className: 'custom-marker',
                     html: `<div class="pulse-marker ${markerClass}"></div>`,
@@ -3224,7 +3369,7 @@
                 // Temperature and Rainfall display for popup
                 const tempDisplay = station.temperature !== null && station.temperature !== undefined ? station.temperature + '°C' : '-';
                 const rainDisplay = station.rainfall !== null && station.rainfall !== undefined ? station.rainfall + ' mm' : '-';
-                
+
                 const marker = L.marker([lat, lng], { icon })
                     .bindPopup(`
                         <div class="custom-popup">
@@ -3242,20 +3387,20 @@
                         maxWidth: 250,
                         className: 'custom-leaflet-popup'
                     });
-                
+
                 marker.stationId = station.station_id;
                 markerClusterGroup.addLayer(marker);
                 markers.push(marker);
             });
         }
-        
+
         // Animate counter
         function animateCounter(element, target) {
             const duration = 1000;
             const start = 0;
             const increment = target / (duration / 16);
             let current = start;
-            
+
             const timer = setInterval(() => {
                 current += increment;
                 if (current >= target) {
@@ -3266,13 +3411,13 @@
                 }
             }, 16);
         }
-        
+
         // Store previous stats for trend calculation
         let previousStats = { online: 0, offline: 0, avgTemp: null };
-        
+
         // Display total stations (can be higher than actual for presentation)
         const DISPLAY_TOTAL_STATIONS = 350;
-        
+
         // Fetch dashboard stats from backend API (avg uptime/downtime, daily extremes since midnight PKT)
         async function fetchDashboardStats() {
             try {
@@ -3285,21 +3430,21 @@
                         document.getElementById('avgDowntime').textContent = data.average_uptime.downtime_pct + '%';
                         document.getElementById('avgUptimeInfo').textContent = `${data.average_uptime.stations_counted} stations avg`;
                         document.getElementById('avgDowntimeInfo').textContent = `${data.average_uptime.stations_counted} stations avg`;
-                        
+
                         // Update daily extremes (since midnight PKT)
                         if (data.daily_extremes.max_temp !== null) {
                             document.getElementById('maxTemp').textContent = data.daily_extremes.max_temp + '°C';
                             document.getElementById('maxTempStation').textContent = data.daily_extremes.max_temp_station || '--';
                         }
-                        
+
                         if (data.daily_extremes.min_temp !== null) {
                             document.getElementById('minTemp').textContent = data.daily_extremes.min_temp + '°C';
                             document.getElementById('minTempStation').textContent = data.daily_extremes.min_temp_station || '--';
                         }
-                        
+
                         document.getElementById('maxRain').textContent = data.daily_extremes.max_rainfall + ' mm';
                         document.getElementById('maxRainStation').textContent = data.daily_extremes.max_rainfall_station || 'No rainfall';
-                        
+
                         // Max Wind Gust
                         if (data.daily_extremes.max_wind_gust !== undefined) {
                             document.getElementById('maxWindGust').textContent = data.daily_extremes.max_wind_gust + ' km/h';
@@ -3308,10 +3453,10 @@
                     }
                 }
             } catch (e) {
-                console.warn('Failed to fetch dashboard stats:', e);
+                // silenced
             }
         }
-        
+
         // Fetch last API sync time from storage stats
         async function fetchLastApiSyncTime() {
             try {
@@ -3341,24 +3486,24 @@
                     }
                 }
             } catch (e) {
-                console.warn('Failed to fetch last sync time:', e);
+                // silenced
             }
         }
-        
+
         // Update stats cards
         function updateStats(stats) {
             const realTotal = stats.total || 0;
             const realOnline = stats.online || 0;
             const realOffline = stats.offline || 0;  // Now only Inactive stations
             const realDisabled = stats.disabled || 0;
-            
+
             // Calculate display values: extra stations are always "online"
             const extraStations = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
             const displayTotal = DISPLAY_TOTAL_STATIONS;
             const displayOnline = realOnline + extraStations;
             const displayOffline = realOffline; // Inactive count stays real
             const displayDisabled = realDisabled; // Disabled count stays real
-            
+
             animateCounter(document.getElementById('ringTotal'), displayTotal);
             animateCounter(document.getElementById('onlineCount'), displayOnline);
             animateCounter(document.getElementById('offlineCount'), displayOffline);
@@ -3366,24 +3511,24 @@
             animateCounter(document.getElementById('legendOnline'), displayOnline);
             animateCounter(document.getElementById('legendOffline'), displayOffline);
             animateCounter(document.getElementById('legendDisabled'), displayDisabled);
-            
+
             // Update trend indicators
             updateTrendIndicator('onlineTrend', displayOnline, previousStats.online);
             updateTrendIndicator('offlineTrend', displayOffline, previousStats.offline, true);
-            
+
             // Fetch daily extremes and avg uptime from backend API (since midnight PKT)
             fetchDashboardStats();
-            
+
             // Fetch last API sync time from database
             fetchLastApiSyncTime();
-            
+
             // Store current stats for next comparison (use display values)
             previousStats.online = displayOnline;
             previousStats.offline = displayOffline;
-            
+
             updateRingChart(displayOnline, displayOffline, displayDisabled, displayTotal);
         }
-        
+
         // Update trend indicator
         function updateTrendIndicator(elementId, current, previous, inverse = false) {
             const element = document.getElementById(elementId);
@@ -3391,7 +3536,7 @@
                 if (element) element.textContent = '';
                 return;
             }
-            
+
             const diff = current - previous;
             if (diff === 0) {
                 element.textContent = '→ No change';
@@ -3445,30 +3590,30 @@
             if (!overlay) return;
             overlay.style.display = 'none';
         }
-        
+
         // Update ring chart
         function updateRingChart(online, offline, disabled, total) {
             const circumference = 2 * Math.PI * 80;
             const onlinePercent = total > 0 ? (online / total) * 100 : 0;
             const offlinePercent = total > 0 ? (offline / total) * 100 : 0;
             const disabledPercent = total > 0 ? (disabled / total) * 100 : 0;
-            
+
             const ringOnline = document.getElementById('ringOnline');
             const onlineLength = (circumference * onlinePercent) / 100;
             ringOnline.style.strokeDasharray = `${onlineLength} ${circumference}`;
             ringOnline.style.strokeDashoffset = '0';
-            
+
             const ringOffline = document.getElementById('ringOffline');
             const offlineLength = (circumference * offlinePercent) / 100;
             ringOffline.style.strokeDasharray = `${offlineLength} ${circumference}`;
             ringOffline.style.strokeDashoffset = -onlineLength;
-            
+
             const ringDisabled = document.getElementById('ringDisabled');
             const disabledLength = (circumference * disabledPercent) / 100;
             ringDisabled.style.strokeDasharray = `${disabledLength} ${circumference}`;
             ringDisabled.style.strokeDashoffset = -(onlineLength + offlineLength);
         }
-        
+
         // Update category counts
         function updateCategoryCounts() {
             const counts = {
@@ -3478,42 +3623,42 @@
                 reference: 0,
                 wu: 0
             };
-            
+
             allStations.forEach(station => {
                 const category = station.category || 'community';
                 if (counts[category] !== undefined) {
                     counts[category]++;
                 }
             });
-            
+
             // Update tab counts
             const countAll = document.getElementById('countAll');
             const countCorporate = document.getElementById('countCorporate');
             const countCommunity = document.getElementById('countCommunity');
             const countReference = document.getElementById('countReference');
             const countWU = document.getElementById('countWU');
-            
+
             if (countAll) countAll.textContent = counts.all;
             if (countCorporate) countCorporate.textContent = counts.corporate;
             if (countCommunity) countCommunity.textContent = counts.community;
             if (countReference) countReference.textContent = counts.reference;
             if (countWU) countWU.textContent = counts.wu;
         }
-        
+
         // Format relative time
         function formatRelativeTime(timestamp) {
             if (!timestamp) return 'Unknown';
-            
+
             // Both timestamps from API are in Pakistan time
             // Parse as local time string and calculate difference
             const parts = timestamp.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
             if (!parts) return 'Unknown';
-            
+
             const [, year, month, day, hour, minute, second] = parts;
-            
+
             // Create date object treating it as UTC (to avoid browser timezone issues)
             const then = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-            
+
             // Get current time and add 5 hours to convert to Pakistan time, then treat as UTC
             const nowUTC = new Date();
             const nowPakistanHours = nowUTC.getUTCHours() + 5;
@@ -3525,29 +3670,29 @@
                 nowUTC.getUTCMinutes(),
                 nowUTC.getUTCSeconds()
             ));
-            
+
             const diffMs = nowPakistan - then;
             const diffMins = Math.floor(diffMs / 60000);
             const diffHours = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHours / 24);
-            
+
             if (isNaN(diffMins) || diffMins < 0) return 'Unknown';
             if (diffMins < 1) return 'Just now';
             if (diffMins < 60) return `${diffMins} min ago`;
             if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
             return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
         }
-        
+
         // Current time range for filtering
         let currentTimeRange = '24h';
-        
+
         // Filter by category dropdown
         function filterByCategory(category) {
             currentCategory = category;
             renderTable();
             updateMapMarkers();
             updateCategoryChart();
-            
+
             // Update count display
             const counts = {
                 all: allStations.length,
@@ -3559,14 +3704,14 @@
             const count = counts[category] || counts.all;
             document.getElementById('countAll').textContent = count;
         }
-        
+
         function filterByNetwork(network) {
             currentNetworkFilter = network;
             localStorage.setItem('networkFilter', network);
             renderTable();
             updateMapMarkers();
             updateCategoryChart();
-            
+
             // Update count display based on network filter (if element exists)
             let filteredStations = allStations;
             if (network === 'ww') {
@@ -3579,16 +3724,16 @@
                 countAllEl.textContent = filteredStations.length;
             }
         }
-        
+
         // Set time range for uptime display
         function setTimeRange(range) {
             currentTimeRange = range;
-            
+
             // Update active button
             document.querySelectorAll('.time-range-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.range === range);
             });
-            
+
             // Hide custom date picker if not custom
             if (range !== 'custom') {
                 document.getElementById('customDateRange').style.display = 'none';
@@ -3596,75 +3741,75 @@
                 loadUptimeData(range);
             }
         }
-        
+
         // Show custom date picker
         function showCustomDatePicker() {
             currentTimeRange = 'custom';
-            
+
             // Update active button
             document.querySelectorAll('.time-range-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.range === 'custom');
             });
-            
+
             // Show date pickers
             const customDiv = document.getElementById('customDateRange');
             customDiv.style.display = 'flex';
-            
+
             // Set default dates (last 7 days)
             const today = new Date();
             const weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
-            
+
             document.getElementById('endDate').value = today.toISOString().split('T')[0];
             document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
         }
-        
+
         // Apply custom date range
         function applyCustomRange() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            
+
             if (!startDate || !endDate) {
                 showNotification('Please select both start and end dates', 'error');
                 return;
             }
-            
+
             if (new Date(startDate) > new Date(endDate)) {
                 showNotification('Start date must be before end date', 'error');
                 return;
             }
-            
+
             loadUptimeData('custom', startDate, endDate);
         }
-        
+
         // Load uptime data for selected time range
         async function loadUptimeData(range, startDate = null, endDate = null) {
             try {
                 showNotification('Loading uptime data...', 'info');
-                
+
                 let url = `${WORKER_API}/api/uptime-percentages?range=${range}`;
                 if (range === 'custom' && startDate && endDate) {
                     url += `&start=${startDate}&end=${endDate}`;
                 }
-                
+
                 const response = await fetch(url);
                 if (!response.ok) {
                     showNotification('Failed to load uptime data', 'error');
                     return;
                 }
-                
+
                 const data = await response.json();
                 if (!data.uptime_data) {
                     showNotification('No uptime data returned', 'error');
                     return;
                 }
-                
+
                 // Update station uptime values
                 const uptimeMap = {};
                 data.uptime_data.forEach(u => {
                     uptimeMap[u.station_id] = u.uptime_24h;
                 });
-                
+
                 // Update allStations with new uptime
                 let updatedCount = 0;
                 allStations = allStations.map(s => {
@@ -3675,24 +3820,24 @@
                     }
                     return s;
                 });
-                
+
                 renderTable();
                 showNotification(`Uptime updated for ${updatedCount} stations (${range})`, 'success');
             } catch (e) {
-                console.warn('Failed to load uptime data for range:', range, e);
+                // silenced
                 showNotification('Error loading uptime: ' + e.message, 'error');
             }
         }
-        
+
         // Get filtered stations based on current filters (shared by table, PDF, CSV)
         function getFilteredStations() {
             let stations = [...allStations];
-            
+
             // Filter by category
             if (currentCategory !== 'all') {
                 stations = stations.filter(s => s.category === currentCategory);
             }
-            
+
             // Filter by status (Active, Inactive, Disabled)
             if (currentFilter !== 'all') {
                 stations = stations.filter(s => {
@@ -3702,12 +3847,12 @@
                     return true;
                 });
             }
-            
+
             // Filter by source (Davis, Misol, WU)
             if (currentSourceFilter !== 'all') {
                 stations = stations.filter(s => s.api_source === currentSourceFilter);
             }
-            
+
             // Filter by network (WW, WU)
             if (currentNetworkFilter !== 'all') {
                 if (currentNetworkFilter === 'ww') {
@@ -3716,21 +3861,21 @@
                     stations = stations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
                 }
             }
-            
+
             // Search
             const searchTerm = document.getElementById('searchBox').value.toLowerCase();
             if (searchTerm) {
-                stations = stations.filter(s => 
+                stations = stations.filter(s =>
                     (s.station_name && s.station_name.toLowerCase().includes(searchTerm)) ||
                     (s.location && s.location.toLowerCase().includes(searchTerm)) ||
                     (s.station_id && s.station_id.toString().includes(searchTerm)) ||
                     (s.category && s.category.toLowerCase().includes(searchTerm))
                 );
             }
-            
+
             return stations;
         }
-        
+
         // Get a human-readable description of active filters
         function getActiveFiltersDescription() {
             const filters = [];
@@ -3746,11 +3891,11 @@
         // Render table
         function renderTable() {
             let stations = getFilteredStations();
-            
+
             // Sort
             stations.sort((a, b) => {
                 let aVal, bVal;
-                
+
                 if (sortColumn === 'temperature') {
                     aVal = parseFloat(a.temperature) || -999;
                     bVal = parseFloat(b.temperature) || -999;
@@ -3760,6 +3905,9 @@
                 } else if (sortColumn === 'uptime') {
                     aVal = parseFloat(a.uptime_24h) || 0;
                     bVal = parseFloat(b.uptime_24h) || 0;
+                } else if (sortColumn === 'last_seen') {
+                    aVal = a.last_seen || '';
+                    bVal = b.last_seen || '';
                 } else if (sortColumn === 'name') {
                     aVal = String(a.station_name || '').toLowerCase();
                     bVal = String(b.station_name || '').toLowerCase();
@@ -3770,18 +3918,18 @@
                     aVal = String(a[sortColumn] || '').toLowerCase();
                     bVal = String(b[sortColumn] || '').toLowerCase();
                 }
-                
+
                 if (sortDirection === 'asc') {
                     return aVal > bVal ? 1 : -1;
                 } else {
                     return aVal < bVal ? 1 : -1;
                 }
             });
-            
+
             const tbody = document.getElementById('stationsTable');
             tbody.innerHTML = stations.map(station => {
                 const statusText = station.status ? station.status.toLowerCase() : 'unknown';
-                
+
                 // Get availability - use real 24h uptime if available, otherwise based on current status
                 let availability = 'N/A';
                 let hasHistoricalData = false;
@@ -3791,24 +3939,24 @@
                 } else if (station.uptime !== undefined && station.uptime !== null) {
                     availability = parseFloat(station.uptime).toFixed(1);
                 }
-                
+
                 // Color code availability
                 let availClass = '';
                 const availVal = parseFloat(availability) || 0;
                 if (availVal >= 90) availClass = 'style="color: var(--success)"';
                 else if (availVal >= 50) availClass = 'style="color: var(--warning)"';
                 else availClass = 'style="color: var(--danger)"';
-                
+
                 // Show current status clearly if no historical data
                 let availDisplay = hasHistoricalData ? `${availability}%` : (station.status === 'Active' ? '✓ Online' : '✗ Offline');
 
-                // POI/Location
-                const poi = station.location || 'N/A';
+                // Last Online - show "Online" for active, relative time for others
+                const lastOnline = station.status === 'Active' ? '🟢 Online' : station.status === 'Disabled' ? '⚫ Disabled' : formatRelativeTime(station.last_seen || station.last_update);
 
                 // Temperature and Rainfall display
                 const tempDisplay = station.temperature !== null && station.temperature !== undefined ? station.temperature + '°C' : '-';
                 const rainDisplay = station.rainfall !== null && station.rainfall !== undefined ? station.rainfall + ' mm' : '-';
-                
+
                 return `
                 <tr onclick="focusStation('${station.station_id}')" data-station-id="${station.station_id}">
                     <td><strong>${station.station_name || 'Unknown'}</strong><br><small style="color: var(--text-secondary)">ID: ${station.station_id}</small></td>
@@ -3822,67 +3970,67 @@
                     <td>${tempDisplay}</td>
                     <td>${rainDisplay}</td>
                     <td><strong ${availClass}>${availDisplay}</strong></td>
-                    <td><small>${poi}</small></td>
+                    <td><small>${lastOnline}</small></td>
                 </tr>
             `;
             }).join('');
-            
+
             // Update category counts
             updateCategoryCounts();
         }
-        
+
         // Focus on station (click table row -> zoom to marker and open modal)
         function focusStation(stationId) {
             const marker = markers.find(m => m.stationId == stationId);
             if (marker) {
                 map.setView(marker.getLatLng(), 12);
                 marker.openPopup();
-                
+
                 // Highlight table row
                 document.querySelectorAll('tr').forEach(tr => tr.classList.remove('selected'));
                 document.querySelector(`tr[data-station-id="${stationId}"]`)?.classList.add('selected');
             }
-            
+
             // Open the station detail modal
             openStationModal(stationId);
         }
-        
+
         // Station detail modal charts
         let stationUptimeChart = null;
         let stationTempChart = null;
-        
+
         // Open station modal and load details
         async function openStationModal(stationId) {
             const modal = document.getElementById('stationModal');
             modal.style.display = 'flex';
-            
+
             // Find station in allStations (this has correct data)
             const station = allStations.find(s => String(s.station_id) === String(stationId));
             currentModalStation = station; // Store for reference in updateModalWithData
-            
+
             // Set basic info immediately from LOCAL data (not API)
             document.getElementById('modalStationName').textContent = station?.station_name || 'Loading...';
             document.getElementById('modalStationId').textContent = stationId;
-            
+
             if (station) {
                 const statusText = (station.status || 'unknown').toLowerCase();
                 const statusBadge = document.getElementById('modalStationStatus');
                 statusBadge.textContent = station.status || 'UNKNOWN';
                 statusBadge.className = `status-badge ${statusText}`;
-                
+
                 // Set category badge
                 const category = station.category || 'community';
                 const catConfig = CATEGORY_CONFIG[category] || CATEGORY_CONFIG['community'];
                 const categoryBadge = document.getElementById('modalStationCategory');
                 categoryBadge.textContent = `${catConfig.icon} ${catConfig.name}`;
                 categoryBadge.className = `category-badge ${category}`;
-                
+
                 // Set temperature from local data - this is correct
                 const tempElement = document.getElementById('modalTemperature');
                 tempElement.textContent = station.temperature ? `${station.temperature}°C` : 'N/A';
                 tempElement.setAttribute('data-original', station.temperature || ''); // Preserve original
             }
-            
+
             // Load detailed history from station-history API (uses status_logs)
             try {
                 let query = '?hours=24';
@@ -3895,15 +4043,15 @@
                     // station-history returns data in the exact format updateModalWithData expects
                     updateModalWithData(data);
                 } else {
-                    console.error('Failed to load station history');
+                    // silenced
                     setModalPlaceholders();
                 }
             } catch (error) {
-                console.error('Error loading station history:', error);
+                // silenced
                 setModalPlaceholders();
             }
         }
-        
+
         function setModalPlaceholders() {
             document.getElementById('modalUptime').textContent = 'N/A';
             document.getElementById('modalDowntime').textContent = 'N/A';
@@ -3911,34 +4059,34 @@
             document.getElementById('modalTrackingSince').textContent = 'No data yet';
             document.getElementById('downtimeRecords').innerHTML = 'No tracking data available yet. Data will accumulate over time.';
         }
-        
+
         // Store current modal station for reference
         let currentModalStation = null;
         // Modal period (days/hours) used when fetching history
         let modalPeriodDays = 0;
         let modalPeriodHours = 24;
-        
+
         function updateModalWithData(data) {
             // Check if we have historical data
             const hasHistoricalData = data.uptime.total_checks > 0;
-            
+
             // Determine period label for titles
             let periodLabel = 'Last 24 Hours';
             if (modalPeriodDays === 7) periodLabel = 'Last 7 Days';
             else if (modalPeriodDays === 30) periodLabel = 'Last 30 Days';
             else if (modalPeriodDays === 365) periodLabel = 'Last Year';
             else if (modalPeriodHours && modalPeriodHours !== 24) periodLabel = `Last ${modalPeriodHours} Hours`;
-            
+
             // Update chart titles
             document.getElementById('uptimeChartTitle').textContent = `Availability History (${periodLabel})`;
             document.getElementById('tempChartTitle').textContent = `Temperature History (${periodLabel})`;
-            
+
             // Update stat labels for selected period
             const availLabelText = modalPeriodDays >= 7 ? `Availability (${modalPeriodDays}d)` : `Availability (${modalPeriodHours || 24}h)`;
             const downLabelText = modalPeriodDays >= 7 ? `Offline Time (${modalPeriodDays}d)` : `Offline Time (${modalPeriodHours || 24}h)`;
             document.getElementById('modalAvailLabel').textContent = availLabelText;
             document.getElementById('modalDownLabel').textContent = downLabelText;
-            
+
             // Update availability
             const uptimeValue = document.getElementById('modalUptime');
             if (hasHistoricalData) {
@@ -3950,36 +4098,36 @@
                 uptimeValue.textContent = isActive ? '✓ Online' : '✗ Offline';
                 uptimeValue.className = 'modal-stat-value ' + (isActive ? 'good' : 'bad');
             }
-            
+
             // DON'T update temperature from API response - it returns wrong station
             // Keep the temperature from local station data which was set in openStationModal
-            
+
             // Update offline time
             const downtimeValue = document.getElementById('modalDowntime');
             downtimeValue.textContent = data.downtime.total_minutes > 0 ? `${data.downtime.total_hours}h` : '0h';
             downtimeValue.className = 'modal-stat-value ' + (data.downtime.total_minutes === 0 ? 'good' : 'bad');
-            
+
             // Update outages count
             document.getElementById('modalIncidents').textContent = data.downtime.incidents;
-            
+
             // Tracking since
             if (data.tracking_since) {
                 document.getElementById('modalTrackingSince').textContent = formatDatePKT(data.tracking_since);
             } else {
                 document.getElementById('modalTrackingSince').textContent = 'Just started tracking';
             }
-            
+
             // Outage records
             if ((data.downtime.records && data.downtime.records.length > 0) || data.downtime.total_minutes > 0) {
                 let recordsHtml = '';
-                
+
                 // Show calculated downtime incidents if any
                 if (data.downtime.total_minutes > 0 && data.downtime.incidents > 0) {
                     recordsHtml += `<div style="margin-bottom: 10px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--danger);">
                         <strong>⚠️ ${data.downtime.incidents} outage${data.downtime.incidents > 1 ? 's' : ''} detected</strong> - Total offline time: ${data.downtime.total_hours}h
                     </div>`;
                 }
-                
+
                 // Show detailed records from downtime_records table
                 if (data.downtime.records && data.downtime.records.length > 0) {
                     recordsHtml += data.downtime.records.map(d => `
@@ -3989,26 +4137,26 @@
                         </div>
                     `).join('');
                 }
-                
+
                 document.getElementById('downtimeRecords').innerHTML = recordsHtml;
             } else {
                 document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No outages recorded (${periodLabel.toLowerCase()})</div>`;
             }
-            
+
             // Create uptime chart
             createStationUptimeChart(data.hourly_data);
-            
+
             // Create temperature chart
             createStationTempChart(data.hourly_data);
         }
-        
+
         function createStationUptimeChart(hourlyData) {
             const ctx = document.getElementById('stationUptimeChart').getContext('2d');
-            
+
             if (stationUptimeChart) {
                 stationUptimeChart.destroy();
             }
-            
+
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
@@ -4053,7 +4201,7 @@
                 ctx.fillText('No availability data for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
                 return;
             }
-            
+
             stationUptimeChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -4080,9 +4228,9 @@
                             min: 0,
                             max: 100,
                             grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { 
+                            ticks: {
                                 color: '#94a3b8',
-                                callback: function(value) { return value + '%'; }
+                                callback: function (value) { return value + '%'; }
                             }
                         },
                         x: {
@@ -4094,7 +4242,7 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
+                                label: function (context) {
                                     return 'Availability: ' + context.parsed.y + '%';
                                 }
                             }
@@ -4103,14 +4251,14 @@
                 }
             });
         }
-        
+
         function createStationTempChart(hourlyData) {
             const ctx = document.getElementById('stationTempChart').getContext('2d');
-            
+
             if (stationTempChart) {
                 stationTempChart.destroy();
             }
-            
+
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
@@ -4161,7 +4309,7 @@
                 ctx.fillText('No temperature data available for selected period', ctx.canvas.width / 2, ctx.canvas.height / 2);
                 return;
             }
-            
+
             stationTempChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -4186,9 +4334,9 @@
                     scales: {
                         y: {
                             grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { 
+                            ticks: {
                                 color: '#94a3b8',
-                                callback: function(value) { return value.toFixed(1) + '°C'; }
+                                callback: function (value) { return value.toFixed(1) + '°C'; }
                             }
                         },
                         x: {
@@ -4200,7 +4348,7 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
+                                label: function (context) {
                                     return 'Temp: ' + context.parsed.y.toFixed(1) + '°C';
                                 }
                             }
@@ -4209,10 +4357,10 @@
                 }
             });
         }
-        
+
         function closeStationModal() {
             document.getElementById('stationModal').style.display = 'none';
-            
+
             // Destroy charts to free memory
             if (stationUptimeChart) {
                 stationUptimeChart.destroy();
@@ -4223,14 +4371,14 @@
                 stationTempChart = null;
             }
         }
-        
+
         // Close modal on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeStationModal();
             }
         });
-        
+
         // Store offline alerts globally for filtering
         let currentOfflineAlerts = [];
         let currentOfflineSourceFilter = 'all';
@@ -4250,15 +4398,15 @@
         function renderOfflinePanel() {
             const panel = document.getElementById('offlinePanel');
             let alertsList = currentOfflineAlerts;
-            
+
             // Apply source filter
             if (currentOfflineSourceFilter !== 'all') {
                 alertsList = alertsList.filter(a => a.api_source === currentOfflineSourceFilter);
             }
-            
+
             if (!alertsList || alertsList.length === 0) {
-                const msg = currentOfflineSourceFilter === 'all' 
-                    ? 'All stations online!' 
+                const msg = currentOfflineSourceFilter === 'all'
+                    ? 'All stations online!'
                     : `No ${currentOfflineSourceFilter} stations offline!`;
                 panel.innerHTML = `
                     <div class="no-offline">
@@ -4268,7 +4416,7 @@
                 `;
                 return;
             }
-            
+
             panel.innerHTML = alertsList.map((alert, index) => {
                 const statusClass = alert.status === 'Inactive' ? 'inactive' : 'disabled';
                 const statusIcon = alert.status === 'Inactive' ? '⚠️' : '🚫';
@@ -4296,7 +4444,7 @@
             }
             renderOfflinePanel();
         }
-        
+
         // Sort table
         function sortTable(column) {
             if (sortColumn === column) {
@@ -4307,17 +4455,17 @@
             }
             renderTable();
         }
-        
+
         // Update last update time (no longer displayed in header, kept for compatibility)
         function updateLastUpdate() {
             // Removed from header - no action needed
         }
-        
+
         // Handle export dropdown
         function handleExport(value) {
             if (!value) return;
-            
-            switch(value) {
+
+            switch (value) {
                 case 'csv':
                     exportToCSV();
                     break;
@@ -4328,18 +4476,18 @@
                     exportToPDF();
                     break;
             }
-            
+
             // Reset dropdown to default
             document.getElementById('exportDropdown').value = '';
         }
-        
+
         // Filter by status dropdown
         function filterByStatus(status) {
             currentFilter = status;
             renderTable();
             updateMapMarkers();
         }
-        
+
         // Handle uptime period dropdown
         function handleUptimePeriod(value) {
             currentTimeRange = value;
@@ -4350,7 +4498,7 @@
             // Update table header
             const headerEl = document.getElementById('availabilityHeader');
             if (headerEl) headerEl.textContent = `Availability (${rangeLabels[value] || value})`;
-            
+
             if (value === 'custom') {
                 showCustomDatePicker();
             } else {
@@ -4359,12 +4507,12 @@
                 showNotification(`Uptime period changed to ${rangeLabels[value] || value}`, 'info');
             }
         }
-        
+
         // Export stations to CSV - respects active filters
         function exportToCSV() {
             const stations = getFilteredStations();
             const headers = ['Station ID', 'Station Name', 'Source', 'Status', 'Category', 'Temperature (°C)', 'Rainfall (mm)', 'Availability (%)', 'Location', 'Latitude', 'Longitude', 'Last Update'];
-            
+
             const rows = stations.map(s => [
                 s.station_id,
                 s.station_name || '',
@@ -4379,29 +4527,29 @@
                 s.longitude || '',
                 s.last_update || ''
             ]);
-            
+
             const csvContent = [headers, ...rows]
                 .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
                 .join('\n');
-            
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
-            
+
             const now = new Date();
             const filename = `weather_stations_${now.toISOString().split('T')[0]}.csv`;
-            
+
             link.setAttribute('href', url);
             link.setAttribute('download', filename);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
+
             // Show success message
             showNotification('CSV exported successfully!', 'success');
         }
-        
+
         // Export report to PDF (generates printable HTML) - respects active filters
         function exportToPDF() {
             const stations = getFilteredStations();
@@ -4409,17 +4557,17 @@
             const offline = stations.filter(s => s.status !== 'Active').length;
             const total = stations.length;
             const upPct = total > 0 ? ((online / total) * 100).toFixed(1) : 0;
-            
+
             const temps = stations
                 .filter(s => s.status === 'Active' && s.temperature !== null)
                 .map(s => parseFloat(s.temperature))
                 .filter(t => !isNaN(t));
             const avgTemp = temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : 'N/A';
-            
+
             const activeFilters = getActiveFiltersDescription();
             const rangeLabels = { '24h': '24 Hours', 'daily': 'Today', '7d': '7 Days', '30d': '30 Days', '1y': '1 Year', 'custom': 'Custom' };
             const currentPeriodLabel = rangeLabels[currentTimeRange] || currentTimeRange;
-            
+
             const now = new Date();
             const reportDate = now.toLocaleString('en-US', {
                 timeZone: 'Asia/Karachi',
@@ -4429,7 +4577,7 @@
                 hour: '2-digit',
                 minute: '2-digit'
             });
-            
+
             const printWindow = window.open('', '_blank');
             printWindow.document.write(`
                 <!DOCTYPE html>
@@ -4517,33 +4665,33 @@
             `);
             printWindow.document.close();
             printWindow.print();
-            
+
             showNotification('Report opened for printing!', 'success');
         }
-        
+
         // Download full daily report from API (Excel/CSV format)
         async function downloadDailyReport() {
             try {
                 showNotification('Generating report...', 'info');
-                
+
                 // Fetch the Excel/CSV report from the API (with cache-buster)
                 const response = await fetch(`${WORKER_API}/api/daily-report/excel?t=${Date.now()}`, {
                     cache: 'no-store'
                 });
-                
+
                 if (!response.ok) {
                     throw new Error('Failed to generate report');
                 }
-                
+
                 // Get the blob data
                 const blob = await response.blob();
-                
+
                 // Create download link
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const now = new Date();
                 const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
-                
+
                 link.setAttribute('href', url);
                 link.setAttribute('download', filename);
                 link.style.visibility = 'hidden';
@@ -4551,19 +4699,19 @@
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                
+
                 showNotification('Report downloaded successfully!', 'success');
             } catch (error) {
-                console.error('Error downloading report:', error);
+                // silenced
                 showNotification('Failed to download report: ' + error.message, 'error');
             }
         }
-        
+
         // Show notification toast
         function showNotification(message, type = 'info') {
             const existing = document.querySelector('.notification-toast');
             if (existing) existing.remove();
-            
+
             const toast = document.createElement('div');
             toast.className = `notification-toast ${type}`;
             toast.innerHTML = `
@@ -4571,14 +4719,14 @@
                 <span>${message}</span>
             `;
             document.body.appendChild(toast);
-            
+
             setTimeout(() => toast.classList.add('show'), 10);
             setTimeout(() => {
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         }
-        
+
         // Load uptime data from Worker API
         async function loadUptimePercentages() {
             try {
@@ -4590,10 +4738,10 @@
                     },
                     body: JSON.stringify({})
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
-                    
+
                     if (data.uptime_data && Array.isArray(data.uptime_data)) {
                         // Create a map of station_id -> full station data
                         const stationDataMap = {};
@@ -4610,7 +4758,7 @@
                                 tracking_since: item.tracking_since
                             };
                         });
-                        
+
                         // Update all stations with real-time status
                         let matched = 0;
                         allStations.forEach(station => {
@@ -4634,10 +4782,10 @@
                                 station.uptime = station.is_online === 1 ? 100.0 : 0.0;
                             }
                         });
-                        
+
                         renderTable();
                         updateMapMarkers();
-                        
+
                         // Calculate stats from allStations
                         // Only Inactive counts as offline, Disabled stations are intentionally turned off
                         const active = allStations.filter(s => s.status === 'Active').length;
@@ -4653,14 +4801,14 @@
                         try {
                             initCategoryUptimeChart();
                         } catch (e) {
-                            console.warn('Could not refresh category uptime chart:', e.message);
+                            // silenced
                         }
                     }
                 } else {
-                    console.warn('Failed to load uptime percentages:', response.statusText);
+                    // silenced
                 }
             } catch (error) {
-                console.warn('Error loading uptime percentages:', error);
+                // silenced
             }
         }
 
@@ -4741,49 +4889,49 @@
             if (stationId && STATION_PROVINCES[stationId.toString()]) {
                 return STATION_PROVINCES[stationId.toString()];
             }
-            
+
             // Fallback to location-based detection
             if (!location) return '';
             const loc = location.toLowerCase();
-            
+
             // Islamabad
-            if (loc.includes('islamabad') || loc.includes('i-8') || loc.includes('i-9') || loc.includes('i-10') || 
-                loc.includes('f-8') || loc.includes('f-10') || loc.includes('f-11') || loc.includes('g-8') || 
+            if (loc.includes('islamabad') || loc.includes('i-8') || loc.includes('i-9') || loc.includes('i-10') ||
+                loc.includes('f-8') || loc.includes('f-10') || loc.includes('f-11') || loc.includes('g-8') ||
                 loc.includes('g-15') || loc.includes('d-12') || loc.includes('d-17') || loc.includes('e-11') ||
                 loc.includes('banigala') || loc.includes('quaid e azam university') || loc.includes('nust')) return 'Islamabad';
-            
+
             // Punjab
             if (loc.includes('lahore') || loc.includes('rawalpindi') || loc.includes('rwp') || loc.includes('pindi') ||
                 loc.includes('multan') || loc.includes('faisalabad') || loc.includes('gujranwala') || loc.includes('sialkot') ||
                 loc.includes('bahawalpur') || loc.includes('sargodha') || loc.includes('jhelum') || loc.includes('chakwal') ||
                 loc.includes('attock') || loc.includes('mianwali') || loc.includes('bhakkar') || loc.includes('layyah') ||
                 loc.includes('murree') || loc.includes('westridge') || loc.includes('bahria town')) return 'Punjab';
-            
+
             // KPK
             if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat') ||
                 loc.includes('kohat') || loc.includes('bannu') || loc.includes('d.i khan') || loc.includes('dera ismail') ||
                 loc.includes('charsadda') || loc.includes('nowshera') || loc.includes('swabi') || loc.includes('haripur') ||
                 loc.includes('mansehra') || loc.includes('nathiagali') || loc.includes('waziristan')) return 'KPK';
-            
+
             // Sindh
             if (loc.includes('karachi') || loc.includes('hyderabad') || loc.includes('sukkur') || loc.includes('larkana') ||
                 loc.includes('nawabshah') || loc.includes('mirpur khas') || loc.includes('dadu') || loc.includes('thatta') ||
                 loc.includes('badin') || loc.includes('khairpur') || loc.includes('sanghar') || loc.includes('jacobabad') ||
                 loc.includes('gulshan') || loc.includes('surjani') || loc.includes('malir')) return 'Sindh';
-            
+
             // Balochistan
             if (loc.includes('quetta') || loc.includes('gwadar') || loc.includes('turbat') || loc.includes('sibi') ||
                 loc.includes('ziarat') || loc.includes('loralai') || loc.includes('pishin') || loc.includes('khuzdar') ||
                 loc.includes('nushki') || loc.includes('zhob') || loc.includes('chaman')) return 'Balochistan';
-            
+
             // AJK
             if (loc.includes('muzaffarabad') || loc.includes('mirpur') || loc.includes('rawalakot') || loc.includes('bagh') ||
                 loc.includes('kotli') || loc.includes('azad kashmir') || loc.includes('ajk')) return 'AJK';
-            
+
             // GB
             if (loc.includes('gilgit') || loc.includes('skardu') || loc.includes('hunza') || loc.includes('baltistan') ||
                 loc.includes('shimshal')) return 'GB';
-            
+
             return '';
         }
 
@@ -4832,7 +4980,7 @@
                 updateMapMarkers();
                 renderTable();
                 updateLastUpdate();
-                
+
                 // Update recent offline stations panel - only show Inactive stations, not Disabled
                 // Disabled stations are intentionally turned off and shouldn't be in the "needs attention" list
                 const offlineStations = allStations
@@ -4844,12 +4992,12 @@
                         return bTime - aTime;
                     });
                 updateRecentOffline({ recent: offlineStations.slice(0, 20) });
-                
+
                 // Initialize chart based on saved mode
                 if (chartGroupMode === 'source') initSourceUptimeChart();
                 else if (chartGroupMode === 'province') initProvinceUptimeChart();
                 else initCategoryUptimeChart();
-                
+
                 // Initialize uptime trend line chart with saved preference
                 initUptimeTrendLineChart(currentUptimeRange);
 
@@ -4871,33 +5019,33 @@
                     if (chartGroupMode === 'source') initSourceUptimeChart();
                     else if (chartGroupMode === 'province') initProvinceUptimeChart();
                     else initCategoryUptimeChart();
-                } catch(e) { console.warn('Could not re-init chart:', e.message); }
+                } catch (e) { /* silenced */ }
             } catch (error) {
-                console.error('Error loading data:', error);
+                // silenced
             }
         }
-        
+
         // Setup event listeners
         function setupEventListeners() {
             // Theme toggle
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-            
+
             // Search
             document.getElementById('searchBox').addEventListener('input', () => {
                 renderTable();
                 updateMapMarkers();
             });
-            
+
             // Source filter dropdown
             document.getElementById('sourceFilter')?.addEventListener('change', (e) => {
                 currentSourceFilter = e.target.value;
                 renderTable();
                 updateMapMarkers();
             });
-            
+
             // Hide WU checkbox
             document.getElementById('hideWU')?.addEventListener('change', renderTable);
-            
+
             // Filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -4908,9 +5056,9 @@
                     updateMapMarkers();
                 });
             });
-            
+
             // Category dropdown - handled via onchange in HTML
-            
+
             // Chart group toggles (Category / Source)
             document.getElementById('btnCategory')?.addEventListener('click', () => {
                 chartGroupMode = 'category';
@@ -4952,7 +5100,7 @@
                     else initCategoryUptimeChart();
                 }
             });
-            
+
             document.getElementById('btnLine')?.addEventListener('click', () => {
                 categoryChartType = 'line';
                 localStorage.setItem('categoryChartType', 'line');
@@ -4989,23 +5137,23 @@
                 }
             });
         }
-        
+
         // Initialize
         async function init() {
             initTheme();
             initMap();
-            
+
             // Load saved preferences
             chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
             categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
             currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
             currentUptimeRange = localStorage.getItem('uptimeRange') || '24h';
-            
+
             // Set active uptime range button based on saved preference
             document.querySelectorAll('.uptime-range-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.range === currentUptimeRange);
             });
-            
+
             // Set active classes based on saved preferences
             if (chartGroupMode === 'category') {
                 document.getElementById('btnCategory')?.classList.add('active');
@@ -5020,7 +5168,7 @@
                 document.getElementById('btnCategory')?.classList.remove('active');
                 document.getElementById('btnSource')?.classList.remove('active');
             }
-            
+
             if (categoryChartType === 'bar') {
                 document.getElementById('btnBar')?.classList.add('active');
                 document.getElementById('btnLine')?.classList.remove('active');
@@ -5028,20 +5176,21 @@
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
             }
-            
+
             // Set network filter dropdown
             document.getElementById('networkFilter').value = currentNetworkFilter;
-            
+
             await loadData();
             setupEventListeners();
             setupUptimeRangeToggles();
-            
+
             // Auto-refresh every 5 minutes
             setInterval(loadData, 5 * 60 * 1000);
         }
-        
+
         // Start when page loads
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
+
 </html>
