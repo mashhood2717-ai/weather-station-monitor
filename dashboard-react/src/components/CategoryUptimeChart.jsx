@@ -67,7 +67,7 @@ export default function CategoryUptimeChart({ stations, isDark }) {
                 const barH = (d.avgUptime / 100) * plotH;
                 const y = pad.top + plotH - barH;
                 // Bar
-                ctx.fillStyle = d.color + 'cc';
+                ctx.fillStyle = d.color;
                 ctx.beginPath();
                 const r = 4;
                 ctx.moveTo(x + r, y); ctx.lineTo(x + barW - r, y); ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
@@ -75,7 +75,7 @@ export default function CategoryUptimeChart({ stations, isDark }) {
                 ctx.quadraticCurveTo(x, y, x + r, y); ctx.fill();
                 // Value on top
                 ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-                ctx.font = '10px Space Grotesk';
+                ctx.font = 'bold 11px Space Grotesk';
                 ctx.textAlign = 'center';
                 ctx.fillText(d.avgUptime + '%', x + barW / 2, y - 4);
                 // Label

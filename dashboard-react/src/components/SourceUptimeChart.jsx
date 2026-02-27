@@ -60,14 +60,14 @@ export default function SourceUptimeChart({ stations, isDark }) {
             const x = pad.left + gap * i + gap / 2 - barW / 2;
             const barH = (d.avgUptime / 100) * plotH;
             const y = pad.top + plotH - barH;
-            ctx.fillStyle = d.color + 'cc';
+            ctx.fillStyle = d.color;
             ctx.beginPath();
             const r = 4;
             ctx.moveTo(x + r, y); ctx.lineTo(x + barW - r, y); ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
             ctx.lineTo(x + barW, pad.top + plotH); ctx.lineTo(x, pad.top + plotH); ctx.lineTo(x, y + r);
             ctx.quadraticCurveTo(x, y, x + r, y); ctx.fill();
             ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-            ctx.font = '11px Space Grotesk'; ctx.textAlign = 'center';
+            ctx.font = 'bold 11px Space Grotesk'; ctx.textAlign = 'center';
             ctx.fillText(d.avgUptime + '%', x + barW / 2, y - 4);
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
             ctx.font = '10px Space Grotesk';
