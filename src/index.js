@@ -2756,7 +2756,8 @@ async function handleDashboardStats(env, corsHeaders) {
     const midnightUTC = new Date(midnightUTC_ms);
     
     const midnightStr = midnightUTC.toISOString().slice(0, 19).replace('T', ' ');
-    const sixHoursBeforeMidnight = new Date(midnightUTC.getTime() - (6 * 60 * 60 * 1000)).toISOString().slice(0, 19).replace('T', ' ');
+    const twoHoursBeforeMidnight = new Date(midnightUTC.getTime() - (2 * 60 * 60 * 1000)).toISOString().slice(0, 19).replace('T', ' ');
+    const twoHoursAfterMidnight = new Date(midnightUTC.getTime() + (2 * 60 * 60 * 1000)).toISOString().slice(0, 19).replace('T', ' ');
 
     // Seasonal temperature validation for Pakistan
     const currentMonth = now.getMonth() + 1;
@@ -2771,7 +2772,7 @@ async function handleDashboardStats(env, corsHeaders) {
       stale_temp_stations AS (
         SELECT station_id
         FROM status_logs
-        WHERE timestamp >= ? AND temperature IS NOT NULL AND is_online = 1
+        WHERE timestamp >= ? AND timestamp <= ? AND temperature IS NOT NULL AND is_online = 1
         GROUP BY station_id
         HAVING 
           SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) >= 2
@@ -2874,7 +2875,7 @@ async function handleDashboardStats(env, corsHeaders) {
       UNION ALL SELECT * FROM min_temp_result
       UNION ALL SELECT * FROM max_rain_result
       UNION ALL SELECT * FROM max_wind_result
-    `).bind(sixHoursBeforeMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
+    `).bind(twoHoursBeforeMidnight, twoHoursAfterMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
 
     // Parse results
     let maxTemp = null, maxTempStation = null;
