@@ -406,24 +406,26 @@ export default {
 
       // ---- Cacheable API Routes (check in-memory cache first) ----
       const cacheTTL = API_CACHE_TTL[path];
-      if (cacheTTL && request.method === 'GET') {
-        // Include query params in cache key for endpoints like uptime-trend-chart?range=7d
-        const cacheKey = url.pathname + url.search;
+      if (cacheTTL) {
+        // Include query params in cache key, and method to separate GET/POST
+        const cacheKey = request.method + ':' + url.pathname + url.search;
         const cached = getCachedResponse(cacheKey);
         if (cached) return cached;
       }
 
       // API Routes
+      // Build cache key matching early lookup: method:path+search
+      const routeCacheKey = request.method + ':' + url.pathname + url.search;
+
       if (path === '/api/stations-with-uptime') {
-        const cacheKey = '/api/stations-with-uptime';
-        return await cacheAndReturn(cacheKey, API_CACHE_TTL[path], handleStationsWithUptimeRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStationsWithUptimeRequest(env, corsHeaders));
       }
       if (path === '/api/stations') {
         return await handleStationsRequest(env, corsHeaders);
       } else if (path === '/api/stats') {
-        return await cacheAndReturn('/api/stats', API_CACHE_TTL[path], handleStatsRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStatsRequest(env, corsHeaders));
       } else if (path === '/api/alerts') {
-        return await cacheAndReturn('/api/alerts', API_CACHE_TTL[path], handleAlertsRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleAlertsRequest(env, corsHeaders));
       } else if (path === '/api/station') {
         const stationId = url.searchParams.get('id');
         return await handleStationDetailRequest(env, stationId, corsHeaders);
@@ -432,10 +434,10 @@ export default {
         return await syncAllStations(env, corsHeaders);
       } else if (path === '/api/uptime-trend') {
         // Get 24-hour uptime trend for all stations
-        return await cacheAndReturn('/api/uptime-trend', API_CACHE_TTL[path], handleUptimeTrendRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendRequest(env, corsHeaders));
       } else if (path === '/api/uptime-percentages') {
         // Get uptime percentages for all stations or specific ones
-        return await cacheAndReturn('/api/uptime-percentages', API_CACHE_TTL[path], handleUptimePercentagesRequest(env, request, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimePercentagesRequest(env, request, corsHeaders));
       } else if (path === '/api/ingest-station-samples') {
         // Aggregate recent status_logs into hourly samples and persist
         return await handleIngestStationSamples(env, corsHeaders);
@@ -497,7 +499,7 @@ export default {
         }
       } else if (path === '/api/storage-stats') {
         // Get storage statistics
-        return await cacheAndReturn('/api/storage-stats', API_CACHE_TTL[path], handleStorageStats(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStorageStats(env, corsHeaders));
       } else if (path === '/api/daily-report') {
         // Generate daily report JSON
         return await handleDailyReportRequest(env, corsHeaders);
@@ -624,11 +626,10 @@ export default {
         }
       } else if (path === '/api/dashboard-stats') {
         // Get avg uptime/downtime and daily extremes (since midnight PKT)
-        return await cacheAndReturn('/api/dashboard-stats', API_CACHE_TTL[path], handleDashboardStats(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleDashboardStats(env, corsHeaders));
       } else if (path === '/api/uptime-trend-chart') {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
-        const trendCacheKey = '/api/uptime-trend-chart' + url.search;
-        return await cacheAndReturn(trendCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
       } else if (path === '/api/send-daily-report') {
         // Manually trigger sending daily email report
         return await handleSendDailyReport(env, corsHeaders);
