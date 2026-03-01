@@ -52,9 +52,10 @@ database_name = "weatherlink-monitor"
 database_id = "f075f3d2-753d-45e2-a94f-0b1c0ab7a60d"
 
 [env.production.triggers]
-# Cloudflare cron - runs every 15 min (4x/hour)
-# D1 batching keeps writes well within free tier limits
-crons = ["7,22,37,52 * * * *"]
+# DISABLED - Cron causing excessive D1 reads (15.97B reads!)
+# Re-enable with reduced frequency after optimizing database queries
+# crons = ["7,22,37,52 * * * *"]
+crons = []
 
 [env.production.vars]
 ENVIRONMENT = "production"

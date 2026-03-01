@@ -138,7 +138,8 @@ export function useStations() {
 
     useEffect(() => {
         fetchStations();
-        intervalRef.current = setInterval(fetchStations, REFRESH_INTERVAL);
+        // Auto-refresh disabled to reduce D1 reads — use manual browser refresh
+        // intervalRef.current = setInterval(fetchStations, REFRESH_INTERVAL);
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };

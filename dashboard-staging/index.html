@@ -5184,8 +5184,8 @@
             setupEventListeners();
             setupUptimeRangeToggles();
 
-            // Auto-refresh every 5 minutes
-            setInterval(loadData, 5 * 60 * 1000);
+            // Auto-refresh disabled to reduce D1 reads — use manual browser refresh
+            // setInterval(loadData, 5 * 60 * 1000);
         }
 
         // Start when page loads
