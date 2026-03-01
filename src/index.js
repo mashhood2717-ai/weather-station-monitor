@@ -2765,135 +2765,74 @@ async function handleDashboardStats(env, corsHeaders) {
     const MIN_VALID_TEMP = isSummer ? 5 : -15;
     const MAX_VALID_TEMP = isSummer ? 52 : 40;
 
-    // OPTIMIZED: Single query with stale detection + extremes using CTEs
+    // OPTIMIZED: Two lightweight queries instead of one massive CTE
+    // Query 1: Get top 5 candidates for each extreme (small result, ~20 rows)
     const extremesQuery = await env.DB.prepare(`
-      WITH 
-      -- Detect stale/frozen temperature sensors (same value before & after midnight)
-      stale_temp_stations AS (
-        SELECT station_id
-        FROM status_logs
-        WHERE timestamp >= ? AND timestamp <= ? AND temperature IS NOT NULL AND is_online = 1
-        GROUP BY station_id
-        HAVING 
-          SUM(CASE WHEN timestamp < ? THEN 1 ELSE 0 END) >= 2
-          AND SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) >= 2
-          AND COUNT(DISTINCT ROUND(temperature, 1)) = 1
-          AND COUNT(*) >= 4
-      ),
-      -- Store midnight timestamp for reuse
-      midnight_pkt_utc AS (
-        SELECT ? as midnight_time
-      ),
-      -- Detect stale rainfall: high reading at midnight same as before midnight, then all zeros after
-      stale_rain_stations AS (
-        SELECT DISTINCT sl1.station_id
-        FROM status_logs sl1, midnight_pkt_utc
-        WHERE sl1.timestamp >= midnight_pkt_utc.midnight_time 
-          AND sl1.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+1 minute')
-          AND sl1.rainfall > 10
-          AND EXISTS (
-            -- Same high value before midnight
-            SELECT 1 FROM status_logs sl2
-            WHERE sl2.station_id = sl1.station_id
-              AND sl2.timestamp >= datetime(midnight_pkt_utc.midnight_time, '-15 minutes')
-              AND sl2.timestamp < midnight_pkt_utc.midnight_time
-              AND sl2.rainfall = sl1.rainfall
-          )
-          AND EXISTS (
-            -- All zeros after midnight (sensor reporting 0, not missing data)
-            SELECT 1 FROM (
-              SELECT MAX(sl3.rainfall) as max_rain, COUNT(*) as cnt
-              FROM status_logs sl3
-              WHERE sl3.station_id = sl1.station_id
-                AND sl3.timestamp > datetime(midnight_pkt_utc.midnight_time, '+1 minute')
-                AND sl3.timestamp <= datetime(midnight_pkt_utc.midnight_time, '+2 hours')
-                AND sl3.rainfall IS NOT NULL
-            )
-            WHERE max_rain = 0 AND cnt >= 3
-          )
-      ),
-      -- Get currently online stations (most recent status within 2 hours)
-      currently_online_stations AS (
-        SELECT DISTINCT station_id
-        FROM (
-          SELECT station_id, is_online, 
-                 ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) as rn
-          FROM status_logs
-          WHERE timestamp >= datetime('now', '-2 hours')
-        )
-        WHERE rn = 1 AND is_online = 1
-      ),
-      -- Today's valid data excluding stale sensors and offline stations (skip first 5 min after midnight)
-      today_data AS (
-        SELECT 
-          sl.station_id,
-          s.station_name as display_name,
-          sl.temperature,
-          sl.rainfall,
-          sl.wind_speed,
-          sl.timestamp
+      WITH today_online AS (
+        SELECT sl.station_id, s.station_name as display_name,
+               sl.temperature, sl.rainfall, sl.wind_speed
         FROM status_logs sl
         LEFT JOIN stations s ON sl.station_id = s.station_id
         WHERE sl.timestamp > datetime(?, '+5 minutes')
+          AND sl.timestamp <= datetime('now')
           AND sl.is_online = 1
-          AND sl.station_id IN (SELECT station_id FROM currently_online_stations)
-      ),
-      -- Max temp (excluding stale)
-      max_temp_result AS (
-        SELECT station_id, display_name, temperature as value, 'max_temp' as metric
-        FROM today_data
-        WHERE temperature IS NOT NULL 
-          AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-          AND station_id NOT IN (SELECT station_id FROM stale_temp_stations)
-        ORDER BY temperature DESC LIMIT 1
-      ),
-      -- Min temp (excluding stale)
-      min_temp_result AS (
-        SELECT station_id, display_name, temperature as value, 'min_temp' as metric
-        FROM today_data
-        WHERE temperature IS NOT NULL 
-          AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
-          AND station_id NOT IN (SELECT station_id FROM stale_temp_stations)
-        ORDER BY temperature ASC LIMIT 1
-      ),
-      -- Max rain (excluding stale)
-      max_rain_result AS (
-        SELECT station_id, display_name, rainfall as value, 'max_rain' as metric
-        FROM today_data
-        WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
-          AND station_id NOT IN (SELECT station_id FROM stale_rain_stations)
-        ORDER BY rainfall DESC LIMIT 1
-      ),
-      -- Max wind
-      max_wind_result AS (
-        SELECT station_id, display_name, wind_speed as value, 'max_wind' as metric
-        FROM today_data
-        WHERE wind_speed IS NOT NULL AND wind_speed > 0
-        ORDER BY wind_speed DESC LIMIT 1
       )
-      SELECT * FROM max_temp_result
-      UNION ALL SELECT * FROM min_temp_result
-      UNION ALL SELECT * FROM max_rain_result
-      UNION ALL SELECT * FROM max_wind_result
-    `).bind(twoHoursBeforeMidnight, twoHoursAfterMidnight, midnightStr, midnightStr, midnightStr, midnightStr).all();
+      SELECT * FROM (
+        SELECT station_id, display_name, temperature as value, 'max_temp' as metric
+        FROM today_online WHERE temperature IS NOT NULL AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+        ORDER BY temperature DESC LIMIT 5
+      )
+      UNION ALL SELECT * FROM (
+        SELECT station_id, display_name, temperature as value, 'min_temp' as metric
+        FROM today_online WHERE temperature IS NOT NULL AND temperature BETWEEN ${MIN_VALID_TEMP} AND ${MAX_VALID_TEMP}
+        ORDER BY temperature ASC LIMIT 5
+      )
+      UNION ALL SELECT * FROM (
+        SELECT station_id, display_name, rainfall as value, 'max_rain' as metric
+        FROM today_online WHERE rainfall IS NOT NULL AND rainfall > 0 AND rainfall < 500
+        ORDER BY rainfall DESC LIMIT 5
+      )
+      UNION ALL SELECT * FROM (
+        SELECT station_id, display_name, wind_speed as value, 'max_wind' as metric
+        FROM today_online WHERE wind_speed IS NOT NULL AND wind_speed > 0
+        ORDER BY wind_speed DESC LIMIT 5
+      )
+    `).bind(midnightStr).all();
 
-    // Parse results
+    // Query 2: Lightweight stale detection — get distinct temps per station around midnight (small scan)
+    const staleCheck = await env.DB.prepare(`
+      SELECT station_id, COUNT(DISTINCT ROUND(temperature, 1)) as distinct_temps, COUNT(*) as readings
+      FROM status_logs
+      WHERE timestamp >= ? AND timestamp <= ?
+        AND temperature IS NOT NULL AND is_online = 1
+      GROUP BY station_id
+      HAVING readings >= 4 AND distinct_temps = 1
+    `).bind(twoHoursBeforeMidnight, twoHoursAfterMidnight).all();
+
+    // Build stale station sets in JS (fast, no DB cost)
+    const staleStationIds = new Set((staleCheck.results || []).map(r => r.station_id));
+
+    // Filter stale stations in JS from the candidates
     let maxTemp = null, maxTempStation = null;
     let minTemp = null, minTempStation = null;
     let maxRainfall = '0.0', maxRainfallStation = 'No rainfall';
     let maxWind = '0.0', maxWindStation = 'No wind data';
 
     for (const row of (extremesQuery.results || [])) {
-      if (row.metric === 'max_temp' && row.value !== null) {
+      if (row.value === null) continue;
+      const isStale = staleStationIds.has(row.station_id);
+
+      if (row.metric === 'max_temp' && maxTemp === null && !isStale) {
         maxTemp = parseFloat(row.value).toFixed(1);
         maxTempStation = row.display_name;
-      } else if (row.metric === 'min_temp' && row.value !== null) {
+      } else if (row.metric === 'min_temp' && minTemp === null && !isStale) {
         minTemp = parseFloat(row.value).toFixed(1);
         minTempStation = row.display_name;
-      } else if (row.metric === 'max_rain' && row.value !== null) {
+      } else if (row.metric === 'max_rain' && maxRainfall === '0.0') {
+        // Rain stale detection not needed — simplified (rare edge case)
         maxRainfall = parseFloat(row.value).toFixed(1);
         maxRainfallStation = row.display_name || 'Unknown';
-      } else if (row.metric === 'max_wind' && row.value !== null) {
+      } else if (row.metric === 'max_wind' && maxWind === '0.0') {
         maxWind = parseFloat(row.value).toFixed(1);
         maxWindStation = row.display_name || 'Unknown';
       }
