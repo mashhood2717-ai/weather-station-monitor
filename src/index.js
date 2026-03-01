@@ -20,14 +20,14 @@ const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
 // ============================================================
 const apiResponseCache = new Map();
 const API_CACHE_TTL = {
-  '/api/dashboard-stats': 360_000,       // 6 min (covers old 5-min refresh clients)
-  '/api/stations-with-uptime': 360_000,  // 6 min
-  '/api/uptime-trend-chart': 360_000,    // 6 min
-  '/api/uptime-percentages': 360_000,    // 6 min
-  '/api/stats': 360_000,                 // 6 min
-  '/api/alerts': 360_000,                // 6 min
-  '/api/uptime-trend': 360_000,          // 6 min
-  '/api/storage-stats': 600_000,         // 10 min (counts don't change often)
+  '/api/dashboard-stats': 600_000,       // 10 min
+  '/api/stations-with-uptime': 600_000,  // 10 min
+  '/api/uptime-trend-chart': 600_000,    // 10 min
+  '/api/uptime-percentages': 600_000,    // 10 min
+  '/api/stats': 600_000,                 // 10 min
+  '/api/alerts': 600_000,                // 10 min
+  '/api/uptime-trend': 600_000,          // 10 min
+  '/api/storage-stats': 900_000,         // 15 min
 };
 
 function getCachedResponse(cacheKey) {
