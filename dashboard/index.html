@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- v2.6 - Moved Last Sync to header, fixed mobile responsiveness -->
+<!-- v2.9 - Issue Tracker with tabs & WU filter -->
 <html lang="en">
 
 <head>
@@ -129,9 +129,11 @@
 
         [data-theme="light"] .search-box,
         [data-theme="light"] .filter-btn,
-        [data-theme="light"] .source-filter {
-            background: white;
-            border-color: var(--border);
+        [data-theme="light"] .source-filter,
+        [data-theme="light"] #issueSearchBox {
+            background: #f5f5f5 !important;
+            border: 1px solid #333 !important;
+            color: #333 !important;
         }
 
         [data-theme="light"] .leaflet-popup-content-wrapper {
@@ -1742,6 +1744,15 @@
             </div>
         </header>
 
+        <!-- Tab Navigation -->
+        <div class="dashboard-tabs">
+            <button class="dashboard-tab active" data-tab="monitoring" onclick="switchDashboardTab('monitoring')">📊 Station Monitoring</button>
+            <button class="dashboard-tab" data-tab="issues" onclick="switchDashboardTab('issues')">📋 Issue Tracker & Call Logs</button>
+        </div>
+
+        <!-- Tab 1: Station Monitoring -->
+        <div id="tab-monitoring" class="tab-content active">
+
         <!-- Stats Cards -->
         <div class="stats-grid">
             <div class="stat-card online">
@@ -2005,6 +2016,214 @@
                 </div>
             </div>
         </div>
+
+        </div><!-- End Tab 1: Station Monitoring -->
+
+        <!-- Tab 2: Issue Tracker -->
+        <div id="tab-issues" class="tab-content" style="display:none;">
+
+        <!-- Issue Tracker Section -->
+        <div class="issue-tracker-section" style="margin-top: 20px;">
+            <div class="issue-tracker-header">
+                <h2 class="issue-tracker-title">📋 Issue Tracker & Call Log</h2>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <select id="issueRangeFilter" class="source-filter" onchange="loadIssueTrackerData()" style="min-width:90px;">
+                        <option value="24h">24h</option>
+                        <option value="7d" selected>7 Days</option>
+                        <option value="30d">30 Days</option>
+                        <option value="1y">1 Year</option>
+                    </select>
+                    <select id="issueStatusFilter" class="source-filter" onchange="loadIssues()" style="min-width:110px;">
+                        <option value="">All Issues</option>
+                        <option value="open">🟡 Open</option>
+                        <option value="in_progress">🔵 In Progress</option>
+                        <option value="resolved">🟢 Resolved</option>
+                        <option value="unresolvable">🔴 Unresolvable</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:4px; color:var(--text-secondary); font-size:13px; cursor:pointer;">
+                        <input type="checkbox" id="includeWuIssues" onchange="renderIssuesTable()" style="cursor:pointer;"> Include WU
+                    </label>
+                    <button class="apply-btn" onclick="autoPopulateInactiveIssues()" style="white-space:nowrap; background:#d97706;">⚡ Auto-Populate Inactive</button>
+                    <button class="apply-btn" onclick="openCreateIssueModal()" style="white-space:nowrap;">+ New Issue</button>
+                </div>
+            </div>
+
+            <!-- Call Stats Summary -->
+            <div class="issue-stats-grid" id="issueStatsGrid">
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statTotalCalls">0</div>
+                    <div class="issue-stat-label">Total Calls</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statOpenIssues">0</div>
+                    <div class="issue-stat-label">Open Issues</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statInProgress">0</div>
+                    <div class="issue-stat-label">In Progress</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statResolved">0</div>
+                    <div class="issue-stat-label">Resolved</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statActiveCallers">0</div>
+                    <div class="issue-stat-label">Active Callers</div>
+                </div>
+            </div>
+
+            <!-- Two column: Issues list + Call stats by person -->
+            <div class="issue-columns">
+                <!-- Issues Table -->
+                <div class="issue-list-panel">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                        <h3 style="margin:0; color:var(--text-primary); font-size:15px;">Station Issues</h3>
+                        <input type="text" id="issueSearchBox" oninput="renderIssuesTable()" placeholder="🔍 Search station..." style="padding:5px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.1); color:var(--text-primary); font-size:12px; width:160px; outline:none;">
+                    </div>
+                    <div class="table-container" style="max-height:400px; overflow-y:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="cursor:pointer;" onclick="sortIssues('station')">Station <span id="sortArrowStation"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('title')">Issue <span id="sortArrowTitle"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('status')">Status <span id="sortArrowStatus"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('priority')">Priority <span id="sortArrowPriority"></span></th>
+                                    <th>Calls</th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('created')">Created <span id="sortArrowCreated"></span></th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issuesTableBody">
+                                <tr><td colspan="7" style="text-align:center; color:var(--text-secondary);">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Calls by Person -->
+                <div class="calls-by-person-panel">
+                    <h3 style="margin:0 0 10px; color:var(--text-primary); font-size:15px;">Calls by Team Member</h3>
+                    <div id="callsByPersonList" style="max-height:400px; overflow-y:auto;">
+                        <div style="text-align:center; color:var(--text-secondary); padding:20px;">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div><!-- End Tab 2: Issue Tracker -->
+
+    </div>
+    <!-- Create Issue Modal -->
+    <div id="createIssueModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <button class="modal-close" onclick="closeCreateIssueModal()">&times;</button>
+            <div class="modal-header"><h2>Create Issue</h2></div>
+            <div class="modal-body" style="padding:20px;">
+                <div class="form-group">
+                    <label>Station</label>
+                    <select id="issueStationId" class="form-input">
+                        <option value="">Select station...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="issueTitle" class="form-input" placeholder="e.g. Station offline since morning">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="issueDescription" class="form-input" rows="3" placeholder="Details about the issue..."></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Priority</label>
+                        <select id="issuePriority" class="form-input">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Assigned To</label>
+                        <input type="text" id="issueAssignedTo" class="form-input" placeholder="Team member name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Created By</label>
+                    <input type="text" id="issueCreatedBy" class="form-input" placeholder="Your name">
+                </div>
+                <button class="apply-btn" onclick="submitCreateIssue()" style="width:100%; padding:10px; font-size:15px; margin-top:10px;">Create Issue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Call Modal -->
+    <div id="logCallModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <button class="modal-close" onclick="closeLogCallModal()">&times;</button>
+            <div class="modal-header"><h2>Log Call</h2></div>
+            <div class="modal-body" style="padding:20px;">
+                <input type="hidden" id="callIssueId">
+                <div class="form-group">
+                    <label>Caller Name</label>
+                    <input type="text" id="callCallerName" class="form-input" placeholder="Who made the call?">
+                </div>
+                <div class="form-group">
+                    <label>Contact Person</label>
+                    <input type="text" id="callContactPerson" class="form-input" placeholder="Who was called?">
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Duration (mins)</label>
+                        <input type="number" id="callDuration" class="form-input" placeholder="5" min="0">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Outcome</label>
+                        <select id="callOutcome" class="form-input">
+                            <option value="answered">✅ Answered</option>
+                            <option value="no_answer" selected>📵 No Answer</option>
+                            <option value="busy">🔴 Busy</option>
+                            <option value="voicemail">📧 Voicemail</option>
+                            <option value="callback_scheduled">📅 Callback</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="callNotes" class="form-input" rows="2" placeholder="Call notes..."></textarea>
+                </div>
+                <button class="apply-btn" onclick="submitLogCall()" style="width:100%; padding:10px; font-size:15px; margin-top:10px;">Log Call</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issue Detail Modal (Call History) -->
+    <div id="issueDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:700px;">
+            <button class="modal-close" onclick="closeIssueDetailModal()">&times;</button>
+            <div class="modal-header">
+                <h2 id="issueDetailTitle">Issue Details</h2>
+                <div class="modal-badges">
+                    <span id="issueDetailStatus" class="status-badge"></span>
+                    <span id="issueDetailPriority" class="category-badge community"></span>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <div id="issueDetailInfo" style="margin-bottom:15px;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0; font-size:15px; color:var(--text-primary);">Call History</h3>
+                    <button class="apply-btn" onclick="openLogCallFromDetail()" style="font-size:12px; padding:5px 12px;">+ Log Call</button>
+                </div>
+                <div id="issueCallHistory" style="max-height:300px; overflow-y:auto;">
+                    <div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls logged</div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:15px; flex-wrap:wrap;">
+                    <button class="apply-btn" onclick="updateIssueStatus('in_progress')" style="background:#1890ff;">🔵 In Progress</button>
+                    <button class="apply-btn" onclick="updateIssueStatus('resolved')" style="background:#52c41a;">🟢 Resolved</button>
+                    <button class="apply-btn" onclick="updateIssueStatus('unresolvable')" style="background:#ff4d4f;">🔴 Can't Resolve</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Station Detail Modal -->
@@ -2062,6 +2281,183 @@
             </div>
         </div>
     </div>
+
+    <style>
+        /* Dashboard Tabs */
+        .dashboard-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 4px;
+            border: 1px solid var(--border-color);
+        }
+        .dashboard-tab {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+        .dashboard-tab:hover { background: rgba(255,255,255,0.05); }
+        .dashboard-tab.active {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tab-content { animation: fadeIn 0.3s ease; }
+
+        /* Issue Tracker Styles */
+        .issue-tracker-section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+        .issue-tracker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .issue-tracker-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .issue-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .issue-stat-card {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        .issue-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .issue-stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .issue-columns {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+        }
+        .issue-list-panel, .calls-by-person-panel {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+        }
+        .issue-status-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .issue-status-open { background: #fff7e6; color: #d48806; }
+        .issue-status-in_progress { background: #e6f7ff; color: #1890ff; }
+        .issue-status-resolved { background: #f6ffed; color: #52c41a; }
+        .issue-status-unresolvable { background: #fff1f0; color: #ff4d4f; }
+        .issue-priority-low { color: #8c8c8c; }
+        .issue-priority-medium { color: #d48806; }
+        .issue-priority-high { color: #fa541c; }
+        .issue-priority-critical { color: #ff4d4f; font-weight: 700; }
+        .issue-actions-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        .issue-actions-btn:hover { background: var(--hover-bg, #f5f5f5); color: var(--text-primary); }
+        .caller-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .caller-row:last-child { border-bottom: none; }
+        .caller-name { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+        .caller-stats { font-size: 12px; color: var(--text-secondary); }
+        .caller-count {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .form-group { margin-bottom: 12px; }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .form-input:focus { outline: none; border-color: #1890ff; }
+        .call-history-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+        .call-history-item:last-child { border-bottom: none; }
+        .call-outcome-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .issue-stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .issue-columns { grid-template-columns: 1fr; }
+            .issue-list-panel > div:first-child {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            .issue-list-panel > div:first-child input {
+                width: 100% !important;
+                max-width: 160px;
+                box-sizing: border-box;
+            }
+        }
+    </style>
 
     <style>
         /* Modal Styles */
@@ -5152,6 +5548,388 @@
             });
         }
 
+        // ============================================================
+        // DASHBOARD TAB SWITCHING
+        // ============================================================
+        let issueTabLoaded = false;
+
+        async function switchDashboardTab(tab) {
+            document.querySelectorAll('.dashboard-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.dashboard-tab[data-tab="${tab}"]`).classList.add('active');
+
+            document.getElementById('tab-monitoring').style.display = tab === 'monitoring' ? '' : 'none';
+            document.getElementById('tab-issues').style.display = tab === 'issues' ? '' : 'none';
+
+            if (tab === 'issues' && !issueTabLoaded) {
+                issueTabLoaded = true;
+                await loadIssueTrackerData();
+                await autoResolveActiveStationIssues();
+                autoPopulateInactiveIssues(true);
+            }
+        }
+
+        // ============================================================
+        // ISSUE TRACKER & CALL LOG FUNCTIONS
+        // ============================================================
+        let allIssues = [];
+        let currentDetailIssueId = null;
+
+        async function loadIssues() {
+            try {
+                const status = document.getElementById('issueStatusFilter')?.value || '';
+                const params = status ? `?status=${status}` : '';
+                const resp = await fetch(`${WORKER_API}/api/issues${params}`);
+                allIssues = await resp.json();
+                renderIssuesTable();
+            } catch (e) {
+                console.error('Failed to load issues:', e);
+            }
+        }
+
+        async function loadCallStats() {
+            try {
+                const range = document.getElementById('issueRangeFilter')?.value || '7d';
+                const resp = await fetch(`${WORKER_API}/api/call-stats?range=${range}`);
+                const data = await resp.json();
+
+                document.getElementById('statTotalCalls').textContent = data.summary?.total_calls || 0;
+                document.getElementById('statActiveCallers').textContent = data.summary?.active_callers || 0;
+
+                renderCallsByPerson(data.by_person || []);
+            } catch (e) {
+                console.error('Failed to load call stats:', e);
+            }
+        }
+
+        function updateIssueStatCards() {
+            const includeWu = document.getElementById('includeWuIssues')?.checked;
+            const filtered = includeWu ? allIssues : allIssues.filter(i => (STATION_CATEGORIES[i.station_id] || 'community') !== 'wu');
+            document.getElementById('statOpenIssues').textContent = filtered.filter(i => i.status === 'open').length;
+            document.getElementById('statInProgress').textContent = filtered.filter(i => i.status === 'in_progress').length;
+            document.getElementById('statResolved').textContent = filtered.filter(i => i.status === 'resolved').length;
+        }
+
+        let issueSortField = 'status';
+        let issueSortAsc = true;
+
+        function sortIssues(field) {
+            if (issueSortField === field) { issueSortAsc = !issueSortAsc; }
+            else { issueSortField = field; issueSortAsc = true; }
+            renderIssuesTable();
+        }
+
+        function renderIssuesTable() {
+            updateIssueStatCards();
+            // Update sort arrows
+            ['Station','Title','Status','Priority','Created'].forEach(col => {
+                const el = document.getElementById('sortArrow' + col);
+                if (el) el.textContent = issueSortField === col.toLowerCase() ? (issueSortAsc ? '▲' : '▼') : '';
+            });
+            const tbody = document.getElementById('issuesTableBody');
+            const includeWu = document.getElementById('includeWuIssues')?.checked;
+            const searchTerm = (document.getElementById('issueSearchBox')?.value || '').toLowerCase();
+            let filtered = includeWu ? [...allIssues] : allIssues.filter(i => (STATION_CATEGORIES[i.station_id] || 'community') !== 'wu');
+            if (searchTerm) {
+                filtered = filtered.filter(i => {
+                    const station = allStations.find(s => s.station_id?.toString() === i.station_id?.toString());
+                    const name = (station?.station_name || i.station_id || '').toLowerCase();
+                    return name.includes(searchTerm) || (i.title || '').toLowerCase().includes(searchTerm) || (i.assigned_to || '').toLowerCase().includes(searchTerm);
+                });
+            }
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding:20px;">No issues found</td></tr>';
+                return;
+            }
+            const statusOrder = { open: 0, in_progress: 1, resolved: 2, unresolvable: 3 };
+            const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+            filtered.sort((a, b) => {
+                let va, vb;
+                if (issueSortField === 'station') {
+                    const sa = allStations.find(s => s.station_id?.toString() === a.station_id?.toString());
+                    const sb = allStations.find(s => s.station_id?.toString() === b.station_id?.toString());
+                    va = (sa?.station_name || a.station_id || '').toString().toLowerCase();
+                    vb = (sb?.station_name || b.station_id || '').toString().toLowerCase();
+                } else if (issueSortField === 'title') {
+                    va = (a.title || '').toLowerCase(); vb = (b.title || '').toLowerCase();
+                } else if (issueSortField === 'status') {
+                    va = statusOrder[a.status] ?? 9; vb = statusOrder[b.status] ?? 9;
+                } else if (issueSortField === 'priority') {
+                    va = priorityOrder[a.priority] ?? 9; vb = priorityOrder[b.priority] ?? 9;
+                } else if (issueSortField === 'created') {
+                    va = a.created_at || ''; vb = b.created_at || '';
+                } else { va = 0; vb = 0; }
+                if (va < vb) return issueSortAsc ? -1 : 1;
+                if (va > vb) return issueSortAsc ? 1 : -1;
+                return 0;
+            });
+            tbody.innerHTML = filtered.map(issue => {
+                const station = allStations.find(s => s.station_id?.toString() === issue.station_id?.toString());
+                const stationName = station?.station_name || issue.station_id;
+                const created = issue.created_at ? new Date(issue.created_at + 'Z').toLocaleDateString() : '-';
+                const statusLabels = { open: '🟡 Open', in_progress: '🔵 In Progress', resolved: '🟢 Resolved', unresolvable: '🔴 Unresolvable' };
+                const priorityIcons = { low: '⬇️', medium: '➡️', high: '⬆️', critical: '🔥' };
+                return `<tr style="cursor:pointer;" onclick="openIssueDetail(${issue.id})">
+                    <td style="font-size:12px;">${stationName}</td>
+                    <td style="font-size:12px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${issue.title}</td>
+                    <td><span class="issue-status-badge issue-status-${issue.status}">${statusLabels[issue.status] || issue.status}</span></td>
+                    <td><span class="issue-priority-${issue.priority}">${priorityIcons[issue.priority] || ''} ${issue.priority}</span></td>
+                    <td style="text-align:center;">-</td>
+                    <td style="font-size:12px;">${created}</td>
+                    <td>
+                        <button class="issue-actions-btn" onclick="event.stopPropagation(); openLogCallModal(${issue.id})">📞 Call</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderCallsByPerson(persons) {
+            const el = document.getElementById('callsByPersonList');
+            if (!persons.length) {
+                el.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls in this period</div>';
+                return;
+            }
+            el.innerHTML = persons.map(p => `
+                <div class="caller-row">
+                    <div>
+                        <div class="caller-name">${p.caller_name}</div>
+                        <div class="caller-stats">${p.issues_handled} issue${p.issues_handled !== 1 ? 's' : ''} handled</div>
+                    </div>
+                    <span class="caller-count">${p.total_calls} calls</span>
+                </div>
+            `).join('');
+        }
+
+        function openCreateIssueModal() {
+            const select = document.getElementById('issueStationId');
+            select.innerHTML = '<option value="">Select station...</option>' +
+                allStations.map(s => `<option value="${s.station_id}">${s.station_name} (${s.station_id})</option>`).join('');
+            document.getElementById('createIssueModal').style.display = 'flex';
+        }
+        function closeCreateIssueModal() { document.getElementById('createIssueModal').style.display = 'none'; }
+
+        async function submitCreateIssue() {
+            const body = {
+                station_id: document.getElementById('issueStationId').value,
+                title: document.getElementById('issueTitle').value,
+                description: document.getElementById('issueDescription').value,
+                priority: document.getElementById('issuePriority').value,
+                assigned_to: document.getElementById('issueAssignedTo').value,
+                created_by: document.getElementById('issueCreatedBy').value,
+            };
+            if (!body.station_id || !body.title) { alert('Station and title are required'); return; }
+            try {
+                await fetch(`${WORKER_API}/api/issues`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                closeCreateIssueModal();
+                document.getElementById('issueTitle').value = '';
+                document.getElementById('issueDescription').value = '';
+                document.getElementById('issueAssignedTo').value = '';
+                document.getElementById('issueCreatedBy').value = '';
+                loadIssues();
+                loadCallStats();
+            } catch (e) {
+                alert('Failed to create issue: ' + e.message);
+            }
+        }
+
+        function openLogCallModal(issueId) {
+            document.getElementById('callIssueId').value = issueId;
+            document.getElementById('issueDetailModal').style.display = 'none';
+            document.getElementById('logCallModal').style.display = 'flex';
+        }
+        function closeLogCallModal() {
+            document.getElementById('logCallModal').style.display = 'none';
+            if (currentDetailIssueId) {
+                document.getElementById('issueDetailModal').style.display = 'flex';
+            }
+        }
+        function openLogCallFromDetail() { openLogCallModal(currentDetailIssueId); }
+
+        async function submitLogCall() {
+            const issueId = document.getElementById('callIssueId').value;
+            const body = {
+                caller_name: document.getElementById('callCallerName').value,
+                contact_person: document.getElementById('callContactPerson').value,
+                duration_minutes: parseInt(document.getElementById('callDuration').value) || null,
+                outcome: document.getElementById('callOutcome').value,
+                notes: document.getElementById('callNotes').value,
+            };
+            if (!body.caller_name) { alert('Caller name is required'); return; }
+            try {
+                await fetch(`${WORKER_API}/api/issues/${issueId}/calls`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                closeLogCallModal();
+                document.getElementById('callCallerName').value = '';
+                document.getElementById('callContactPerson').value = '';
+                document.getElementById('callDuration').value = '';
+                document.getElementById('callNotes').value = '';
+                loadIssues();
+                loadCallStats();
+                if (currentDetailIssueId) openIssueDetail(currentDetailIssueId);
+            } catch (e) {
+                alert('Failed to log call: ' + e.message);
+            }
+        }
+
+        async function openIssueDetail(issueId) {
+            currentDetailIssueId = issueId;
+            const issue = allIssues.find(i => i.id === issueId);
+            if (!issue) return;
+
+            const station = allStations.find(s => s.station_id?.toString() === issue.station_id?.toString());
+            const stationName = station?.station_name || issue.station_id;
+            const statusLabels = { open: '🟡 Open', in_progress: '🔵 In Progress', resolved: '🟢 Resolved', unresolvable: '🔴 Unresolvable' };
+            const priorityLabels = { low: '⬇️ Low', medium: '➡️ Medium', high: '⬆️ High', critical: '🔥 Critical' };
+
+            document.getElementById('issueDetailTitle').textContent = issue.title;
+            document.getElementById('issueDetailStatus').textContent = statusLabels[issue.status] || issue.status;
+            document.getElementById('issueDetailStatus').className = `status-badge issue-status-badge issue-status-${issue.status}`;
+            document.getElementById('issueDetailPriority').textContent = priorityLabels[issue.priority] || issue.priority;
+            document.getElementById('issueDetailPriority').className = `category-badge issue-priority-${issue.priority}`;
+
+            const created = issue.created_at ? new Date(issue.created_at + 'Z').toLocaleString() : '-';
+            const resolved = issue.resolved_at ? new Date(issue.resolved_at + 'Z').toLocaleString() : '-';
+            document.getElementById('issueDetailInfo').innerHTML = `
+                <div style="font-size:13px; color:var(--text-secondary); line-height:1.8;">
+                    <strong>Station:</strong> ${stationName} &nbsp;|&nbsp;
+                    <strong>Created:</strong> ${created} &nbsp;|&nbsp;
+                    <strong>Assigned:</strong> ${issue.assigned_to || 'Unassigned'} &nbsp;|&nbsp;
+                    <strong>Resolved:</strong> ${resolved}
+                    ${issue.description ? `<br/><strong>Description:</strong> ${issue.description}` : ''}
+                </div>`;
+
+            // Load call history
+            try {
+                const resp = await fetch(`${WORKER_API}/api/issues/${issueId}/calls`);
+                const calls = await resp.json();
+                const outcomeColors = { answered: '#52c41a', no_answer: '#ff4d4f', busy: '#fa541c', voicemail: '#1890ff', callback_scheduled: '#d48806' };
+                if (calls.length) {
+                    document.getElementById('issueCallHistory').innerHTML = calls.map(c => {
+                        const time = c.call_time ? new Date(c.call_time + 'Z').toLocaleString() : '-';
+                        return `<div class="call-history-item">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <strong>${c.caller_name}</strong>
+                                <span class="call-outcome-badge" style="background:${outcomeColors[c.outcome] || '#8c8c8c'}22; color:${outcomeColors[c.outcome] || '#8c8c8c'};">${c.outcome?.replace('_', ' ')}</span>
+                            </div>
+                            <div style="color:var(--text-secondary); margin-top:4px;">
+                                ${c.contact_person ? `Called: ${c.contact_person} &nbsp;|&nbsp;` : ''}
+                                ${c.duration_minutes ? `${c.duration_minutes} min &nbsp;|&nbsp;` : ''}
+                                ${time}
+                            </div>
+                            ${c.notes ? `<div style="margin-top:4px; font-style:italic; color:var(--text-secondary);">${c.notes}</div>` : ''}
+                        </div>`;
+                    }).join('');
+                } else {
+                    document.getElementById('issueCallHistory').innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls logged yet</div>';
+                }
+            } catch (e) {
+                document.getElementById('issueCallHistory').innerHTML = '<div style="color:#ff4d4f; padding:10px;">Failed to load calls</div>';
+            }
+
+            document.getElementById('issueDetailModal').style.display = 'flex';
+        }
+        function closeIssueDetailModal() { document.getElementById('issueDetailModal').style.display = 'none'; currentDetailIssueId = null; }
+
+        async function updateIssueStatus(newStatus) {
+            if (!currentDetailIssueId) return;
+            try {
+                await fetch(`${WORKER_API}/api/issues/${currentDetailIssueId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                closeIssueDetailModal();
+                loadIssues();
+                loadCallStats();
+            } catch (e) {
+                alert('Failed to update: ' + e.message);
+            }
+        }
+
+        // Load issue data on init
+        async function loadIssueTrackerData() {
+            await Promise.all([loadIssues(), loadCallStats()]);
+        }
+
+        async function autoResolveActiveStationIssues() {
+            if (!allStations.length || !allIssues.length) return;
+            const activeStationIds = new Set(
+                allStations.filter(s => s.status === 'Active').map(s => s.station_id?.toString())
+            );
+            const toResolve = allIssues.filter(i =>
+                (i.status === 'open' || i.status === 'in_progress') &&
+                activeStationIds.has(i.station_id?.toString())
+            );
+            if (!toResolve.length) return;
+            let resolved = 0;
+            for (const issue of toResolve) {
+                try {
+                    await fetch(`${WORKER_API}/api/issues/${issue.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'resolved' }),
+                    });
+                    resolved++;
+                } catch (e) {
+                    console.error(`Failed to auto-resolve issue ${issue.id}:`, e);
+                }
+            }
+            if (resolved > 0) { await loadIssues(); loadCallStats(); }
+            console.log(`Auto-resolved ${resolved} issue(s) for stations back online.`);
+        }
+
+        async function autoPopulateInactiveIssues(silent = false) {
+            if (!allStations.length) { if (!silent) alert('Station data not loaded yet. Please wait.'); return; }
+            const inactiveStations = allStations.filter(s => s.status !== 'Active' && (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
+            if (!inactiveStations.length) { if (!silent) alert('All stations are active! No issues to create.'); return; }
+
+            try {
+                // Fetch fresh issues from API to avoid stale data / duplicates
+                const resp = await fetch(`${WORKER_API}/api/issues`);
+                const freshIssues = await resp.json();
+                const openIssueStationIds = new Set(
+                    freshIssues
+                        .filter(i => i.status === 'open' || i.status === 'in_progress')
+                        .map(i => i.station_id?.toString())
+                );
+
+                const toCreate = inactiveStations.filter(s => !openIssueStationIds.has(s.station_id?.toString()));
+                if (!toCreate.length) { if (!silent) alert('All inactive stations already have open issues.'); return; }
+
+                if (!silent && !confirm(`Create issues for ${toCreate.length} inactive station(s)?`)) return;
+
+                let created = 0;
+                for (const station of toCreate) {
+                    try {
+                        await fetch(`${WORKER_API}/api/issues`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                station_id: station.station_id,
+                                title: `Station ${station.status || 'Offline'}: ${station.station_name}`,
+                                description: `Auto-created: Station ${station.station_name} (${station.station_id}) is currently ${(station.status || 'offline').toLowerCase()}.`,
+                                priority: station.status === 'Disabled' ? 'low' : 'medium',
+                            }),
+                        });
+                        created++;
+                    } catch (e) {
+                        console.error(`Failed to create issue for ${station.station_id}:`, e);
+                    }
+                }
+                if (!silent) alert(`Created ${created} issue(s) for inactive stations.`);
+                if (created > 0) { await loadIssues(); loadCallStats(); }
+            } catch (e) {
+                if (!silent) alert('Failed to auto-populate: ' + e.message);
+                console.error('Auto-populate failed:', e);
+            }
+        }
+
         // Initialize
         async function init() {
             initTheme();
@@ -5195,6 +5973,7 @@
             document.getElementById('networkFilter').value = currentNetworkFilter;
 
             await loadData();
+            loadIssueTrackerData();
             setupEventListeners();
             setupUptimeRangeToggles();
 

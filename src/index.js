@@ -412,7 +412,7 @@ export default {
     // CORS headers
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
@@ -699,6 +699,126 @@ export default {
       } else if (path === '/api/send-daily-report') {
         // Manually trigger sending daily email report
         return await handleSendDailyReport(env, corsHeaders);
+
+      // ---- Issue Tracking & Call Log Routes ----
+      } else if (path === '/api/issues' && request.method === 'GET') {
+        // List issues, optionally filtered by station_id and/or status
+        const stationId = url.searchParams.get('station_id');
+        const status = url.searchParams.get('status');
+        let query = 'SELECT * FROM station_issues WHERE 1=1';
+        const binds = [];
+        if (stationId) { query += ' AND station_id = ?'; binds.push(stationId); }
+        if (status) { query += ' AND status = ?'; binds.push(status); }
+        query += ' ORDER BY created_at DESC';
+        const result = await env.DB.prepare(query).bind(...binds).all();
+        return new Response(JSON.stringify(result.results), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path === '/api/issues' && request.method === 'POST') {
+        // Create a new issue
+        const body = await request.json();
+        const { station_id, title, description, priority, assigned_to, created_by } = body;
+        if (!station_id || !title) {
+          return new Response(JSON.stringify({ error: 'station_id and title are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const result = await env.DB.prepare(
+          `INSERT INTO station_issues (station_id, title, description, priority, assigned_to, created_by)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(station_id, title, description || null, priority || 'medium', assigned_to || null, created_by || null).run();
+        return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path.match(/^\/api\/issues\/\d+$/) && request.method === 'PATCH') {
+        // Update issue status/fields
+        const issueId = parseInt(path.split('/').pop());
+        const body = await request.json();
+        const updates = [];
+        const binds = [];
+        for (const field of ['status', 'priority', 'assigned_to', 'title', 'description']) {
+          if (body[field] !== undefined) { updates.push(`${field} = ?`); binds.push(body[field]); }
+        }
+        if (body.status === 'resolved' || body.status === 'unresolvable') {
+          updates.push("resolved_at = datetime('now')");
+        }
+        updates.push("updated_at = datetime('now')");
+        binds.push(issueId);
+        await env.DB.prepare(`UPDATE station_issues SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path.match(/^\/api\/issues\/\d+$/) && request.method === 'DELETE') {
+        // Delete an issue
+        const issueId = parseInt(path.split('/').pop());
+        await env.DB.prepare('DELETE FROM station_issues WHERE id = ?').bind(issueId).run();
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path.match(/^\/api\/issues\/\d+\/calls$/) && request.method === 'GET') {
+        // Get calls for an issue
+        const issueId = parseInt(path.split('/')[3]);
+        const result = await env.DB.prepare('SELECT * FROM issue_calls WHERE issue_id = ? ORDER BY call_time DESC').bind(issueId).all();
+        return new Response(JSON.stringify(result.results), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path.match(/^\/api\/issues\/\d+\/calls$/) && request.method === 'POST') {
+        // Log a call for an issue
+        const issueId = parseInt(path.split('/')[3]);
+        const body = await request.json();
+        const { caller_name, contact_person, duration_minutes, outcome, notes } = body;
+        if (!caller_name) {
+          return new Response(JSON.stringify({ error: 'caller_name is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        // Get station_id from the issue
+        const issue = await env.DB.prepare('SELECT station_id FROM station_issues WHERE id = ?').bind(issueId).first();
+        if (!issue) {
+          return new Response(JSON.stringify({ error: 'Issue not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const result = await env.DB.prepare(
+          `INSERT INTO issue_calls (issue_id, station_id, caller_name, contact_person, duration_minutes, outcome, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).bind(issueId, issue.station_id, caller_name, contact_person || null, duration_minutes || null, outcome || 'no_answer', notes || null).run();
+        // Auto-update issue status to in_progress if it's open
+        await env.DB.prepare("UPDATE station_issues SET status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open'").bind(issueId).run();
+        return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      } else if (path === '/api/call-stats' && request.method === 'GET') {
+        // Aggregated call stats by range
+        const range = url.searchParams.get('range') || '24h';
+        let timeFilter;
+        if (range === '24h') timeFilter = "datetime('now', '-1 day')";
+        else if (range === '7d') timeFilter = "datetime('now', '-7 days')";
+        else if (range === '30d') timeFilter = "datetime('now', '-30 days')";
+        else if (range === '1y') timeFilter = "datetime('now', '-1 year')";
+        else timeFilter = "datetime('now', '-1 day')";
+
+        const [byPerson, byStation, byOutcome, summary] = await Promise.all([
+          env.DB.prepare(`SELECT caller_name, COUNT(*) as total_calls, COUNT(DISTINCT issue_id) as issues_handled
+            FROM issue_calls WHERE call_time >= ${timeFilter} GROUP BY caller_name ORDER BY total_calls DESC`).all(),
+          env.DB.prepare(`SELECT c.station_id, s.station_name, COUNT(*) as total_calls
+            FROM issue_calls c LEFT JOIN stations s ON c.station_id = s.station_id
+            WHERE c.call_time >= ${timeFilter} GROUP BY c.station_id ORDER BY total_calls DESC LIMIT 20`).all(),
+          env.DB.prepare(`SELECT outcome, COUNT(*) as count FROM issue_calls
+            WHERE call_time >= ${timeFilter} GROUP BY outcome`).all(),
+          env.DB.prepare(`SELECT
+            COUNT(*) as total_calls,
+            COUNT(DISTINCT issue_id) as total_issues,
+            COUNT(DISTINCT caller_name) as active_callers
+            FROM issue_calls WHERE call_time >= ${timeFilter}`).first(),
+        ]);
+
+        // Issue resolution stats (filtered by range - created_at)
+        const issueStats = await env.DB.prepare(`SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_issues,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+          SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+          SUM(CASE WHEN status = 'unresolvable' THEN 1 ELSE 0 END) as unresolvable
+          FROM station_issues WHERE created_at >= ${timeFilter}`).first();
+
+        return new Response(JSON.stringify({
+          range,
+          summary: summary || { total_calls: 0, total_issues: 0, active_callers: 0 },
+          issue_stats: issueStats || { total: 0, open_issues: 0, in_progress: 0, resolved: 0, unresolvable: 0 },
+          by_person: byPerson.results,
+          by_station: byStation.results,
+          by_outcome: byOutcome.results,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
       } else if (env.ASSETS) {
         // Serve static assets (dashboard SPA)
         return env.ASSETS.fetch(request);
@@ -2834,7 +2954,7 @@ async function handleDashboardStats(env, corsHeaders) {
     // Seasonal temperature validation for Pakistan
     const currentMonth = now.getMonth() + 1;
     const isSummer = currentMonth >= 4 && currentMonth <= 9;
-    const MIN_VALID_TEMP = isSummer ? 5 : -15;
+    const MIN_VALID_TEMP = isSummer ? -5 : -15;
     const MAX_VALID_TEMP = isSummer ? 52 : 40;
 
     // OPTIMIZED: Two lightweight queries instead of one massive CTE
