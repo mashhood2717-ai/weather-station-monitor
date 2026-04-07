@@ -2442,6 +2442,20 @@
             '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis'
         };
 
+        // Auto-detect source for stations with missing/incorrect api_source
+        const VALID_SOURCES = new Set(['Davis', 'Misol', 'WU']);
+        function normalizeApiSource(stationId, rawSource) {
+            // Check manual overrides first
+            if (SOURCE_OVERRIDES[stationId]) return SOURCE_OVERRIDES[stationId];
+            // If already a known valid source, return as-is
+            if (rawSource && VALID_SOURCES.has(rawSource)) return rawSource;
+            // WU station IDs: start with "I" followed by uppercase letter (e.g. IKARAC25)
+            const sid = String(stationId || '');
+            if (/^I[A-Z]/.test(sid)) return 'WU';
+            // Default: most WeatherWalay stations with numeric IDs are Davis
+            return 'Davis';
+        }
+
         // Current category filter
         let currentCategory = 'all';
 
@@ -4946,7 +4960,7 @@
 
                 allStations = payload.stations.map(s => {
                     const category = STATION_CATEGORIES[s.station_id] || 'community';
-                    const apiSource = SOURCE_OVERRIDES[s.station_id] || s.api_source || 'N/A';
+                    const apiSource = normalizeApiSource(s.station_id, s.api_source);
                     return {
                         station_id: s.station_id,
                         station_name: s.location || s.station_name || `Station ${s.station_id}`,

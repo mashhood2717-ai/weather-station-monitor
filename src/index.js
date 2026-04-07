@@ -175,6 +175,27 @@ function fahrenheitToCelsius(fahrenheit) {
   return Math.round((fahrenheit - 32) * 5 / 9 * 10) / 10; // Round to 1 decimal
 }
 
+// Normalize apiSource: auto-detect correct source for stations with missing/incorrect values
+const VALID_SOURCES = new Set(['Davis', 'Misol', 'WU']);
+function normalizeApiSource(station) {
+  const raw = station.apiSource;
+  // If already a known valid source, return as-is
+  if (raw && VALID_SOURCES.has(raw)) return raw;
+
+  // Try apiType field (often correct even when apiSource is wrong)
+  if (station.apiType && VALID_SOURCES.has(station.apiType)) return station.apiType;
+
+  // ownedBy === 'WU' → Weather Underground
+  if (station.ownedBy === 'WU') return 'WU';
+
+  // WU station IDs follow pattern: starts with "I" followed by uppercase letter (e.g. IKARAC25)
+  const sid = String(station.stationID || '');
+  if (/^I[A-Z]/.test(sid)) return 'WU';
+
+  // Default: most WeatherWalay stations with numeric IDs are Davis
+  return 'Davis';
+}
+
 // Fetch all stations from HubService API (your main API)
 async function fetchAllStationsFromHubService(env) {
   try {
@@ -205,7 +226,7 @@ async function fetchAllStationsFromHubService(env) {
     // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={})
     const neededFields = JSON.stringify({
       stationID: 1, stationName: 1, poi: 1, lat: 1, long: 1,
-      status: 1, apiSource: 1, socketLastUpdate: 1
+      status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
     });
     for (let page = 1; page <= 6; page++) {
       const response = await fetch(
@@ -269,8 +290,12 @@ async function fetchAllStationsFromHubService(env) {
             }
           }
 
+          // Normalize apiSource: fix missing/incorrect values (e.g. API keys, nulls)
+          const normalizedSource = normalizeApiSource(station);
+
           return {
             ...station,
+            apiSource: normalizedSource,
             temperature,
             rainfall,
             windSpeed
@@ -454,10 +479,23 @@ export default {
         // Remove stations that return 404 errors
         return await handleRemove404Stations(env, corsHeaders);
       } else if (path === '/api/cleanup') {
-        // Manual cleanup - delete logs older than 30 days
-        const days = parseInt(url.searchParams.get('days')) || 30;
+        // Manual cleanup - delete logs older than N days (default 180 = 6 months)
+        const days = parseInt(url.searchParams.get('days')) || 180;
         const deleted = await cleanupOldLogs(env, days);
         return new Response(JSON.stringify({ success: true, deleted, days_kept: days }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } else if (path === '/api/drop-redundant-indexes') {
+        // Drop 3 redundant indexes to save ~60% storage
+        // Keep only idx_status_logs_station_timestamp and idx_status_logs_ts_station_online
+        try {
+          await env.DB.batch([
+            env.DB.prepare('DROP INDEX IF EXISTS idx_status_logs_station'),
+            env.DB.prepare('DROP INDEX IF EXISTS idx_status_logs_timestamp'),
+            env.DB.prepare('DROP INDEX IF EXISTS idx_status_logs_online'),
+          ]);
+          return new Response(JSON.stringify({ success: true, message: 'Dropped 3 redundant indexes. Run VACUUM via wrangler to reclaim space.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       } else if (path === '/api/test-hubservice') {
         // Debug endpoint to test HubService API response
         const stationName = url.searchParams.get('name') || 'saad';
@@ -497,6 +535,34 @@ export default {
         } catch (e) {
           return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+      } else if (path === '/api/test-hub-endpoint') {
+        // Debug: proxy any HubService endpoint with auth to discover API surface
+        const ep = url.searchParams.get('ep') || '/wms/livedata';
+        const sid = url.searchParams.get('sid') || 'C14';
+        let token = null;
+        if (env.HUBSERVICE_BASIC_AUTH) token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
+        else if (env.HUBSERVICE_JWT) token = env.HUBSERVICE_JWT;
+        if (!token) return new Response(JSON.stringify({ error: 'No token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        // Also prepare Basic Auth for /ww-Hub/ routes
+        const dynamicBasic = btoa(`we@therwalay-${Date.now()}:we@therwalay_dev#7780`);
+        const authHeaders = ep.startsWith('/ww-Hub/')
+          ? { 'Authorization': `Basic ${dynamicBasic}` }
+          : { 'Authorization': `Bearer ${token}` };
+        const tryUrls = [
+          `https://hubservice.weatherwalay.com${ep}?stationID=${sid}`,
+          `https://hubservice.weatherwalay.com${ep}/${sid}`,
+        ];
+        const results = [];
+        for (const u of tryUrls) {
+          try {
+            const r = await fetch(u, { headers: authHeaders });
+            const body = await r.text();
+            results.push({ url: u, status: r.status, body: body.substring(0, 2000) });
+          } catch (e) {
+            results.push({ url: u, error: e.message });
+          }
+        }
+        return new Response(JSON.stringify(results, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else if (path === '/api/storage-stats') {
         // Get storage statistics
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStorageStats(env, corsHeaders));
@@ -682,8 +748,8 @@ export default {
     // Cleanup old data only once per day (at 4 AM UTC / 9 AM PKT)
     if (utcHour === 4 && utcMinute < 30) {
       try {
-        console.log('Cleaning up old logs (keeping 15 months)...');
-        await cleanupOldLogs(env, 456);
+        console.log('Cleaning up old logs (keeping 180 days / 6 months)...');
+        await cleanupOldLogs(env, 180);
       } catch (e) {
         console.warn('Cleanup failed:', e.message);
       }
@@ -694,7 +760,7 @@ export default {
 // ============================================================
 // CLEANUP OLD LOGS - Keep only N days of data
 // ============================================================
-async function cleanupOldLogs(env, daysToKeep = 30) {
+async function cleanupOldLogs(env, daysToKeep = 180) {
   try {
     // Delete status_logs older than N days
     const logsResult = await env.DB.prepare(`
@@ -1415,6 +1481,11 @@ function prepareStationData(station) {
   }
   let rainfall = station.rainfall !== undefined && station.rainfall !== null ? parseFloat(station.rainfall) : null;
   let windSpeed = station.windSpeed !== undefined && station.windSpeed !== null ? parseFloat(station.windSpeed) : null;
+  // Fallback: use socketLastUpdate.ws for stations (e.g. WOW) where servicesResponses parsing yields null
+  if (windSpeed === null && station.socketLastUpdate && station.socketLastUpdate.ws !== undefined && station.socketLastUpdate.ws !== null) {
+    windSpeed = parseFloat(station.socketLastUpdate.ws);
+    if (isNaN(windSpeed)) windSpeed = null;
+  }
 
   return { stationId, isDisabled, isOnline, displayName, stationName, apiSource, temperature, rainfall, windSpeed };
 }

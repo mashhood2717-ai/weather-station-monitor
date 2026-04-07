@@ -26,7 +26,7 @@ database_id = "c86a9395-05a8-4dee-9d6e-acf000bd11ea"
 
 # Static Assets (Serve dashboard from Worker)
 [assets]
-directory = "dashboard-react/dist"
+directory = "dashboard"
 binding = "ASSETS"
 
 # Cron Triggers - DISABLED for staging (manual testing only)
@@ -74,12 +74,12 @@ ENVIRONMENT = "production"
 
 # Static Assets (Serve dashboard from Worker)
 [env.production.assets]
-directory = "dashboard-react/dist"
+directory = "dashboard"
 binding = "ASSETS"
 
 # Build Configuration
-[build]
-command = "cd dashboard-react && npm run build"
+# [build]
+# command = "cd dashboard-react && npm run build"
 
 # Limits (Free Tier)
 # Note: cpu_ms removed; free tier allows 10ms CPU time per invocation by default.
