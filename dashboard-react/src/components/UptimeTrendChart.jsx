@@ -5,6 +5,7 @@ import { API_BASE } from '../utils/constants';
 
 export default function UptimeTrendChart({ isDark }) {
     const [range, setRange] = useState('24h');
+    const [chartType, setChartType] = useState('line');
     const [data, setData] = useState(null);
     const canvasRef = useRef(null);
     const chartRef = useRef(null);
@@ -27,7 +28,7 @@ export default function UptimeTrendChart({ isDark }) {
         if (!data || !canvasRef.current) return;
         // Lazy import chart.js via CDN is already in HTML, use simple canvas drawing
         drawChart();
-    }, [data, isDark]);
+    }, [data, isDark, chartType]);
 
     function drawChart() {
         if (!data || !data.trend || !canvasRef.current) return;
@@ -76,6 +77,31 @@ export default function UptimeTrendChart({ isDark }) {
                     return pktDate.toISOString().substring(11, 16);
                 });
                 values = todayHourly.map(item => item.uptime_pct);
+            } else if (range === '7d') {
+                // Aggregate hourly data into 6-hour checkpoints (4 per day × 7 = 28 points)
+                const buckets = {};
+                trend.forEach(item => {
+                    const d = new Date(item.period);
+                    const pktDate = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+                    const hour = pktDate.getUTCHours();
+                    const bucketHour = Math.floor(hour / 6) * 6; // 0, 6, 12, 18
+                    const day = pktDate.toISOString().substring(0, 10);
+                    const key = `${day} ${String(bucketHour).padStart(2, '0')}:00`;
+                    if (!buckets[key]) buckets[key] = { sumOnline: 0, sumTotal: 0, day, bucketHour };
+                    buckets[key].sumOnline += (item.online_checks || 0);
+                    buckets[key].sumTotal += (item.total_checks || 0);
+                });
+                const keys = Object.keys(buckets).sort();
+                labels = keys.map(k => {
+                    const b = buckets[k];
+                    const date = new Date(b.day);
+                    const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    return `${dayLabel} ${String(b.bucketHour).padStart(2, '0')}:00`;
+                });
+                values = keys.map(k => {
+                    const b = buckets[k];
+                    return b.sumTotal > 0 ? parseFloat(((b.sumOnline / b.sumTotal) * 100).toFixed(1)) : 0;
+                });
             } else {
                 const dailyData = {};
                 trend.forEach(item => {
@@ -145,6 +171,34 @@ export default function UptimeTrendChart({ isDark }) {
         const getX = (i) => pad.left + (i / (values.length - 1)) * plotW;
         const getY = (v) => pad.top + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
 
+        if (chartType === 'bar') {
+            const n = values.length;
+            const slot = plotW / n;
+            const barW = Math.max(1, Math.min(28, slot * 0.7));
+            for (let i = 0; i < n; i++) {
+                const v = values[i];
+                const cx = pad.left + slot * i + slot / 2;
+                const x = cx - barW / 2;
+                const y = getY(v);
+                const barH = pad.top + plotH - y;
+                const color = v >= 95 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444';
+                // Rounded top bar
+                const r = Math.min(4, barW / 2);
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + barW - r, y);
+                ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+                ctx.lineTo(x + barW, y + barH);
+                ctx.lineTo(x, y + barH);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+                ctx.fill();
+            }
+            return;
+        }
+
         // Fill gradient
         const gradient = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
         gradient.addColorStop(0, 'rgba(16, 185, 129, 0.3)');
@@ -203,13 +257,19 @@ export default function UptimeTrendChart({ isDark }) {
             )}
             size="small"
             extra={(
-                <Radio.Group value={range} onChange={(e) => setRange(e.target.value)} size="small" buttonStyle="solid">
-                    <Radio.Button value="24h">24h</Radio.Button>
-                    <Radio.Button value="daily">Daily</Radio.Button>
-                    <Radio.Button value="7d">7d</Radio.Button>
-                    <Radio.Button value="30d">30d</Radio.Button>
-                    <Radio.Button value="1y">1y</Radio.Button>
-                </Radio.Group>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <Radio.Group value={chartType} onChange={(e) => setChartType(e.target.value)} size="small">
+                        <Radio.Button value="line">Line</Radio.Button>
+                        <Radio.Button value="bar">Bar</Radio.Button>
+                    </Radio.Group>
+                    <Radio.Group value={range} onChange={(e) => setRange(e.target.value)} size="small" buttonStyle="solid">
+                        <Radio.Button value="24h">24h</Radio.Button>
+                        <Radio.Button value="daily">Daily</Radio.Button>
+                        <Radio.Button value="7d">7d</Radio.Button>
+                        <Radio.Button value="30d">30d</Radio.Button>
+                        <Radio.Button value="1y">1y</Radio.Button>
+                    </Radio.Group>
+                </div>
             )}
             styles={{ body: { padding: 16 } }}
         >

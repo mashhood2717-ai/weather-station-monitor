@@ -1927,6 +1927,7 @@
                             <option value="community">👥 Community</option>
                             <option value="reference">📍 Reference</option>
                             <option value="wow">🛣️ WOW</option>
+                            <option value="krews">🔬 KREWS</option>
                             <option value="wu">🌐 External</option>
                         </select>
                         <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
@@ -2804,7 +2805,7 @@
             '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'community',
             '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'community',
             '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
-            '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'community',
+            '183871': 'community', '144841': 'krews', '131374': 'community', '147435': 'community',
             '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
             '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
             '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
@@ -2819,7 +2820,10 @@
             // WOW - Toll Plaza Stations
             '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
             '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
-            '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow'
+            '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow',
+            // KREWS Stations
+            '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
+            '232282': 'krews', '232283': 'krews'
         };
 
         // Category display names and colors
@@ -2828,7 +2832,8 @@
             'corporate': { name: 'Corporate', color: '#8b5cf6', icon: '🏢' },
             'wu': { name: 'External', color: '#ec4899', icon: '🌐' },
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' },
-            'wow': { name: 'WOW', color: '#f59e0b', icon: '🛣️' }
+            'wow': { name: 'WOW', color: '#f59e0b', icon: '🛣️' },
+            'krews': { name: 'KREWS', color: '#e11d48', icon: '🔬' }
         };
 
         // Source overrides for stations with missing/incorrect api_source from HubService
@@ -3012,8 +3017,33 @@
                             return parts[1] ? parts[1].substring(0, 5) : item.period;
                         });
                         uptimeValues = data.trend.map(item => item.uptime_pct);
+                    } else if (range === '7d') {
+                        // Aggregate into 6-hour checkpoints (00:00, 06:00, 12:00, 18:00) in PKT
+                        const buckets = {};
+                        data.trend.forEach(item => {
+                            // item.period is already in local (server) time; treat as-is, just bucket by hour
+                            const parts = item.period.split(' ');
+                            const day = parts[0];
+                            const hour = parts[1] ? parseInt(parts[1].substring(0, 2), 10) : 0;
+                            const bucketHour = Math.floor(hour / 6) * 6;
+                            const key = `${day} ${String(bucketHour).padStart(2, '0')}:00`;
+                            if (!buckets[key]) buckets[key] = { sumOnline: 0, sumTotal: 0, day, bucketHour };
+                            buckets[key].sumOnline += (item.online_checks || 0);
+                            buckets[key].sumTotal += (item.total_checks || 0);
+                        });
+                        const keys = Object.keys(buckets).sort();
+                        labels = keys.map(k => {
+                            const b = buckets[k];
+                            const date = new Date(b.day);
+                            const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            return `${dayLabel} ${String(b.bucketHour).padStart(2, '0')}:00`;
+                        });
+                        uptimeValues = keys.map(k => {
+                            const b = buckets[k];
+                            return b.sumTotal > 0 ? parseFloat(((b.sumOnline / b.sumTotal) * 100).toFixed(1)) : 0;
+                        });
                     } else {
-                        // Group by day for 7d
+                        // Group by day for other hourly ranges
                         const dailyData = {};
                         data.trend.forEach(item => {
                             const day = item.period.split(' ')[0];
@@ -3181,9 +3211,9 @@
             }
 
             // Calculate uptime for each category - prefer real 24h uptime when available
-            const categories = ['corporate', 'community', 'reference', 'wow', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -3615,9 +3645,9 @@
 
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
-            const categories = ['corporate', 'community', 'reference', 'wow', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4109,6 +4139,7 @@
                 corporate: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'corporate').length,
                 community: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'community').length,
                 reference: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'reference').length,
+                krews: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'krews').length,
                 wu: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu').length
             };
             const count = counts[category] || counts.all;
@@ -4570,6 +4601,12 @@
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // 6-hour bucket format: 'YYYY-MM-DD HH:00:00' (used for 7D range)
+                const dtMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):\d{2}:\d{2}$/);
+                if (dtMatch) {
+                    const d = new Date(Date.UTC(+dtMatch[1], +dtMatch[2] - 1, +dtMatch[3], +dtMatch[4], 0, 0));
+                    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', hour12: true, timeZone: 'Asia/Karachi' });
+                }
                 // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
                 if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
                     // Daily format - show as "Dec 30"
@@ -4672,6 +4709,12 @@
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // 6-hour bucket format: 'YYYY-MM-DD HH:00:00' (used for 7D range)
+                const dtMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):\d{2}:\d{2}$/);
+                if (dtMatch) {
+                    const d = new Date(Date.UTC(+dtMatch[1], +dtMatch[2] - 1, +dtMatch[3], +dtMatch[4], 0, 0));
+                    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', hour12: true, timeZone: 'Asia/Karachi' });
+                }
                 // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
                 if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
                     // Daily format - show as "Dec 30"

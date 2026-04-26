@@ -1028,7 +1028,7 @@ const STATION_CATEGORIES = {
   '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'community',
   '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'community',
   '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
-  '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'community',
+  '183871': 'community', '144841': 'krews', '131374': 'community', '147435': 'community',
   '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
   '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
   '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
@@ -1043,7 +1043,10 @@ const STATION_CATEGORIES = {
   // WOW - Toll Plaza Stations
   '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
   '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
-  '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow'
+  '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow',
+  // KREWS Stations
+  '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
+  '232282': 'krews', '232283': 'krews'
 };
 
 async function generateDailyReportData(env) {
@@ -1218,6 +1221,7 @@ async function handleDailyReportExcel(env, corsHeaders) {
       'Community': { bg: '#dcfce7', text: '#166534' },
       'Reference': { bg: '#fef3c7', text: '#92400e' },
       'WU': { bg: '#ffe4e6', text: '#be123c' },
+      'KREWS': { bg: '#fce7f3', text: '#9d174d' },
       'Unknown': { bg: '#f1f5f9', text: '#475569' }
     };
 
@@ -2427,11 +2431,12 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     const hoursToFetch = days > 0 ? days * 24 : hours;
 
     // Determine aggregation granularity based on requested period
-    // default: hourly; days >=7 -> daily, days >=90 -> monthly, days >=1095 -> yearly
+    // default: hourly; days ==7 -> 6-hourly, days >=30 -> daily, days >=90 -> monthly, days >=1095 -> yearly
     let granularity = 'hour';
     if (days >= 1095) granularity = 'year';
     else if (days >= 90) granularity = 'month';
-    else if (days >= 7) granularity = 'day';
+    else if (days >= 30) granularity = 'day';
+    else if (days === 7) granularity = '6hour';
 
     // Get station info from cached HubService data (avoids extra API call)
     let stationInfo = null;
@@ -2466,6 +2471,11 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
       timeFilter = `timestamp >= datetime('now', '-${days} days')`;
       groupExpr = "strftime('%Y-%m-%d', timestamp)";
       labelFormatter = (v) => v; // YYYY-MM-DD
+    } else if (granularity === '6hour') {
+      timeFilter = `timestamp >= datetime('now', '-${days} days')`;
+      // Bucket to 6-hour checkpoints (00,06,12,18) in UTC
+      groupExpr = "strftime('%Y-%m-%d ', timestamp) || printf('%02d:00:00', (CAST(strftime('%H', timestamp) AS INTEGER)/6)*6)";
+      labelFormatter = (v) => v;
     } else if (granularity === 'month') {
       timeFilter = `timestamp >= datetime('now', '-${days} days')`;
       groupExpr = "strftime('%Y-%m', timestamp)";
@@ -2559,6 +2569,36 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
           timeseries.push({
             period: bucket,
             period_label: bucket,
+            uptime: uptime !== null ? Number(uptime.toFixed(1)) : null,
+            checks: total,
+            online: online,
+            avg_temperature: avgTemp
+          });
+        }
+      } else if (granularity === '6hour') {
+        // 7 days × 4 buckets/day = 28 points, anchored to 00/06/12/18 UTC
+        const totalBuckets = days * 4;
+        const nowUtc = new Date();
+        // Anchor to the current 6-hour block
+        const anchor = new Date(Date.UTC(
+          nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), nowUtc.getUTCDate(),
+          Math.floor(nowUtc.getUTCHours() / 6) * 6, 0, 0
+        ));
+        for (let i = totalBuckets - 1; i >= 0; i--) {
+          const dt = new Date(anchor.getTime() - i * 6 * 60 * 60 * 1000);
+          const y = dt.getUTCFullYear();
+          const mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
+          const d = String(dt.getUTCDate()).padStart(2, '0');
+          const h = String(dt.getUTCHours()).padStart(2, '0');
+          const bucket = `${y}-${mo}-${d} ${h}:00:00`;
+          const match = aggRows.find(r => r.bucket === bucket);
+          const total = match ? match.total_checks : 0;
+          const online = match ? match.online_checks : 0;
+          const uptime = total > 0 ? (online / total) * 100 : null;
+          const avgTemp = match && match.avg_temp !== null ? parseFloat(match.avg_temp) : null;
+          timeseries.push({
+            period: bucket,
+            period_label: dt.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Karachi' }),
             uptime: uptime !== null ? Number(uptime.toFixed(1)) : null,
             checks: total,
             online: online,

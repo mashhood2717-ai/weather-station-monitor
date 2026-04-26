@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS downtime_records (
 -- INDEXES FOR PERFORMANCE
 -- ============================================================
 
--- Status logs indexes (only 2 essential indexes - minimizes storage overhead)
+which -- Status logs indexes (only 2 essential indexes - minimizes storage overhead)
 -- Covering index for uptime queries (timestamp range + GROUP BY station_id + SUM(is_online))
 -- Defined in add-covering-index.sql: idx_status_logs_ts_station_online(timestamp, station_id, is_online)
 

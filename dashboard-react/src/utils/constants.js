@@ -62,7 +62,7 @@ export const STATION_CATEGORIES = {
     '211337': 'corporate', '128962': 'corporate', '129010': 'community', '129104': 'community',
     '180025': 'community', '180027': 'reference', '129644': 'community', '129727': 'community',
     '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
-    '183871': 'community', '144841': 'community', '131374': 'community', '147435': 'community',
+    '183871': 'community', '144841': 'krews', '131374': 'community', '147435': 'community',
     '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
     '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
     '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
@@ -78,6 +78,9 @@ export const STATION_CATEGORIES = {
     '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
     '221726': 'wow', '221703': 'wow', '221746': 'wow', '221873': 'wow', '221910': 'wow',
     '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow',
+    // KREWS Stations
+    '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
+    '232282': 'krews', '232283': 'krews',
 };
 
 // Source overrides for stations with missing/incorrect api_source
@@ -158,6 +161,7 @@ export const CATEGORY_CONFIG = {
     wu: { name: 'External', color: '#ec4899', icon: '🌐' },
     reference: { name: 'Reference', color: '#14b8a6', icon: '📍' },
     wow: { name: 'WOW', color: '#f59e0b', icon: '🛣️' },
+    krews: { name: 'KREWS', color: '#e11d48', icon: '🔬' },
 };
 
 // Province display config
@@ -172,4 +176,4 @@ export const PROVINCE_CONFIG = {
 };
 
 export const PROVINCE_LIST = ['Islamabad', 'Punjab', 'KPK', 'Sindh', 'Balochistan', 'AJK', 'GB'];
-export const CATEGORY_LIST = ['corporate', 'community', 'reference', 'wow', 'wu'];
+export const CATEGORY_LIST = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
