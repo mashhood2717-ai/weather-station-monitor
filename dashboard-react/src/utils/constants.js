@@ -80,7 +80,9 @@ export const STATION_CATEGORIES = {
     '221938': 'wow', '221876': 'wow', '221803': 'wow', '221884': 'wow', '228127': 'wow',
     // KREWS Stations
     '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
-    '232282': 'krews', '232283': 'krews',
+    '232282': 'krews', '236172': 'krews',
+    // Reference
+    '232283': 'reference',
 };
 
 // Source overrides for stations with missing/incorrect api_source
