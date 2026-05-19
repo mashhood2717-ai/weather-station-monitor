@@ -819,6 +819,56 @@ export default {
           by_outcome: byOutcome.results,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+      } else if (path === '/api/export/calls' && request.method === 'GET') {
+        const range = url.searchParams.get('range') || 'all';
+        const callerFilter = url.searchParams.get('caller') || '';
+
+        let timeCondition = '';
+        if (range === '24h') timeCondition = "AND c.call_time >= datetime('now', '-1 day')";
+        else if (range === '7d') timeCondition = "AND c.call_time >= datetime('now', '-7 days')";
+        else if (range === '30d') timeCondition = "AND c.call_time >= datetime('now', '-30 days')";
+        else if (range === '1y') timeCondition = "AND c.call_time >= datetime('now', '-1 year')";
+
+        let query = `
+          SELECT c.call_time, c.caller_name, c.contact_person, c.station_id,
+            i.title as issue_title, i.status as issue_status, i.assigned_to,
+            c.duration_minutes, c.outcome, c.notes
+          FROM issue_calls c
+          LEFT JOIN station_issues i ON c.issue_id = i.id
+          WHERE 1=1 ${timeCondition}
+        `;
+        const binds = [];
+        if (callerFilter) { query += ' AND c.caller_name = ?'; binds.push(callerFilter); }
+        query += ' ORDER BY c.call_time DESC';
+
+        const result = await env.DB.prepare(query).bind(...binds).all();
+
+        const csvHeaders = ['Date/Time (UTC)', 'Caller Name', 'Contact Person', 'Station ID', 'Issue Title', 'Issue Status', 'Assigned To', 'Duration (min)', 'Outcome', 'Notes'];
+        const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const rows = result.results.map(r => [
+          r.call_time || '',
+          r.caller_name || '',
+          r.contact_person || '',
+          r.station_id || '',
+          r.issue_title || '',
+          r.issue_status || '',
+          r.assigned_to || '',
+          r.duration_minutes ?? '',
+          r.outcome || '',
+          r.notes || '',
+        ].map(escape).join(','));
+
+        const csv = [csvHeaders.join(','), ...rows].join('\r\n');
+        const filename = `call-logs-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+
+        return new Response(csv, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+
       } else if (env.ASSETS) {
         // Serve static assets (dashboard SPA)
         return env.ASSETS.fetch(request);

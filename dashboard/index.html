@@ -2045,6 +2045,7 @@
                         <input type="checkbox" id="includeWuIssues" onchange="renderIssuesTable()" style="cursor:pointer;"> Include WU
                     </label>
                     <button class="apply-btn" onclick="autoPopulateInactiveIssues()" style="white-space:nowrap; background:#d97706;">⚡ Auto-Populate Inactive</button>
+                    <button class="apply-btn" onclick="exportCallLogs()" style="white-space:nowrap; background:#16a34a;">⬇ Export Logs</button>
                     <button class="apply-btn" onclick="openCreateIssueModal()" style="white-space:nowrap;">+ New Issue</button>
                 </div>
             </div>
@@ -5927,6 +5928,16 @@
             }
             if (resolved > 0) { await loadIssues(); loadCallStats(); }
             console.log(`Auto-resolved ${resolved} issue(s) for stations back online.`);
+        }
+
+        function exportCallLogs() {
+            const range = document.getElementById('issueRangeFilter')?.value || '7d';
+            const a = document.createElement('a');
+            a.href = `${WORKER_API}/api/export/calls?range=${range}`;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         async function autoPopulateInactiveIssues(silent = false) {
