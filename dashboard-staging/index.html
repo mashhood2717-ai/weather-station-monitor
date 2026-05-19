@@ -2517,8 +2517,10 @@
         .caller-count { background: var(--bg-card); border-radius: 20px; padding: 2px 10px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
         .form-group { margin-bottom: 12px; }
         .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
-        .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-dark); color: var(--text-primary); font-size: 13px; box-sizing: border-box; }
+        .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font-size: 13px; box-sizing: border-box; }
         .form-input:focus { outline: none; border-color: #1890ff; }
+        select.form-input option { background: var(--bg-card); color: var(--text-primary); }
+        [data-theme="light"] select.form-input option { background: #ffffff; color: #1e293b; }
         .call-history-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
         .call-history-item:last-child { border-bottom: none; }
         .call-outcome-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 600; }
