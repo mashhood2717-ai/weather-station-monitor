@@ -693,6 +693,8 @@ export default {
       } else if (path === '/api/dashboard-stats') {
         // Get avg uptime/downtime and daily extremes (since midnight PKT)
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleDashboardStats(env, corsHeaders));
+      } else if (path === '/api/rain-gauges') {
+        return await cacheAndReturn(routeCacheKey, 600_000, handleRainGaugesRequest(env, url, corsHeaders));
       } else if (path === '/api/uptime-trend-chart') {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
@@ -3253,4 +3255,58 @@ async function handleUptimeTrendChart(env, url, corsHeaders) {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
+}
+
+// ============================================================
+// RAIN GAUGE API INTEGRATION
+// ============================================================
+// Proxies https://rain-gauge-backend.onrender.com/api which returns:
+// { lastUpdated, devices: [{ id, name, status: "Online"|"Offline", "24h", "daily", "7d", "30d", ("1y"?) }] }
+
+const RAIN_GAUGE_API_URL = "https://rain-gauge-backend.onrender.com/api";
+
+async function handleRainGaugesRequest(env, url, corsHeaders) {
+  try {
+    const upstream = await fetch(RAIN_GAUGE_API_URL, {
+      headers: { "Content-Type": "application/json" }
+    });
+
+    if (!upstream.ok) {
+      throw new Error(`Upstream API returned ${upstream.status}`);
+    }
+
+    const data = await upstream.json();
+    const devices = Array.isArray(data?.devices) ? data.devices : [];
+
+    const gauges = devices.map(d => ({
+      id: d.id,
+      name: (d.name || '').trim(),
+      status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
+      rain_24h: numOrNull(d['24h']),
+      rain_daily: numOrNull(d.daily),
+      rain_7d: numOrNull(d['7d']),
+      rain_30d: numOrNull(d['30d']),
+      rain_365d: numOrNull(d['365d'] ?? d['1y'] ?? d['1year'] ?? d.year),
+      rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd)
+    }));
+
+    return new Response(JSON.stringify({
+      success: true,
+      last_updated: data?.lastUpdated || null,
+      count: gauges.length,
+      gauges
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error("Error fetching rain gauges:", error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+function numOrNull(v) {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }

@@ -10,6 +10,7 @@ import StationTable from './components/StationTable';
 import RecentlyOfflinePanel from './components/RecentlyOfflinePanel';
 import StationDetailModal from './components/StationDetailModal';
 import IssueTracker from './components/IssueTracker';
+import RainGauges from './components/RainGauges';
 import { useStations } from './hooks/useStations';
 
 const { Content } = Layout;
@@ -79,6 +80,7 @@ export default function App() {
                                     {[
                                         { key: 'monitoring', label: '📊 Station Monitoring' },
                                         { key: 'issues', label: '📋 Issue Tracker & Call Logs' },
+                                        { key: 'rain', label: '🌧️ Rain Gauges' },
                                     ].map(tab => (
                                         <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
                                             flex: 1, padding: '12px 20px', border: 'none',
@@ -152,6 +154,11 @@ export default function App() {
                                 {/* Tab 2: Issue Tracker & Call Logs */}
                                 {activeTab === 'issues' && (
                                     <IssueTracker stations={stations} isDark={isDark} />
+                                )}
+
+                                {/* Tab 3: Rain Gauges */}
+                                {activeTab === 'rain' && (
+                                    <RainGauges isDark={isDark} />
                                 )}
                             </>
                         )}
