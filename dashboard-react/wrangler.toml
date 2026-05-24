@@ -1,0 +1,7 @@
+# Cloudflare Pages configuration for the React dashboard.
+# This project is deployed independently — do NOT bundle with the Workers staging/production deployments.
+# Deploy: npx wrangler pages deploy dist --project-name weather-monitor-react
+# URL: https://weather-monitor-react.pages.dev
+
+name = "weatherwalay-dashboard-react"
+pages_build_output_dir = "dist"

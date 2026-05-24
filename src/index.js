@@ -3286,8 +3286,8 @@ async function handleRainGaugesRequest(env, url, corsHeaders) {
       rain_daily: numOrNull(d.daily),
       rain_7d: numOrNull(d['7d']),
       rain_30d: numOrNull(d['30d']),
-      rain_365d: numOrNull(d['365d'] ?? d['1y'] ?? d['1year'] ?? d.year),
-      rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd)
+      rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd),
+      rain_all_time: numOrNull(d['all_time'] ?? d.allTime ?? d.total)
     }));
 
     return new Response(JSON.stringify({

@@ -82,12 +82,12 @@
             --success: #10b981;
             --danger: #ef4444;
             --warning: #f59e0b;
-            --bg-dark: #0f172a;
-            --bg-card: #1e293b;
-            --bg-card-hover: #334155;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border: #334155;
+            --bg-dark: #000000;
+            --bg-card: #0a0a0a;
+            --bg-card-hover: #171717;
+            --text-primary: #ffffff;
+            --text-secondary: #a3a3a3;
+            --border: #1f1f1f;
         }
 
         /* Light theme - Professional modern look */
@@ -292,7 +292,7 @@
 
         /* Header */
         header {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 25px 35px;
             border-radius: 16px;
@@ -486,7 +486,7 @@
         }
 
         .stat-card {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 12px 10px;
             border-radius: 12px;
@@ -600,7 +600,7 @@
         }
 
         .chart-card {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 25px;
             border-radius: 16px;
@@ -643,7 +643,7 @@
 
         .ring-background {
             fill: none;
-            stroke: rgba(51, 65, 85, 0.5);
+            stroke: rgba(31, 31, 31, 0.7);
             stroke-width: 25;
         }
 
@@ -748,7 +748,7 @@
 
         /* Map Container */
         .map-container {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -783,7 +783,7 @@
         }
 
         .station-list {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -813,7 +813,7 @@
 
         .search-box {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -830,7 +830,7 @@
 
         .source-filter {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -852,7 +852,7 @@
 
         .filter-btn {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-secondary);
@@ -916,7 +916,7 @@
         th {
             text-align: left;
             padding: 16px 25px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             color: var(--text-secondary);
             font-size: 12px;
             text-transform: uppercase;
@@ -1031,7 +1031,7 @@
         /* Category Dropdown */
         .category-dropdown {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -1051,7 +1051,7 @@
         .time-range-toggle {
             display: flex;
             gap: 4px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 4px;
@@ -1081,7 +1081,7 @@
 
         .date-input {
             padding: 6px 10px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-primary);
@@ -1171,7 +1171,7 @@
 
         /* Offline Panel */
         .offline-panel {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -1280,7 +1280,7 @@
 
         /* Leaflet Popup Custom */
         .leaflet-popup-content-wrapper {
-            background: rgba(30, 41, 59, 0.95) !important;
+            background: rgba(10, 10, 10, 0.95) !important;
             backdrop-filter: blur(20px);
             border: 1px solid var(--border);
             border-radius: 12px !important;
@@ -1293,7 +1293,7 @@
         }
 
         .leaflet-popup-tip {
-            background: rgba(30, 41, 59, 0.95) !important;
+            background: rgba(10, 10, 10, 0.95) !important;
         }
 
         .popup-title {
@@ -2117,7 +2117,7 @@
 
         <!-- Tab 3: Rain Gauges -->
         <div id="tab-rain" class="tab-content" style="display: none;">
-            <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+            <div class="stats-grid" style="grid-template-columns: repeat(7, 1fr);">
                 <div class="stat-card">
                     <div class="stat-label">Total Gauges</div>
                     <div class="stat-value" id="rgTotalCount">0</div>
@@ -2134,14 +2134,24 @@
                     <div class="stat-station">Currently inactive</div>
                 </div>
                 <div class="stat-card rain">
-                    <div class="stat-label">Max 24h Rainfall</div>
-                    <div class="stat-value" id="rgMax24hValue">0.0 mm</div>
-                    <div class="stat-station" id="rgMax24hStation">—</div>
+                    <div class="stat-label">Daily Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxDailyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxDailyStation">—</div>
                 </div>
                 <div class="stat-card" style="border-left: 3px solid #06b6d4;">
-                    <div class="stat-label">Total Rainfall (24h)</div>
-                    <div class="stat-value" id="rgSum24hValue">0.0 mm</div>
-                    <div class="stat-station">Network-wide</div>
+                    <div class="stat-label">Weekly Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxWeeklyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxWeeklyStation">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #8b5cf6;">
+                    <div class="stat-label">Monthly Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxMonthlyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxMonthlyStation">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #f59e0b;">
+                    <div class="stat-label">Annual Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxAnnualValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxAnnualStation">—</div>
                 </div>
             </div>
 
@@ -2172,7 +2182,7 @@
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_7d')">7 Days (mm) <span id="rgSortArrow_rain_7d"></span></th>
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_30d')">30 Days (mm) <span id="rgSortArrow_rain_30d"></span></th>
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_this_year')">This Year (mm) <span id="rgSortArrow_rain_this_year"></span></th>
-                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_365d')">365 Days (mm) <span id="rgSortArrow_rain_365d"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_all_time')">All Time (mm) <span id="rgSortArrow_rain_all_time"></span></th>
                             </tr>
                         </thead>
                         <tbody id="rainGaugesTable">
@@ -3184,10 +3194,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3199,7 +3209,7 @@
                         },
                         scales: {
                             x: {
-                                grid: { display: false, color: 'rgba(51, 65, 85, 0.3)' },
+                                grid: { display: false, color: 'rgba(31, 31, 31, 0.6)' },
                                 ticks: {
                                     color: '#94a3b8',
                                     maxRotation: range === '1y' ? 45 : 0,
@@ -3210,7 +3220,7 @@
                             y: {
                                 min: 0,
                                 max: 100,
-                                grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false },
+                                grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false },
                                 ticks: {
                                     color: '#94a3b8',
                                     callback: function (v) { return v + '%'; }
@@ -3358,10 +3368,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3377,7 +3387,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3404,10 +3414,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3420,7 +3430,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3503,10 +3513,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3522,7 +3532,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3549,10 +3559,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3565,7 +3575,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3657,10 +3667,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3676,7 +3686,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3703,10 +3713,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3719,7 +3729,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3832,7 +3842,7 @@
                                 }
                             },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
                                 callbacks: {
@@ -5745,19 +5755,22 @@
             document.getElementById('rgOnlineCount').textContent = online;
             document.getElementById('rgOfflineCount').textContent = total - online;
 
-            // Max 24h rainfall + station
-            let maxGauge = null;
-            let sum24h = 0;
-            for (const g of rainGaugesData) {
-                const v = Number(g.rain_24h);
-                if (Number.isFinite(v)) {
-                    sum24h += v;
-                    if (!maxGauge || v > Number(maxGauge.rain_24h)) maxGauge = g;
+            const periods = [
+                { key: 'rain_daily',     valueEl: 'rgMaxDailyValue',   stationEl: 'rgMaxDailyStation' },
+                { key: 'rain_7d',        valueEl: 'rgMaxWeeklyValue',  stationEl: 'rgMaxWeeklyStation' },
+                { key: 'rain_30d',       valueEl: 'rgMaxMonthlyValue', stationEl: 'rgMaxMonthlyStation' },
+                { key: 'rain_this_year', valueEl: 'rgMaxAnnualValue',  stationEl: 'rgMaxAnnualStation' }
+            ];
+            for (const p of periods) {
+                let max = null;
+                for (const g of rainGaugesData) {
+                    const v = Number(g[p.key]);
+                    if (!Number.isFinite(v)) continue;
+                    if (!max || v > Number(max[p.key])) max = g;
                 }
+                document.getElementById(p.valueEl).textContent = max ? `${Number(max[p.key]).toFixed(1)} mm` : '0.0 mm';
+                document.getElementById(p.stationEl).textContent = max ? max.name : '—';
             }
-            document.getElementById('rgMax24hValue').textContent = maxGauge ? `${Number(maxGauge.rain_24h).toFixed(1)} mm` : '0.0 mm';
-            document.getElementById('rgMax24hStation').textContent = maxGauge ? maxGauge.name : '—';
-            document.getElementById('rgSum24hValue').textContent = `${sum24h.toFixed(1)} mm`;
         }
 
         function rgFormatMm(v) {
@@ -5809,7 +5822,7 @@
             });
 
             // Update sort arrows on column headers
-            ['name','status','rain_daily','rain_24h','rain_7d','rain_30d','rain_this_year','rain_365d'].forEach(k => {
+            ['name','status','rain_daily','rain_24h','rain_7d','rain_30d','rain_this_year','rain_all_time'].forEach(k => {
                 const el = document.getElementById('rgSortArrow_' + k);
                 if (el) el.textContent = k === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : '';
             });
@@ -5834,7 +5847,7 @@
                     <td style="text-align:right;">${rgFormatMm(g.rain_7d)}</td>
                     <td style="text-align:right;">${rgFormatMm(g.rain_30d)}</td>
                     <td style="text-align:right;">${rgFormatMm(g.rain_this_year)}</td>
-                    <td style="text-align:right;">${rgFormatMm(g.rain_365d)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_all_time)}</td>
                 `;
                 frag.appendChild(tr);
             });

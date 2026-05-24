@@ -61,16 +61,26 @@ export default function RainGauges({ isDark }) {
     const stats = useMemo(() => {
         const total = gauges.length;
         const online = gauges.filter(g => g.status === 'online').length;
-        let max = null;
-        let sum24h = 0;
-        for (const g of gauges) {
-            const v = Number(g.rain_24h);
-            if (Number.isFinite(v)) {
-                sum24h += v;
-                if (!max || v > Number(max.rain_24h)) max = g;
+
+        const maxBy = (key) => {
+            let max = null;
+            for (const g of gauges) {
+                const v = Number(g[key]);
+                if (!Number.isFinite(v)) continue;
+                if (!max || v > Number(max[key])) max = g;
             }
-        }
-        return { total, online, offline: total - online, max, sum24h };
+            return max;
+        };
+
+        return {
+            total,
+            online,
+            offline: total - online,
+            maxDaily:   maxBy('rain_daily'),
+            maxWeekly:  maxBy('rain_7d'),
+            maxMonthly: maxBy('rain_30d'),
+            maxAnnual:  maxBy('rain_this_year'),
+        };
     }, [gauges]);
 
     const filteredRows = useMemo(() => {
@@ -93,17 +103,21 @@ export default function RainGauges({ isDark }) {
         ? `Last updated: ${new Date(lastUpdated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`
         : '';
 
+    const maxCard = (title, color, gauge, key) => ({
+        title,
+        color,
+        value: gauge ? `${Number(gauge[key]).toFixed(1)} mm` : '0.0 mm',
+        sub: gauge ? gauge.name : '—',
+    });
+
     const cardCfgs = [
         { title: '🌧️ Total Gauges', value: stats.total, color: '#0ea5e9', sub: 'DynaSys Network' },
         { title: '🟢 Online', value: stats.online, color: '#10b981', sub: 'Currently active' },
         { title: '🔴 Offline', value: stats.offline, color: '#ef4444', sub: 'Currently inactive' },
-        {
-            title: '💧 Max 24h Rainfall',
-            value: stats.max ? `${Number(stats.max.rain_24h).toFixed(1)} mm` : '0.0 mm',
-            color: '#3b82f6',
-            sub: stats.max ? stats.max.name : '—',
-        },
-        { title: '☔ Total 24h Rainfall', value: `${stats.sum24h.toFixed(1)} mm`, color: '#06b6d4', sub: 'Network-wide' },
+        maxCard('💧 Daily Max Rainfall',   '#3b82f6', stats.maxDaily,   'rain_daily'),
+        maxCard('💦 Weekly Max Rainfall',  '#06b6d4', stats.maxWeekly,  'rain_7d'),
+        maxCard('☔ Monthly Max Rainfall', '#8b5cf6', stats.maxMonthly, 'rain_30d'),
+        maxCard('🌊 Annual Max Rainfall',  '#f59e0b', stats.maxAnnual,  'rain_this_year'),
     ];
 
     const columns = [
@@ -135,7 +149,7 @@ export default function RainGauges({ isDark }) {
         { title: '7 Days (mm)', dataIndex: 'rain_7d', key: 'rain_7d', align: 'right', width: 110, sorter: numericSorter('rain_7d'), render: (v) => <MmCell value={v} /> },
         { title: '30 Days (mm)', dataIndex: 'rain_30d', key: 'rain_30d', align: 'right', width: 120, sorter: numericSorter('rain_30d'), render: (v) => <MmCell value={v} /> },
         { title: 'This Year (mm)', dataIndex: 'rain_this_year', key: 'rain_this_year', align: 'right', width: 120, sorter: numericSorter('rain_this_year'), render: (v) => <MmCell value={v} /> },
-        { title: '365 Days (mm)', dataIndex: 'rain_365d', key: 'rain_365d', align: 'right', width: 120, sorter: numericSorter('rain_365d'), render: (v) => <MmCell value={v} /> },
+        { title: 'All Time (mm)', dataIndex: 'rain_all_time', key: 'rain_all_time', align: 'right', width: 120, sorter: numericSorter('rain_all_time'), render: (v) => <MmCell value={v} /> },
     ];
 
     return (
