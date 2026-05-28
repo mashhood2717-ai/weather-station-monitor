@@ -12,7 +12,7 @@
 - `dashboard/index.html`: Main dashboard UI, all client logic.
 - `schema.sql`: DB schema (status_logs, stations, etc).
 - `wrangler.toml`: Worker deployment config.
-- `DASHBOARD_SETUP.md`, `GETTING_STARTED.md`, `CODE_CHANGES.md`, `QUICK_START.md`, `IMPLEMENTATION_SUMMARY.md`: Read for feature, setup, and workflow details.
+- `README.md`: Architecture, API endpoints, and deploy instructions.
 
 ## Essential Workflows
 - **Deploy Worker:**
