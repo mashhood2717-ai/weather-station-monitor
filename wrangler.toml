@@ -61,8 +61,8 @@ crons = []
 ENVIRONMENT = "production"
 
 # Secrets (set via: wrangler secret put SECRET_NAME)
-# WEATHERLINK_API_KEY
-# WEATHERLINK_API_SECRET
+# HUBSERVICE_BASIC_AUTH  - Basic-auth credentials for hubservice.weatherwalay.com (preferred; Worker exchanges for JWT)
+# HUBSERVICE_JWT         - Pre-issued HubService JWT (fallback if BASIC_AUTH not set)
 # RESEND_API_KEY         - Get from https://resend.com (free tier: 100 emails/day)
 # REPORT_EMAILS          - Comma-separated list of email recipients
 # REPORT_FROM_EMAIL      - Sender email address (optional, needs domain verification)

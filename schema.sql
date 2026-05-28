@@ -1,4 +1,4 @@
--- Davis WeatherLink Monitor - Database Schema
+-- Weatherwalay Station Monitor - Database Schema
 -- schema.sql
 
 -- ============================================================

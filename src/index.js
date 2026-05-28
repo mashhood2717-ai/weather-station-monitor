@@ -1,4 +1,3 @@
-// weatherlink-monitor/src/index.js
 // Cloudflare Worker for Weatherwalay/HubService Station Monitoring
 
 // ============================================================
