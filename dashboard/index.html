@@ -1613,6 +1613,7 @@
                     transform-origin: center;
                 }
             }
+        }
     </style>
 </head>
 
@@ -1854,6 +1855,7 @@
                 <div class="chart-title">
                     <span class="chart-icon">📊</span>
                     <span id="categoryChartTitle">Category Availability Summary</span>
+                    <span style="font-size:11px; font-weight:400; color:var(--text-secondary); margin-left:6px;">— 24h average</span>
                 </div>
                 <div class="chart-controls"
                     style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -2307,6 +2309,27 @@
         </div>
     </div>
 
+    <!-- Caller Drill-down modal -->
+    <div id="callerDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:900px;">
+            <button class="modal-close" onclick="closeCallerDetailModal()">&times;</button>
+            <div class="modal-header">
+                <h2 id="callerDetailTitle">📞 Call History</h2>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <div id="callerDetailSummary" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;"></div>
+                <div id="callerDetailOutcomes" style="margin-bottom:12px;"></div>
+                <div id="callerDetailTableWrap" style="max-height:420px; overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
+                    <div style="text-align:center; color:var(--text-secondary); padding:30px;">Loading...</div>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+                    <button class="apply-btn" id="callerDetailExportBtn" style="background:#16a34a;">⬇ Export CSV</button>
+                    <button class="apply-btn" onclick="closeCallerDetailModal()" style="background:#475569;">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Station Detail Modal -->
     <div id="stationModal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -2481,9 +2504,13 @@
             align-items: center;
             padding: 10px 12px;
             border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.15s;
         }
+        .caller-row:hover { background: var(--hover-bg, rgba(14,165,233,0.08)); }
         .caller-row:last-child { border-bottom: none; }
-        .caller-name { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+        .caller-name { font-weight: 600; color: var(--accent-color, #0284c7); font-size: 13px; }
         .caller-stats { font-size: 12px; color: var(--text-secondary); }
         .caller-count {
             background: var(--card-bg);
@@ -5987,15 +6014,109 @@
                 el.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls in this period</div>';
                 return;
             }
-            el.innerHTML = persons.map(p => `
-                <div class="caller-row">
+            el.innerHTML = persons.map(p => {
+                const safeName = (p.caller_name || '').replace(/'/g, "\\'");
+                return `
+                <div class="caller-row" onclick="openCallerDetailModal('${safeName}')" title="Click for full call history">
                     <div>
                         <div class="caller-name">${p.caller_name}</div>
                         <div class="caller-stats">${p.issues_handled} issue${p.issues_handled !== 1 ? 's' : ''} handled</div>
                     </div>
                     <span class="caller-count">${p.total_calls} calls</span>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
+        }
+
+        async function openCallerDetailModal(callerName) {
+            const modal = document.getElementById('callerDetailModal');
+            const titleEl = document.getElementById('callerDetailTitle');
+            const summaryEl = document.getElementById('callerDetailSummary');
+            const outcomesEl = document.getElementById('callerDetailOutcomes');
+            const tableWrap = document.getElementById('callerDetailTableWrap');
+            const exportBtn = document.getElementById('callerDetailExportBtn');
+            const range = document.getElementById('issueRangeFilter')?.value || '7d';
+
+            titleEl.innerHTML = `📞 ${callerName} — Call History (${range})`;
+            summaryEl.innerHTML = '';
+            outcomesEl.innerHTML = '';
+            tableWrap.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:30px;">Loading...</div>';
+            modal.style.display = 'flex';
+
+            exportBtn.onclick = () => {
+                window.location.href = `${WORKER_API}/api/export/calls?range=${range}&caller=${encodeURIComponent(callerName)}`;
+            };
+
+            try {
+                const resp = await fetch(`${WORKER_API}/api/calls?caller=${encodeURIComponent(callerName)}&range=${range}`);
+                const data = await resp.json();
+                renderCallerDetail(data);
+            } catch (e) {
+                tableWrap.innerHTML = '<div style="text-align:center; color:#ff4d4f; padding:30px;">Failed to load call history</div>';
+            }
+        }
+
+        function renderCallerDetail(data) {
+            const summaryEl = document.getElementById('callerDetailSummary');
+            const outcomesEl = document.getElementById('callerDetailOutcomes');
+            const tableWrap = document.getElementById('callerDetailTableWrap');
+
+            const stat = (label, value) => `
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; text-align:center;">
+                    <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">${label}</div>
+                    <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:4px;">${value}</div>
+                </div>`;
+            summaryEl.innerHTML =
+                stat('Total Calls', data.total_calls || 0) +
+                stat('Issues Handled', data.issues_handled || 0) +
+                stat('Stations Called', data.stations_called || 0) +
+                stat('Total Duration', `${data.total_duration_minutes || 0} min`);
+
+            const outcomeColors = { answered: '#52c41a', no_answer: '#ff4d4f', busy: '#fa541c', voicemail: '#1890ff', callback_scheduled: '#d48806' };
+            outcomesEl.innerHTML = (data.by_outcome || []).map(o => {
+                const c = outcomeColors[o.outcome] || '#8c8c8c';
+                return `<span class="call-outcome-badge" style="background:${c}22; color:${c}; margin-right:6px;">${(o.outcome || '').replace('_', ' ')}: ${o.count}</span>`;
+            }).join('');
+
+            const calls = data.calls || [];
+            if (!calls.length) {
+                tableWrap.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:30px;">No calls found for this person in the selected range</div>';
+                return;
+            }
+
+            const esc = (v) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const rows = calls.map(c => {
+                const time = c.call_time ? new Date(c.call_time + 'Z').toLocaleString() : '-';
+                const color = outcomeColors[c.outcome] || '#8c8c8c';
+                return `<tr>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${time}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.station_name || c.station_id || '-')}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.contact_person || '-')}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.issue_title || '—')}</td>
+                    <td style="padding:8px 12px;"><span class="call-outcome-badge" style="background:${color}22; color:${color};">${(c.outcome || '-').replace('_', ' ')}</span></td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${c.duration_minutes ? c.duration_minutes + ' min' : '-'}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(c.notes || '')}">${esc(c.notes || '—')}</td>
+                </tr>`;
+            }).join('');
+
+            tableWrap.innerHTML = `
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead style="position:sticky; top:0; background:var(--card-bg); z-index:1;">
+                        <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+                            <th style="padding:10px 12px;">Date/Time</th>
+                            <th style="padding:10px 12px;">Station</th>
+                            <th style="padding:10px 12px;">Contact</th>
+                            <th style="padding:10px 12px;">Issue</th>
+                            <th style="padding:10px 12px;">Outcome</th>
+                            <th style="padding:10px 12px;">Duration</th>
+                            <th style="padding:10px 12px;">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        function closeCallerDetailModal() {
+            document.getElementById('callerDetailModal').style.display = 'none';
         }
 
         function openCreateIssueModal() {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- v2.6 - Moved Last Sync to header, fixed mobile responsiveness -->
+<!-- v2.9 - Issue Tracker with tabs & WU filter -->
 <html lang="en">
 
 <head>
@@ -82,12 +82,12 @@
             --success: #10b981;
             --danger: #ef4444;
             --warning: #f59e0b;
-            --bg-dark: #0f172a;
-            --bg-card: #1e293b;
-            --bg-card-hover: #334155;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border: #334155;
+            --bg-dark: #000000;
+            --bg-card: #0a0a0a;
+            --bg-card-hover: #171717;
+            --text-primary: #ffffff;
+            --text-secondary: #a3a3a3;
+            --border: #1f1f1f;
         }
 
         /* Light theme - Professional modern look */
@@ -129,9 +129,11 @@
 
         [data-theme="light"] .search-box,
         [data-theme="light"] .filter-btn,
-        [data-theme="light"] .source-filter {
-            background: white;
-            border-color: var(--border);
+        [data-theme="light"] .source-filter,
+        [data-theme="light"] #issueSearchBox {
+            background: #f5f5f5 !important;
+            border: 1px solid #333 !important;
+            color: #333 !important;
         }
 
         [data-theme="light"] .leaflet-popup-content-wrapper {
@@ -290,7 +292,7 @@
 
         /* Header */
         header {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 25px 35px;
             border-radius: 16px;
@@ -484,7 +486,7 @@
         }
 
         .stat-card {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 12px 10px;
             border-radius: 12px;
@@ -598,7 +600,7 @@
         }
 
         .chart-card {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             padding: 25px;
             border-radius: 16px;
@@ -641,7 +643,7 @@
 
         .ring-background {
             fill: none;
-            stroke: rgba(51, 65, 85, 0.5);
+            stroke: rgba(31, 31, 31, 0.7);
             stroke-width: 25;
         }
 
@@ -746,7 +748,7 @@
 
         /* Map Container */
         .map-container {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -781,7 +783,7 @@
         }
 
         .station-list {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -811,7 +813,7 @@
 
         .search-box {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -828,7 +830,7 @@
 
         .source-filter {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -850,7 +852,7 @@
 
         .filter-btn {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-secondary);
@@ -914,7 +916,7 @@
         th {
             text-align: left;
             padding: 16px 25px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             color: var(--text-secondary);
             font-size: 12px;
             text-transform: uppercase;
@@ -1029,7 +1031,7 @@
         /* Category Dropdown */
         .category-dropdown {
             padding: 10px 16px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text-primary);
@@ -1049,7 +1051,7 @@
         .time-range-toggle {
             display: flex;
             gap: 4px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 4px;
@@ -1079,7 +1081,7 @@
 
         .date-input {
             padding: 6px 10px;
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-primary);
@@ -1169,7 +1171,7 @@
 
         /* Offline Panel */
         .offline-panel {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             border: 1px solid var(--border);
@@ -1278,7 +1280,7 @@
 
         /* Leaflet Popup Custom */
         .leaflet-popup-content-wrapper {
-            background: rgba(30, 41, 59, 0.95) !important;
+            background: rgba(10, 10, 10, 0.95) !important;
             backdrop-filter: blur(20px);
             border: 1px solid var(--border);
             border-radius: 12px !important;
@@ -1291,7 +1293,7 @@
         }
 
         .leaflet-popup-tip {
-            background: rgba(30, 41, 59, 0.95) !important;
+            background: rgba(10, 10, 10, 0.95) !important;
         }
 
         .popup-title {
@@ -1611,6 +1613,7 @@
                     transform-origin: center;
                 }
             }
+        }
     </style>
 </head>
 
@@ -1746,6 +1749,7 @@
         <div class="dashboard-tabs">
             <button class="dashboard-tab active" data-tab="monitoring" onclick="switchDashboardTab('monitoring')">📊 Station Monitoring</button>
             <button class="dashboard-tab" data-tab="issues" onclick="switchDashboardTab('issues')">📋 Issue Tracker & Call Logs</button>
+            <button class="dashboard-tab" data-tab="rain" onclick="switchDashboardTab('rain')">🌧️ Rain Gauges</button>
         </div>
 
         <!-- Tab 1: Station Monitoring -->
@@ -1851,6 +1855,7 @@
                 <div class="chart-title">
                     <span class="chart-icon">📊</span>
                     <span id="categoryChartTitle">Category Availability Summary</span>
+                    <span style="font-size:11px; font-weight:400; color:var(--text-secondary); margin-left:6px;">— 24h average</span>
                 </div>
                 <div class="chart-controls"
                     style="margin:8px 0 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -2020,6 +2025,8 @@
 
         <!-- Tab 2: Issue Tracker -->
         <div id="tab-issues" class="tab-content" style="display:none;">
+
+        <!-- Issue Tracker Section -->
         <div class="issue-tracker-section" style="margin-top: 20px;">
             <div class="issue-tracker-header">
                 <h2 class="issue-tracker-title">📋 Issue Tracker & Call Log</h2>
@@ -2041,17 +2048,38 @@
                         <input type="checkbox" id="includeWuIssues" onchange="renderIssuesTable()" style="cursor:pointer;"> Include WU
                     </label>
                     <button class="apply-btn" onclick="autoPopulateInactiveIssues()" style="white-space:nowrap; background:#d97706;">⚡ Auto-Populate Inactive</button>
+                    <button class="apply-btn" onclick="exportCallLogs()" style="white-space:nowrap; background:#16a34a;">⬇ Export Logs</button>
                     <button class="apply-btn" onclick="openCreateIssueModal()" style="white-space:nowrap;">+ New Issue</button>
                 </div>
             </div>
+
+            <!-- Call Stats Summary -->
             <div class="issue-stats-grid" id="issueStatsGrid">
-                <div class="issue-stat-card"><div class="issue-stat-value" id="statTotalCalls">0</div><div class="issue-stat-label">Total Calls</div></div>
-                <div class="issue-stat-card"><div class="issue-stat-value" id="statOpenIssues">0</div><div class="issue-stat-label">Open Issues</div></div>
-                <div class="issue-stat-card"><div class="issue-stat-value" id="statInProgress">0</div><div class="issue-stat-label">In Progress</div></div>
-                <div class="issue-stat-card"><div class="issue-stat-value" id="statResolved">0</div><div class="issue-stat-label">Resolved</div></div>
-                <div class="issue-stat-card"><div class="issue-stat-value" id="statActiveCallers">0</div><div class="issue-stat-label">Active Callers</div></div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statTotalCalls">0</div>
+                    <div class="issue-stat-label">Total Calls</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statOpenIssues">0</div>
+                    <div class="issue-stat-label">Open Issues</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statInProgress">0</div>
+                    <div class="issue-stat-label">In Progress</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statResolved">0</div>
+                    <div class="issue-stat-label">Resolved</div>
+                </div>
+                <div class="issue-stat-card">
+                    <div class="issue-stat-value" id="statActiveCallers">0</div>
+                    <div class="issue-stat-label">Active Callers</div>
+                </div>
             </div>
+
+            <!-- Two column: Issues list + Call stats by person -->
             <div class="issue-columns">
+                <!-- Issues Table -->
                 <div class="issue-list-panel">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                         <h3 style="margin:0; color:var(--text-primary); font-size:15px;">Station Issues</h3>
@@ -2059,19 +2087,25 @@
                     </div>
                     <div class="table-container" style="max-height:400px; overflow-y:auto;">
                         <table>
-                            <thead><tr>
-                                <th style="cursor:pointer;" onclick="sortIssues('station')">Station <span id="sortArrowStation"></span></th>
-                                <th style="cursor:pointer;" onclick="sortIssues('title')">Issue <span id="sortArrowTitle"></span></th>
-                                <th style="cursor:pointer;" onclick="sortIssues('status')">Status <span id="sortArrowStatus"></span></th>
-                                <th style="cursor:pointer;" onclick="sortIssues('priority')">Priority <span id="sortArrowPriority"></span></th>
-                                <th>Calls</th>
-                                <th style="cursor:pointer;" onclick="sortIssues('created')">Created <span id="sortArrowCreated"></span></th>
-                                <th>Actions</th>
-                            </tr></thead>
-                            <tbody id="issuesTableBody"><tr><td colspan="7" style="text-align:center; color:var(--text-secondary);">Loading...</td></tr></tbody>
+                            <thead>
+                                <tr>
+                                    <th style="cursor:pointer;" onclick="sortIssues('station')">Station <span id="sortArrowStation"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('title')">Issue <span id="sortArrowTitle"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('status')">Status <span id="sortArrowStatus"></span></th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('priority')">Priority <span id="sortArrowPriority"></span></th>
+                                    <th>Calls</th>
+                                    <th style="cursor:pointer;" onclick="sortIssues('created')">Created <span id="sortArrowCreated"></span></th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issuesTableBody">
+                                <tr><td colspan="7" style="text-align:center; color:var(--text-secondary);">Loading...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
+
+                <!-- Calls by Person -->
                 <div class="calls-by-person-panel">
                     <h3 style="margin:0 0 10px; color:var(--text-primary); font-size:15px;">Calls by Team Member</h3>
                     <div id="callsByPersonList" style="max-height:400px; overflow-y:auto;">
@@ -2080,24 +2114,127 @@
                 </div>
             </div>
         </div>
+
         </div><!-- End Tab 2: Issue Tracker -->
 
-    </div>
+        <!-- Tab 3: Rain Gauges -->
+        <div id="tab-rain" class="tab-content" style="display: none;">
+            <div class="stats-grid" style="grid-template-columns: repeat(7, 1fr);">
+                <div class="stat-card">
+                    <div class="stat-label">Total Gauges</div>
+                    <div class="stat-value" id="rgTotalCount">0</div>
+                    <div class="stat-station">DynaSys Network</div>
+                </div>
+                <div class="stat-card online">
+                    <div class="stat-label">Online</div>
+                    <div class="stat-value" id="rgOnlineCount">0</div>
+                    <div class="stat-station">Currently active</div>
+                </div>
+                <div class="stat-card offline">
+                    <div class="stat-label">Offline</div>
+                    <div class="stat-value" id="rgOfflineCount">0</div>
+                    <div class="stat-station">Currently inactive</div>
+                </div>
+                <div class="stat-card rain">
+                    <div class="stat-label">Daily Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxDailyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxDailyStation">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #06b6d4;">
+                    <div class="stat-label">Weekly Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxWeeklyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxWeeklyStation">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #8b5cf6;">
+                    <div class="stat-label">Monthly Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxMonthlyValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxMonthlyStation">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #f59e0b;">
+                    <div class="stat-label">Annual Max Rainfall</div>
+                    <div class="stat-value" id="rgMaxAnnualValue">0.0 mm</div>
+                    <div class="stat-station" id="rgMaxAnnualStation">—</div>
+                </div>
+            </div>
 
+            <div class="station-list">
+                <div class="list-header" style="justify-content: space-between; flex-direction: row; flex-wrap: wrap; gap: 8px;">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <h2 class="list-title" style="margin: 0;">🌧️ Rain Gauges Data</h2>
+                        <span id="rgLastUpdated" style="font-size:11px; color:var(--text-secondary);"></span>
+                    </div>
+                    <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap;">
+                        <input type="text" class="search-box" id="rgSearchBox" oninput="renderRainGaugesTable()" placeholder="🔍 Search gauge..." style="width: 180px;">
+                        <select id="rgStatusFilter" class="source-filter" onchange="renderRainGaugesTable()" style="min-width: 120px;">
+                            <option value="all">All Status</option>
+                            <option value="online">Online Only</option>
+                            <option value="offline">Offline Only</option>
+                        </select>
+                        <button class="filter-btn" onclick="fetchRainGaugesData()" title="Refresh">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="min-width:220px; cursor:pointer; user-select:none;" onclick="rgSort('name')">Gauge Name <span id="rgSortArrow_name"></span></th>
+                                <th style="text-align:center; cursor:pointer; user-select:none;" onclick="rgSort('status')">Status <span id="rgSortArrow_status"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_daily')">Today (mm) <span id="rgSortArrow_rain_daily"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_24h')">24h (mm) <span id="rgSortArrow_rain_24h"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_7d')">7 Days (mm) <span id="rgSortArrow_rain_7d"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_30d')">30 Days (mm) <span id="rgSortArrow_rain_30d"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_this_year')">This Year (mm) <span id="rgSortArrow_rain_this_year"></span></th>
+                                <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_all_time')">All Time (mm) <span id="rgSortArrow_rain_all_time"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="rainGaugesTable">
+                            <tr><td colspan="8" style="text-align: center; padding: 20px;">Loading gauges...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- End Tab 3: Rain Gauges -->
+
+    </div>
     <!-- Create Issue Modal -->
     <div id="createIssueModal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width:500px;">
             <button class="modal-close" onclick="closeCreateIssueModal()">&times;</button>
             <div class="modal-header"><h2>Create Issue</h2></div>
             <div class="modal-body" style="padding:20px;">
-                <div class="form-group"><label>Station</label><select id="issueStationId" class="form-input"><option value="">Select station...</option></select></div>
-                <div class="form-group"><label>Title</label><input type="text" id="issueTitle" class="form-input" placeholder="e.g. Station offline since morning"></div>
-                <div class="form-group"><label>Description</label><textarea id="issueDescription" class="form-input" rows="3" placeholder="Details about the issue..."></textarea></div>
-                <div style="display:flex; gap:10px;">
-                    <div class="form-group" style="flex:1;"><label>Priority</label><select id="issuePriority" class="form-input"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div>
-                    <div class="form-group" style="flex:1;"><label>Assigned To</label><input type="text" id="issueAssignedTo" class="form-input" placeholder="Team member name"></div>
+                <div class="form-group">
+                    <label>Station</label>
+                    <select id="issueStationId" class="form-input">
+                        <option value="">Select station...</option>
+                    </select>
                 </div>
-                <div class="form-group"><label>Created By</label><input type="text" id="issueCreatedBy" class="form-input" placeholder="Your name"></div>
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="issueTitle" class="form-input" placeholder="e.g. Station offline since morning">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="issueDescription" class="form-input" rows="3" placeholder="Details about the issue..."></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Priority</label>
+                        <select id="issuePriority" class="form-input">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Assigned To</label>
+                        <input type="text" id="issueAssignedTo" class="form-input" placeholder="Team member name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Created By</label>
+                    <input type="text" id="issueCreatedBy" class="form-input" placeholder="Your name">
+                </div>
                 <button class="apply-btn" onclick="submitCreateIssue()" style="width:100%; padding:10px; font-size:15px; margin-top:10px;">Create Issue</button>
             </div>
         </div>
@@ -2110,19 +2247,40 @@
             <div class="modal-header"><h2>Log Call</h2></div>
             <div class="modal-body" style="padding:20px;">
                 <input type="hidden" id="callIssueId">
-                <div class="form-group"><label>Caller Name</label><input type="text" id="callCallerName" class="form-input" placeholder="Who made the call?"></div>
-                <div class="form-group"><label>Contact Person</label><input type="text" id="callContactPerson" class="form-input" placeholder="Who was called?"></div>
-                <div style="display:flex; gap:10px;">
-                    <div class="form-group" style="flex:1;"><label>Duration (mins)</label><input type="number" id="callDuration" class="form-input" placeholder="5" min="0"></div>
-                    <div class="form-group" style="flex:1;"><label>Outcome</label><select id="callOutcome" class="form-input"><option value="answered">✅ Answered</option><option value="no_answer" selected>📵 No Answer</option><option value="busy">🔴 Busy</option><option value="voicemail">📧 Voicemail</option><option value="callback_scheduled">📅 Callback</option></select></div>
+                <div class="form-group">
+                    <label>Caller Name</label>
+                    <input type="text" id="callCallerName" class="form-input" placeholder="Who made the call?">
                 </div>
-                <div class="form-group"><label>Notes</label><textarea id="callNotes" class="form-input" rows="2" placeholder="Call notes..."></textarea></div>
+                <div class="form-group">
+                    <label>Contact Person</label>
+                    <input type="text" id="callContactPerson" class="form-input" placeholder="Who was called?">
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>Duration (mins)</label>
+                        <input type="number" id="callDuration" class="form-input" placeholder="5" min="0">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Outcome</label>
+                        <select id="callOutcome" class="form-input">
+                            <option value="answered">✅ Answered</option>
+                            <option value="no_answer" selected>📵 No Answer</option>
+                            <option value="busy">🔴 Busy</option>
+                            <option value="voicemail">📧 Voicemail</option>
+                            <option value="callback_scheduled">📅 Callback</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="callNotes" class="form-input" rows="2" placeholder="Call notes..."></textarea>
+                </div>
                 <button class="apply-btn" onclick="submitLogCall()" style="width:100%; padding:10px; font-size:15px; margin-top:10px;">Log Call</button>
             </div>
         </div>
     </div>
 
-    <!-- Issue Detail Modal -->
+    <!-- Issue Detail Modal (Call History) -->
     <div id="issueDetailModal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width:700px;">
             <button class="modal-close" onclick="closeIssueDetailModal()">&times;</button>
@@ -2146,6 +2304,27 @@
                     <button class="apply-btn" onclick="updateIssueStatus('in_progress')" style="background:#1890ff;">🔵 In Progress</button>
                     <button class="apply-btn" onclick="updateIssueStatus('resolved')" style="background:#52c41a;">🟢 Resolved</button>
                     <button class="apply-btn" onclick="updateIssueStatus('unresolvable')" style="background:#ff4d4f;">🔴 Can't Resolve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Caller Drill-down modal -->
+    <div id="callerDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:900px;">
+            <button class="modal-close" onclick="closeCallerDetailModal()">&times;</button>
+            <div class="modal-header">
+                <h2 id="callerDetailTitle">📞 Call History</h2>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <div id="callerDetailSummary" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;"></div>
+                <div id="callerDetailOutcomes" style="margin-bottom:12px;"></div>
+                <div id="callerDetailTableWrap" style="max-height:420px; overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
+                    <div style="text-align:center; color:var(--text-secondary); padding:30px;">Loading...</div>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+                    <button class="apply-btn" id="callerDetailExportBtn" style="background:#16a34a;">⬇ Export CSV</button>
+                    <button class="apply-btn" onclick="closeCallerDetailModal()" style="background:#475569;">Close</button>
                 </div>
             </div>
         </div>
@@ -2206,6 +2385,195 @@
             </div>
         </div>
     </div>
+
+    <style>
+        /* Dashboard Tabs */
+        .dashboard-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 4px;
+            border: 1px solid var(--border-color);
+        }
+        .dashboard-tab {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+        .dashboard-tab:hover { background: rgba(255,255,255,0.05); }
+        .dashboard-tab.active {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .tab-content { animation: fadeIn 0.3s ease; }
+
+        /* Issue Tracker Styles */
+        .issue-tracker-section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+        .issue-tracker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .issue-tracker-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .issue-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .issue-stat-card {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        .issue-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .issue-stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .issue-columns {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+        }
+        .issue-list-panel, .calls-by-person-panel {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+        }
+        .issue-status-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .issue-status-open { background: #fff7e6; color: #d48806; }
+        .issue-status-in_progress { background: #e6f7ff; color: #1890ff; }
+        .issue-status-resolved { background: #f6ffed; color: #52c41a; }
+        .issue-status-unresolvable { background: #fff1f0; color: #ff4d4f; }
+        .issue-priority-low { color: #8c8c8c; }
+        .issue-priority-medium { color: #d48806; }
+        .issue-priority-high { color: #fa541c; }
+        .issue-priority-critical { color: #ff4d4f; font-weight: 700; }
+        .issue-actions-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        .issue-actions-btn:hover { background: var(--hover-bg, #f5f5f5); color: var(--text-primary); }
+        .caller-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+        .caller-row:hover { background: var(--hover-bg, rgba(14,165,233,0.08)); }
+        .caller-row:last-child { border-bottom: none; }
+        .caller-name { font-weight: 600; color: var(--accent-color, #0284c7); font-size: 13px; }
+        .caller-stats { font-size: 12px; color: var(--text-secondary); }
+        .caller-count {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .form-group { margin-bottom: 12px; }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .form-input:focus { outline: none; border-color: #1890ff; }
+        select.form-input option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+        [data-theme="light"] select.form-input option {
+            background: #ffffff;
+            color: #1e293b;
+        }
+        .call-history-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+        .call-history-item:last-child { border-bottom: none; }
+        .call-outcome-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .issue-stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .issue-columns { grid-template-columns: 1fr; }
+            .issue-list-panel > div:first-child {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+            .issue-list-panel > div:first-child input {
+                width: 100% !important;
+                max-width: 160px;
+                box-sizing: border-box;
+            }
+        }
+    </style>
 
     <style>
         /* Modal Styles */
@@ -2484,52 +2852,6 @@
         }
     </style>
 
-    <style>
-        /* Dashboard Tabs */
-        .dashboard-tabs { display: flex; gap: 0; margin-bottom: 20px; background: var(--bg-card); border-radius: 12px; padding: 4px; border: 1px solid var(--border); }
-        .dashboard-tab { flex: 1; padding: 12px 20px; border: none; background: transparent; color: var(--text-secondary); font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 10px; transition: all 0.2s; }
-        .dashboard-tab:hover { background: rgba(255,255,255,0.05); }
-        .dashboard-tab.active { background: var(--bg-dark); color: var(--text-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .tab-content { animation: fadeIn 0.3s ease; }
-        /* Issue Tracker Styles */
-        .issue-tracker-section { background: var(--bg-card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); }
-        .issue-tracker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
-        .issue-tracker-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
-        .issue-stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
-        .issue-stat-card { background: var(--bg-dark); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border); }
-        .issue-stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
-        .issue-stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-        .issue-columns { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
-        .issue-list-panel, .calls-by-person-panel { background: var(--bg-dark); border-radius: 12px; padding: 16px; border: 1px solid var(--border); }
-        .issue-status-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-        .issue-status-open { background: #fff7e6; color: #d48806; }
-        .issue-status-in_progress { background: #e6f7ff; color: #1890ff; }
-        .issue-status-resolved { background: #f6ffed; color: #52c41a; }
-        .issue-status-unresolvable { background: #fff1f0; color: #ff4d4f; }
-        .issue-priority-low { color: #8c8c8c; } .issue-priority-medium { color: #d48806; }
-        .issue-priority-high { color: #fa541c; } .issue-priority-critical { color: #ff4d4f; font-weight: 700; }
-        .issue-actions-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; color: var(--text-secondary); transition: all 0.2s; }
-        .issue-actions-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
-        .caller-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-        .caller-row:last-child { border-bottom: none; }
-        .caller-name { font-weight: 600; color: var(--text-primary); font-size: 13px; }
-        .caller-stats { font-size: 12px; color: var(--text-secondary); }
-        .caller-count { background: var(--bg-card); border-radius: 20px; padding: 2px 10px; font-size: 13px; font-weight: 700; color: var(--text-primary); }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
-        .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font-size: 13px; box-sizing: border-box; }
-        .form-input:focus { outline: none; border-color: #1890ff; }
-        select.form-input option { background: var(--bg-card); color: var(--text-primary); }
-        [data-theme="light"] select.form-input option { background: #ffffff; color: #1e293b; }
-        .call-history-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
-        .call-history-item:last-child { border-bottom: none; }
-        .call-outcome-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 600; }
-        @media (max-width: 768px) {
-            .issue-stats-grid { grid-template-columns: repeat(3, 1fr); }
-            .issue-columns { grid-template-columns: 1fr; }
-        }
-    </style>
-
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
@@ -2537,7 +2859,10 @@
     <script>
         // Configuration
         const API_BASE = 'https://hubservice.weatherwalay.com';
-        const WORKER_API = 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
+        // Use same-origin when running locally (wrangler dev) so we hit the local worker; otherwise production.
+        const WORKER_API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+            ? location.origin
+            : 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
 
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
@@ -2812,8 +3137,33 @@
                             return parts[1] ? parts[1].substring(0, 5) : item.period;
                         });
                         uptimeValues = data.trend.map(item => item.uptime_pct);
+                    } else if (range === '7d') {
+                        // Aggregate into 6-hour checkpoints (00:00, 06:00, 12:00, 18:00) in PKT
+                        const buckets = {};
+                        data.trend.forEach(item => {
+                            // item.period is already in local (server) time; treat as-is, just bucket by hour
+                            const parts = item.period.split(' ');
+                            const day = parts[0];
+                            const hour = parts[1] ? parseInt(parts[1].substring(0, 2), 10) : 0;
+                            const bucketHour = Math.floor(hour / 6) * 6;
+                            const key = `${day} ${String(bucketHour).padStart(2, '0')}:00`;
+                            if (!buckets[key]) buckets[key] = { sumOnline: 0, sumTotal: 0, day, bucketHour };
+                            buckets[key].sumOnline += (item.online_checks || 0);
+                            buckets[key].sumTotal += (item.total_checks || 0);
+                        });
+                        const keys = Object.keys(buckets).sort();
+                        labels = keys.map(k => {
+                            const b = buckets[k];
+                            const date = new Date(b.day);
+                            const dayLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            return `${dayLabel} ${String(b.bucketHour).padStart(2, '0')}:00`;
+                        });
+                        uptimeValues = keys.map(k => {
+                            const b = buckets[k];
+                            return b.sumTotal > 0 ? parseFloat(((b.sumOnline / b.sumTotal) * 100).toFixed(1)) : 0;
+                        });
                     } else {
-                        // Group by day for 7d
+                        // Group by day for other hourly ranges
                         const dailyData = {};
                         data.trend.forEach(item => {
                             const day = item.period.split(' ')[0];
@@ -2871,10 +3221,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -2886,7 +3236,7 @@
                         },
                         scales: {
                             x: {
-                                grid: { display: false, color: 'rgba(51, 65, 85, 0.3)' },
+                                grid: { display: false, color: 'rgba(31, 31, 31, 0.6)' },
                                 ticks: {
                                     color: '#94a3b8',
                                     maxRotation: range === '1y' ? 45 : 0,
@@ -2897,7 +3247,7 @@
                             y: {
                                 min: 0,
                                 max: 100,
-                                grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false },
+                                grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false },
                                 ticks: {
                                     color: '#94a3b8',
                                     callback: function (v) { return v + '%'; }
@@ -3045,10 +3395,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3064,7 +3414,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3091,10 +3441,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3107,7 +3457,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3190,10 +3540,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3209,7 +3559,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3236,10 +3586,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3252,7 +3602,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3344,10 +3694,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3363,7 +3713,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3390,10 +3740,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
-                                borderColor: '#334155',
+                                borderColor: '#1f1f1f',
                                 borderWidth: 1,
                                 padding: 12,
                                 callbacks: {
@@ -3406,7 +3756,7 @@
                         },
                         scales: {
                             x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                            y: { min: 0, max: 100, grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
+                            y: { min: 0, max: 100, grid: { color: 'rgba(31, 31, 31, 0.6)', drawBorder: false }, ticks: { color: '#94a3b8', callback: function (v) { return v + '%'; } } }
                         }
                     }
                 });
@@ -3519,7 +3869,7 @@
                                 }
                             },
                             tooltip: {
-                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
                                 titleColor: '#f1f5f9',
                                 bodyColor: '#94a3b8',
                                 callbacks: {
@@ -4371,6 +4721,12 @@
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // 6-hour bucket format: 'YYYY-MM-DD HH:00:00' (used for 7D range)
+                const dtMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):\d{2}:\d{2}$/);
+                if (dtMatch) {
+                    const d = new Date(Date.UTC(+dtMatch[1], +dtMatch[2] - 1, +dtMatch[3], +dtMatch[4], 0, 0));
+                    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', hour12: true, timeZone: 'Asia/Karachi' });
+                }
                 // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
                 if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
                     // Daily format - show as "Dec 30"
@@ -4473,6 +4829,12 @@
             // Format labels based on granularity
             const labels = hourlyData.map(h => {
                 const raw = h.period || h.hour || h.hour_label || h.period_label || '';
+                // 6-hour bucket format: 'YYYY-MM-DD HH:00:00' (used for 7D range)
+                const dtMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):\d{2}:\d{2}$/);
+                if (dtMatch) {
+                    const d = new Date(Date.UTC(+dtMatch[1], +dtMatch[2] - 1, +dtMatch[3], +dtMatch[4], 0, 0));
+                    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', hour12: true, timeZone: 'Asia/Karachi' });
+                }
                 // Check if it's a date-only format (YYYY-MM-DD) for daily/monthly views
                 if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
                     // Daily format - show as "Dec 30"
@@ -5353,18 +5715,183 @@
         // DASHBOARD TAB SWITCHING
         // ============================================================
         let issueTabLoaded = false;
+        let rainTabLoaded = false;
 
         async function switchDashboardTab(tab) {
             document.querySelectorAll('.dashboard-tab').forEach(t => t.classList.remove('active'));
             document.querySelector(`.dashboard-tab[data-tab="${tab}"]`).classList.add('active');
+
             document.getElementById('tab-monitoring').style.display = tab === 'monitoring' ? '' : 'none';
             document.getElementById('tab-issues').style.display = tab === 'issues' ? '' : 'none';
+            document.getElementById('tab-rain').style.display = tab === 'rain' ? '' : 'none';
+
             if (tab === 'issues' && !issueTabLoaded) {
                 issueTabLoaded = true;
                 await loadIssueTrackerData();
                 await autoResolveActiveStationIssues();
                 autoPopulateInactiveIssues(true);
             }
+            if (tab === 'rain' && !rainTabLoaded) {
+                rainTabLoaded = true;
+                await fetchRainGaugesData();
+            }
+        }
+
+        // ============================================================
+        // RAIN GAUGES DASHBOARD
+        // ============================================================
+        let rainGaugesData = [];
+
+        async function fetchRainGaugesData() {
+            const tableBody = document.getElementById('rainGaugesTable');
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading gauges...</td></tr>';
+
+            try {
+                const res = await fetch(`${WORKER_API}/api/rain-gauges`);
+                const data = await res.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to fetch rain gauges');
+                }
+
+                rainGaugesData = data.gauges || [];
+
+                // Last updated indicator
+                const lu = document.getElementById('rgLastUpdated');
+                if (lu) {
+                    if (data.last_updated) {
+                        const d = new Date(data.last_updated);
+                        lu.textContent = `Last updated: ${d.toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+                    } else {
+                        lu.textContent = '';
+                    }
+                }
+
+                updateRainGaugesStats();
+                renderRainGaugesTable();
+            } catch (error) {
+                console.error('Error in fetchRainGaugesData:', error);
+                tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--danger); padding: 20px;">Error: ${error.message}</td></tr>`;
+            }
+        }
+
+        function updateRainGaugesStats() {
+            const total = rainGaugesData.length;
+            const online = rainGaugesData.filter(g => g.status === 'online').length;
+            document.getElementById('rgTotalCount').textContent = total;
+            document.getElementById('rgOnlineCount').textContent = online;
+            document.getElementById('rgOfflineCount').textContent = total - online;
+
+            const periods = [
+                { key: 'rain_daily',     valueEl: 'rgMaxDailyValue',   stationEl: 'rgMaxDailyStation' },
+                { key: 'rain_7d',        valueEl: 'rgMaxWeeklyValue',  stationEl: 'rgMaxWeeklyStation' },
+                { key: 'rain_30d',       valueEl: 'rgMaxMonthlyValue', stationEl: 'rgMaxMonthlyStation' },
+                { key: 'rain_this_year', valueEl: 'rgMaxAnnualValue',  stationEl: 'rgMaxAnnualStation' }
+            ];
+            for (const p of periods) {
+                let max = null;
+                for (const g of rainGaugesData) {
+                    const v = Number(g[p.key]);
+                    if (!Number.isFinite(v)) continue;
+                    if (!max || v > Number(max[p.key])) max = g;
+                }
+                document.getElementById(p.valueEl).textContent = max ? `${Number(max[p.key]).toFixed(1)} mm` : '0.0 mm';
+                document.getElementById(p.stationEl).textContent = max ? max.name : '—';
+            }
+        }
+
+        function rgFormatMm(v) {
+            if (v === null || v === undefined || !Number.isFinite(Number(v))) {
+                return '<span style="color: var(--text-secondary)">—</span>';
+            }
+            const n = Number(v);
+            if (n <= 0) return '<span style="color: var(--text-secondary)">0.0</span>';
+            // Color scale: light → heavy rainfall
+            let color = 'var(--text-primary)';
+            if (n >= 50) color = '#ef4444';        // heavy
+            else if (n >= 20) color = '#f59e0b';   // moderate-heavy
+            else if (n >= 5) color = '#06b6d4';    // moderate
+            else if (n > 0) color = '#22c55e';     // light
+            return `<strong style="color:${color}">${n.toFixed(1)}</strong>`;
+        }
+
+        function renderRainGaugesTable() {
+            const tbody = document.getElementById('rainGaugesTable');
+            tbody.innerHTML = '';
+
+            if (rainGaugesData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No rain gauges found</td></tr>';
+                return;
+            }
+
+            const search = (document.getElementById('rgSearchBox')?.value || '').toLowerCase().trim();
+            const statusFilter = document.getElementById('rgStatusFilter')?.value || 'all';
+            const sortKey = rgSortState.key;
+            const sortDir = rgSortState.dir; // 'asc' | 'desc'
+
+            let rows = rainGaugesData.slice();
+            if (statusFilter !== 'all') rows = rows.filter(g => g.status === statusFilter);
+            if (search) rows = rows.filter(g => (g.name || '').toLowerCase().includes(search));
+
+            rows.sort((a, b) => {
+                let cmp;
+                if (sortKey === 'name') {
+                    cmp = (a.name || '').localeCompare(b.name || '');
+                } else if (sortKey === 'status') {
+                    cmp = (a.status || '').localeCompare(b.status || '');
+                } else {
+                    const av = Number(a[sortKey]); const bv = Number(b[sortKey]);
+                    const an = Number.isFinite(av) ? av : -Infinity;
+                    const bn = Number.isFinite(bv) ? bv : -Infinity;
+                    cmp = an - bn;
+                }
+                return sortDir === 'asc' ? cmp : -cmp;
+            });
+
+            // Update sort arrows on column headers
+            ['name','status','rain_daily','rain_24h','rain_7d','rain_30d','rain_this_year','rain_all_time'].forEach(k => {
+                const el = document.getElementById('rgSortArrow_' + k);
+                if (el) el.textContent = k === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : '';
+            });
+
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">No gauges match the current filters</td></tr>';
+                return;
+            }
+
+            const frag = document.createDocumentFragment();
+            rows.forEach(g => {
+                const tr = document.createElement('tr');
+                const statusHtml = g.status === 'online'
+                    ? `<span class="status-badge status-active">Online</span>`
+                    : `<span class="status-badge status-inactive">Offline</span>`;
+
+                tr.innerHTML = `
+                    <td><strong>${g.name}</strong><br><small style="color: var(--text-secondary)">${g.id}</small></td>
+                    <td style="text-align:center;">${statusHtml}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_daily)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_24h)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_7d)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_30d)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_this_year)}</td>
+                    <td style="text-align:right;">${rgFormatMm(g.rain_all_time)}</td>
+                `;
+                frag.appendChild(tr);
+            });
+            tbody.appendChild(frag);
+        }
+
+        // Sort state for rain gauges (default: 24h descending)
+        let rgSortState = { key: 'rain_24h', dir: 'desc' };
+        function rgSort(key) {
+            if (rgSortState.key === key) {
+                rgSortState.dir = rgSortState.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                rgSortState.key = key;
+                // Default: text columns ascending, numeric columns descending
+                rgSortState.dir = (key === 'name' || key === 'status') ? 'asc' : 'desc';
+            }
+            renderRainGaugesTable();
         }
 
         // ============================================================
@@ -5380,7 +5907,9 @@
                 const resp = await fetch(`${WORKER_API}/api/issues${params}`);
                 allIssues = await resp.json();
                 renderIssuesTable();
-            } catch (e) { console.error('Failed to load issues:', e); }
+            } catch (e) {
+                console.error('Failed to load issues:', e);
+            }
         }
 
         async function loadCallStats() {
@@ -5388,10 +5917,14 @@
                 const range = document.getElementById('issueRangeFilter')?.value || '7d';
                 const resp = await fetch(`${WORKER_API}/api/call-stats?range=${range}`);
                 const data = await resp.json();
+
                 document.getElementById('statTotalCalls').textContent = data.summary?.total_calls || 0;
                 document.getElementById('statActiveCallers').textContent = data.summary?.active_callers || 0;
+
                 renderCallsByPerson(data.by_person || []);
-            } catch (e) { console.error('Failed to load call stats:', e); }
+            } catch (e) {
+                console.error('Failed to load call stats:', e);
+            }
         }
 
         function updateIssueStatCards() {
@@ -5413,6 +5946,7 @@
 
         function renderIssuesTable() {
             updateIssueStatCards();
+            // Update sort arrows
             ['Station','Title','Status','Priority','Created'].forEach(col => {
                 const el = document.getElementById('sortArrow' + col);
                 if (el) el.textContent = issueSortField === col.toLowerCase() ? (issueSortAsc ? '▲' : '▼') : '';
@@ -5428,7 +5962,10 @@
                     return name.includes(searchTerm) || (i.title || '').toLowerCase().includes(searchTerm) || (i.assigned_to || '').toLowerCase().includes(searchTerm);
                 });
             }
-            if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding:20px;">No issues found</td></tr>'; return; }
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding:20px;">No issues found</td></tr>';
+                return;
+            }
             const statusOrder = { open: 0, in_progress: 1, resolved: 2, unresolvable: 3 };
             const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
             filtered.sort((a, b) => {
@@ -5438,10 +5975,14 @@
                     const sb = allStations.find(s => s.station_id?.toString() === b.station_id?.toString());
                     va = (sa?.station_name || a.station_id || '').toString().toLowerCase();
                     vb = (sb?.station_name || b.station_id || '').toString().toLowerCase();
-                } else if (issueSortField === 'title') { va = (a.title || '').toLowerCase(); vb = (b.title || '').toLowerCase();
-                } else if (issueSortField === 'status') { va = statusOrder[a.status] ?? 9; vb = statusOrder[b.status] ?? 9;
-                } else if (issueSortField === 'priority') { va = priorityOrder[a.priority] ?? 9; vb = priorityOrder[b.priority] ?? 9;
-                } else if (issueSortField === 'created') { va = a.created_at || ''; vb = b.created_at || '';
+                } else if (issueSortField === 'title') {
+                    va = (a.title || '').toLowerCase(); vb = (b.title || '').toLowerCase();
+                } else if (issueSortField === 'status') {
+                    va = statusOrder[a.status] ?? 9; vb = statusOrder[b.status] ?? 9;
+                } else if (issueSortField === 'priority') {
+                    va = priorityOrder[a.priority] ?? 9; vb = priorityOrder[b.priority] ?? 9;
+                } else if (issueSortField === 'created') {
+                    va = a.created_at || ''; vb = b.created_at || '';
                 } else { va = 0; vb = 0; }
                 if (va < vb) return issueSortAsc ? -1 : 1;
                 if (va > vb) return issueSortAsc ? 1 : -1;
@@ -5460,24 +6001,128 @@
                     <td><span class="issue-priority-${issue.priority}">${priorityIcons[issue.priority] || ''} ${issue.priority}</span></td>
                     <td style="text-align:center;">-</td>
                     <td style="font-size:12px;">${created}</td>
-                    <td><button class="issue-actions-btn" onclick="event.stopPropagation(); openLogCallModal(${issue.id})">📞 Call</button></td>
+                    <td>
+                        <button class="issue-actions-btn" onclick="event.stopPropagation(); openLogCallModal(${issue.id})">📞 Call</button>
+                    </td>
                 </tr>`;
             }).join('');
         }
 
         function renderCallsByPerson(persons) {
             const el = document.getElementById('callsByPersonList');
-            if (!persons.length) { el.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls in this period</div>'; return; }
-            el.innerHTML = persons.map(p => `
-                <div class="caller-row">
-                    <div><div class="caller-name">${p.caller_name}</div><div class="caller-stats">${p.issues_handled} issue${p.issues_handled !== 1 ? 's' : ''} handled</div></div>
+            if (!persons.length) {
+                el.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">No calls in this period</div>';
+                return;
+            }
+            el.innerHTML = persons.map(p => {
+                const safeName = (p.caller_name || '').replace(/'/g, "\\'");
+                return `
+                <div class="caller-row" onclick="openCallerDetailModal('${safeName}')" title="Click for full call history">
+                    <div>
+                        <div class="caller-name">${p.caller_name}</div>
+                        <div class="caller-stats">${p.issues_handled} issue${p.issues_handled !== 1 ? 's' : ''} handled</div>
+                    </div>
                     <span class="caller-count">${p.total_calls} calls</span>
-                </div>`).join('');
+                </div>`;
+            }).join('');
+        }
+
+        async function openCallerDetailModal(callerName) {
+            const modal = document.getElementById('callerDetailModal');
+            const titleEl = document.getElementById('callerDetailTitle');
+            const summaryEl = document.getElementById('callerDetailSummary');
+            const outcomesEl = document.getElementById('callerDetailOutcomes');
+            const tableWrap = document.getElementById('callerDetailTableWrap');
+            const exportBtn = document.getElementById('callerDetailExportBtn');
+            const range = document.getElementById('issueRangeFilter')?.value || '7d';
+
+            titleEl.innerHTML = `📞 ${callerName} — Call History (${range})`;
+            summaryEl.innerHTML = '';
+            outcomesEl.innerHTML = '';
+            tableWrap.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:30px;">Loading...</div>';
+            modal.style.display = 'flex';
+
+            exportBtn.onclick = () => {
+                window.location.href = `${WORKER_API}/api/export/calls?range=${range}&caller=${encodeURIComponent(callerName)}`;
+            };
+
+            try {
+                const resp = await fetch(`${WORKER_API}/api/calls?caller=${encodeURIComponent(callerName)}&range=${range}`);
+                const data = await resp.json();
+                renderCallerDetail(data);
+            } catch (e) {
+                tableWrap.innerHTML = '<div style="text-align:center; color:#ff4d4f; padding:30px;">Failed to load call history</div>';
+            }
+        }
+
+        function renderCallerDetail(data) {
+            const summaryEl = document.getElementById('callerDetailSummary');
+            const outcomesEl = document.getElementById('callerDetailOutcomes');
+            const tableWrap = document.getElementById('callerDetailTableWrap');
+
+            const stat = (label, value) => `
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; text-align:center;">
+                    <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">${label}</div>
+                    <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:4px;">${value}</div>
+                </div>`;
+            summaryEl.innerHTML =
+                stat('Total Calls', data.total_calls || 0) +
+                stat('Issues Handled', data.issues_handled || 0) +
+                stat('Stations Called', data.stations_called || 0) +
+                stat('Total Duration', `${data.total_duration_minutes || 0} min`);
+
+            const outcomeColors = { answered: '#52c41a', no_answer: '#ff4d4f', busy: '#fa541c', voicemail: '#1890ff', callback_scheduled: '#d48806' };
+            outcomesEl.innerHTML = (data.by_outcome || []).map(o => {
+                const c = outcomeColors[o.outcome] || '#8c8c8c';
+                return `<span class="call-outcome-badge" style="background:${c}22; color:${c}; margin-right:6px;">${(o.outcome || '').replace('_', ' ')}: ${o.count}</span>`;
+            }).join('');
+
+            const calls = data.calls || [];
+            if (!calls.length) {
+                tableWrap.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:30px;">No calls found for this person in the selected range</div>';
+                return;
+            }
+
+            const esc = (v) => String(v ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const rows = calls.map(c => {
+                const time = c.call_time ? new Date(c.call_time + 'Z').toLocaleString() : '-';
+                const color = outcomeColors[c.outcome] || '#8c8c8c';
+                return `<tr>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${time}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.station_name || c.station_id || '-')}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.contact_person || '-')}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${esc(c.issue_title || '—')}</td>
+                    <td style="padding:8px 12px;"><span class="call-outcome-badge" style="background:${color}22; color:${color};">${(c.outcome || '-').replace('_', ' ')}</span></td>
+                    <td style="padding:8px 12px; color:var(--text-primary);">${c.duration_minutes ? c.duration_minutes + ' min' : '-'}</td>
+                    <td style="padding:8px 12px; color:var(--text-primary); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(c.notes || '')}">${esc(c.notes || '—')}</td>
+                </tr>`;
+            }).join('');
+
+            tableWrap.innerHTML = `
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead style="position:sticky; top:0; background:var(--card-bg); z-index:1;">
+                        <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+                            <th style="padding:10px 12px;">Date/Time</th>
+                            <th style="padding:10px 12px;">Station</th>
+                            <th style="padding:10px 12px;">Contact</th>
+                            <th style="padding:10px 12px;">Issue</th>
+                            <th style="padding:10px 12px;">Outcome</th>
+                            <th style="padding:10px 12px;">Duration</th>
+                            <th style="padding:10px 12px;">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        function closeCallerDetailModal() {
+            document.getElementById('callerDetailModal').style.display = 'none';
         }
 
         function openCreateIssueModal() {
             const select = document.getElementById('issueStationId');
-            select.innerHTML = '<option value="">Select station...</option>' + allStations.map(s => `<option value="${s.station_id}">${s.station_name} (${s.station_id})</option>`).join('');
+            select.innerHTML = '<option value="">Select station...</option>' +
+                allStations.map(s => `<option value="${s.station_id}">${s.station_name} (${s.station_id})</option>`).join('');
             document.getElementById('createIssueModal').style.display = 'flex';
         }
         function closeCreateIssueModal() { document.getElementById('createIssueModal').style.display = 'none'; }
@@ -5493,14 +6138,21 @@
             };
             if (!body.station_id || !body.title) { alert('Station and title are required'); return; }
             try {
-                await fetch(`${WORKER_API}/api/issues`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                await fetch(`${WORKER_API}/api/issues`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
                 closeCreateIssueModal();
                 document.getElementById('issueTitle').value = '';
                 document.getElementById('issueDescription').value = '';
                 document.getElementById('issueAssignedTo').value = '';
                 document.getElementById('issueCreatedBy').value = '';
-                loadIssues(); loadCallStats();
-            } catch (e) { alert('Failed to create issue: ' + e.message); }
+                loadIssues();
+                loadCallStats();
+            } catch (e) {
+                alert('Failed to create issue: ' + e.message);
+            }
         }
 
         function openLogCallModal(issueId) {
@@ -5510,7 +6162,9 @@
         }
         function closeLogCallModal() {
             document.getElementById('logCallModal').style.display = 'none';
-            if (currentDetailIssueId) document.getElementById('issueDetailModal').style.display = 'flex';
+            if (currentDetailIssueId) {
+                document.getElementById('issueDetailModal').style.display = 'flex';
+            }
         }
         function openLogCallFromDetail() { openLogCallModal(currentDetailIssueId); }
 
@@ -5525,38 +6179,52 @@
             };
             if (!body.caller_name) { alert('Caller name is required'); return; }
             try {
-                await fetch(`${WORKER_API}/api/issues/${issueId}/calls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                await fetch(`${WORKER_API}/api/issues/${issueId}/calls`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
                 closeLogCallModal();
                 document.getElementById('callCallerName').value = '';
                 document.getElementById('callContactPerson').value = '';
                 document.getElementById('callDuration').value = '';
                 document.getElementById('callNotes').value = '';
-                loadIssues(); loadCallStats();
+                loadIssues();
+                loadCallStats();
                 if (currentDetailIssueId) openIssueDetail(currentDetailIssueId);
-            } catch (e) { alert('Failed to log call: ' + e.message); }
+            } catch (e) {
+                alert('Failed to log call: ' + e.message);
+            }
         }
 
         async function openIssueDetail(issueId) {
             currentDetailIssueId = issueId;
             const issue = allIssues.find(i => i.id === issueId);
             if (!issue) return;
+
             const station = allStations.find(s => s.station_id?.toString() === issue.station_id?.toString());
             const stationName = station?.station_name || issue.station_id;
             const statusLabels = { open: '🟡 Open', in_progress: '🔵 In Progress', resolved: '🟢 Resolved', unresolvable: '🔴 Unresolvable' };
             const priorityLabels = { low: '⬇️ Low', medium: '➡️ Medium', high: '⬆️ High', critical: '🔥 Critical' };
+
             document.getElementById('issueDetailTitle').textContent = issue.title;
             document.getElementById('issueDetailStatus').textContent = statusLabels[issue.status] || issue.status;
             document.getElementById('issueDetailStatus').className = `status-badge issue-status-badge issue-status-${issue.status}`;
             document.getElementById('issueDetailPriority').textContent = priorityLabels[issue.priority] || issue.priority;
             document.getElementById('issueDetailPriority').className = `category-badge issue-priority-${issue.priority}`;
+
             const created = issue.created_at ? new Date(issue.created_at + 'Z').toLocaleString() : '-';
+            const resolved = issue.resolved_at ? new Date(issue.resolved_at + 'Z').toLocaleString() : '-';
             document.getElementById('issueDetailInfo').innerHTML = `
                 <div style="font-size:13px; color:var(--text-secondary); line-height:1.8;">
                     <strong>Station:</strong> ${stationName} &nbsp;|&nbsp;
                     <strong>Created:</strong> ${created} &nbsp;|&nbsp;
-                    <strong>Assigned:</strong> ${issue.assigned_to || 'Unassigned'}
+                    <strong>Assigned:</strong> ${issue.assigned_to || 'Unassigned'} &nbsp;|&nbsp;
+                    <strong>Resolved:</strong> ${resolved}
                     ${issue.description ? `<br/><strong>Description:</strong> ${issue.description}` : ''}
                 </div>`;
+
+            // Load call history
             try {
                 const resp = await fetch(`${WORKER_API}/api/issues/${issueId}/calls`);
                 const calls = await resp.json();
@@ -5571,7 +6239,8 @@
                             </div>
                             <div style="color:var(--text-secondary); margin-top:4px;">
                                 ${c.contact_person ? `Called: ${c.contact_person} &nbsp;|&nbsp;` : ''}
-                                ${c.duration_minutes ? `${c.duration_minutes} min &nbsp;|&nbsp;` : ''}${time}
+                                ${c.duration_minutes ? `${c.duration_minutes} min &nbsp;|&nbsp;` : ''}
+                                ${time}
                             </div>
                             ${c.notes ? `<div style="margin-top:4px; font-style:italic; color:var(--text-secondary);">${c.notes}</div>` : ''}
                         </div>`;
@@ -5582,6 +6251,7 @@
             } catch (e) {
                 document.getElementById('issueCallHistory').innerHTML = '<div style="color:#ff4d4f; padding:10px;">Failed to load calls</div>';
             }
+
             document.getElementById('issueDetailModal').style.display = 'flex';
         }
         function closeIssueDetailModal() { document.getElementById('issueDetailModal').style.display = 'none'; currentDetailIssueId = null; }
@@ -5589,51 +6259,105 @@
         async function updateIssueStatus(newStatus) {
             if (!currentDetailIssueId) return;
             try {
-                await fetch(`${WORKER_API}/api/issues/${currentDetailIssueId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) });
-                closeIssueDetailModal(); loadIssues(); loadCallStats();
-            } catch (e) { alert('Failed to update: ' + e.message); }
+                await fetch(`${WORKER_API}/api/issues/${currentDetailIssueId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                closeIssueDetailModal();
+                loadIssues();
+                loadCallStats();
+            } catch (e) {
+                alert('Failed to update: ' + e.message);
+            }
         }
 
-        async function loadIssueTrackerData() { await Promise.all([loadIssues(), loadCallStats()]); }
+        // Load issue data on init
+        async function loadIssueTrackerData() {
+            await Promise.all([loadIssues(), loadCallStats()]);
+        }
 
         async function autoResolveActiveStationIssues() {
             if (!allStations.length || !allIssues.length) return;
-            const activeStationIds = new Set(allStations.filter(s => s.status === 'Active').map(s => s.station_id?.toString()));
-            const toResolve = allIssues.filter(i => (i.status === 'open' || i.status === 'in_progress') && activeStationIds.has(i.station_id?.toString()));
+            const activeStationIds = new Set(
+                allStations.filter(s => s.status === 'Active').map(s => s.station_id?.toString())
+            );
+            const toResolve = allIssues.filter(i =>
+                (i.status === 'open' || i.status === 'in_progress') &&
+                activeStationIds.has(i.station_id?.toString())
+            );
             if (!toResolve.length) return;
             let resolved = 0;
             for (const issue of toResolve) {
-                try { await fetch(`${WORKER_API}/api/issues/${issue.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }) }); resolved++; } catch (e) {}
+                try {
+                    await fetch(`${WORKER_API}/api/issues/${issue.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'resolved' }),
+                    });
+                    resolved++;
+                } catch (e) {
+                    console.error(`Failed to auto-resolve issue ${issue.id}:`, e);
+                }
             }
             if (resolved > 0) { await loadIssues(); loadCallStats(); }
+            console.log(`Auto-resolved ${resolved} issue(s) for stations back online.`);
+        }
+
+        function exportCallLogs() {
+            const range = document.getElementById('issueRangeFilter')?.value || '7d';
+            const a = document.createElement('a');
+            a.href = `${WORKER_API}/api/export/calls?range=${range}`;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         async function autoPopulateInactiveIssues(silent = false) {
-            if (!allStations.length) { if (!silent) alert('Station data not loaded yet.'); return; }
+            if (!allStations.length) { if (!silent) alert('Station data not loaded yet. Please wait.'); return; }
             const inactiveStations = allStations.filter(s => s.status !== 'Active' && (STATION_CATEGORIES[s.station_id] || 'community') !== 'wu');
-            if (!inactiveStations.length) { if (!silent) alert('All stations are active!'); return; }
+            if (!inactiveStations.length) { if (!silent) alert('All stations are active! No issues to create.'); return; }
+
             try {
+                // Fetch fresh issues from API to avoid stale data / duplicates
                 const resp = await fetch(`${WORKER_API}/api/issues`);
                 const freshIssues = await resp.json();
-                const openIssueStationIds = new Set(freshIssues.filter(i => i.status === 'open' || i.status === 'in_progress').map(i => i.station_id?.toString()));
+                const openIssueStationIds = new Set(
+                    freshIssues
+                        .filter(i => i.status === 'open' || i.status === 'in_progress')
+                        .map(i => i.station_id?.toString())
+                );
+
                 const toCreate = inactiveStations.filter(s => !openIssueStationIds.has(s.station_id?.toString()));
                 if (!toCreate.length) { if (!silent) alert('All inactive stations already have open issues.'); return; }
+
                 if (!silent && !confirm(`Create issues for ${toCreate.length} inactive station(s)?`)) return;
+
                 let created = 0;
                 for (const station of toCreate) {
                     try {
-                        await fetch(`${WORKER_API}/api/issues`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-                            station_id: station.station_id,
-                            title: `Station ${station.status || 'Offline'}: ${station.station_name}`,
-                            description: `Auto-created: Station ${station.station_name} (${station.station_id}) is currently ${(station.status || 'offline').toLowerCase()}.`,
-                            priority: station.status === 'Disabled' ? 'low' : 'medium',
-                        })});
+                        await fetch(`${WORKER_API}/api/issues`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                station_id: station.station_id,
+                                title: `Station ${station.status || 'Offline'}: ${station.station_name}`,
+                                description: `Auto-created: Station ${station.station_name} (${station.station_id}) is currently ${(station.status || 'offline').toLowerCase()}.`,
+                                priority: station.status === 'Disabled' ? 'low' : 'medium',
+                            }),
+                        });
                         created++;
-                    } catch (e) {}
+                    } catch (e) {
+                        console.error(`Failed to create issue for ${station.station_id}:`, e);
+                    }
                 }
                 if (!silent) alert(`Created ${created} issue(s) for inactive stations.`);
                 if (created > 0) { await loadIssues(); loadCallStats(); }
-            } catch (e) { if (!silent) alert('Failed to auto-populate: ' + e.message); }
+            } catch (e) {
+                if (!silent) alert('Failed to auto-populate: ' + e.message);
+                console.error('Auto-populate failed:', e);
+            }
         }
 
         // Initialize
@@ -5683,10 +6407,8 @@
             setupEventListeners();
             setupUptimeRangeToggles();
 
-            // Auto-refresh every 30 minutes (only on main production Pages)
-            if (location.hostname === 'weatherwalay-dashboard.pages.dev') {
-                setInterval(loadData, 30 * 60 * 1000);
-            }
+            // Auto-refresh disabled in STAGING (production has it enabled).
+            // setInterval(loadData, 30 * 60 * 1000);
         }
 
         // Start when page loads
