@@ -30,6 +30,15 @@ export default function UptimeTrendChart({ isDark }) {
         drawChart();
     }, [data, isDark, chartType]);
 
+    // The Worker returns periods as UTC datetime strings WITHOUT a 'Z' suffix
+    // (e.g. "2026-05-29 14:00:00"). `new Date(s)` parses those as the browser's
+    // LOCAL timezone, so in a PKT browser we'd interpret 14:00 UTC as 14:00 PKT
+    // and the +5h offset below would push labels into next-timezone-land. Force
+    // UTC parsing by normalizing to ISO format with an explicit 'Z'.
+    function parseUtc(periodStr) {
+        return new Date(periodStr.replace(' ', 'T') + 'Z');
+    }
+
     function drawChart() {
         if (!data || !data.trend || !canvasRef.current) return;
         const canvas = canvasRef.current;
@@ -54,26 +63,22 @@ export default function UptimeTrendChart({ isDark }) {
         if (data.granularity === 'hourly') {
             if (range === '24h') {
                 labels = trend.map(item => {
-                    // Convert UTC to PKT (UTC+5)
-                    const d = new Date(item.period);
-                    const pktDate = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+                    const pktDate = new Date(parseUtc(item.period).getTime() + 5 * 60 * 60 * 1000);
                     return pktDate.toISOString().substring(11, 16);
                 });
                 values = trend.map(item => item.uptime_pct);
             } else if (range === 'daily') {
                 // Show hourly data for TODAY only (from 12 AM PKT to now)
-                const nowPKT = new Date(new Date().getTime() + 5 * 60 * 60 * 1000);
+                const nowPKT = new Date(Date.now() + 5 * 60 * 60 * 1000);
                 const todayStr = nowPKT.toISOString().substring(0, 10); // YYYY-MM-DD in PKT
 
                 const todayHourly = trend.filter(item => {
-                    const d = new Date(item.period);
-                    const pktDate = new Date(d.getTime() + 5 * 60 * 60 * 1000);
-                    return pktDate.toISOString().startsWith(todayStr); // Only today's hours
+                    const pktDate = new Date(parseUtc(item.period).getTime() + 5 * 60 * 60 * 1000);
+                    return pktDate.toISOString().startsWith(todayStr);
                 });
 
                 labels = todayHourly.map(item => {
-                    const d = new Date(item.period);
-                    const pktDate = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+                    const pktDate = new Date(parseUtc(item.period).getTime() + 5 * 60 * 60 * 1000);
                     return pktDate.toISOString().substring(11, 16);
                 });
                 values = todayHourly.map(item => item.uptime_pct);
@@ -81,8 +86,7 @@ export default function UptimeTrendChart({ isDark }) {
                 // Aggregate hourly data into 6-hour checkpoints (4 per day × 7 = 28 points)
                 const buckets = {};
                 trend.forEach(item => {
-                    const d = new Date(item.period);
-                    const pktDate = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+                    const pktDate = new Date(parseUtc(item.period).getTime() + 5 * 60 * 60 * 1000);
                     const hour = pktDate.getUTCHours();
                     const bucketHour = Math.floor(hour / 6) * 6; // 0, 6, 12, 18
                     const day = pktDate.toISOString().substring(0, 10);

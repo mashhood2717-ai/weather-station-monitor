@@ -3129,25 +3129,37 @@
                 let uptimeValues = [];
 
                 if (data.granularity === 'hourly') {
+                    // The Worker returns item.period as UTC ("YYYY-MM-DD HH:00:00"), so we
+                    // need to add +5h to display the hour in PKT. Use Date.UTC + offset to
+                    // also roll the day boundary correctly when 19+ UTC → next-day PKT.
+                    function toPkt(periodStr) {
+                        const [datePart, timePart] = periodStr.split(' ');
+                        const [Y, M, D] = datePart.split('-').map(Number);
+                        const [h, m] = (timePart || '00:00:00').split(':').map(Number);
+                        const utcMs = Date.UTC(Y, M - 1, D, h, m);
+                        const pktMs = utcMs + 5 * 60 * 60 * 1000;
+                        const pkt = new Date(pktMs);
+                        return {
+                            day: pkt.toISOString().substring(0, 10),
+                            hour: pkt.getUTCHours(),
+                            minute: pkt.getUTCMinutes(),
+                            hhmm: pkt.toISOString().substring(11, 16),
+                        };
+                    }
+
                     // Group hourly data by day for 7d, or show hours for 24h
                     if (range === '24h') {
                         // Show hourly for 24h
-                        labels = data.trend.map(item => {
-                            const parts = item.period.split(' ');
-                            return parts[1] ? parts[1].substring(0, 5) : item.period;
-                        });
+                        labels = data.trend.map(item => toPkt(item.period).hhmm);
                         uptimeValues = data.trend.map(item => item.uptime_pct);
                     } else if (range === '7d') {
                         // Aggregate into 6-hour checkpoints (00:00, 06:00, 12:00, 18:00) in PKT
                         const buckets = {};
                         data.trend.forEach(item => {
-                            // item.period is already in local (server) time; treat as-is, just bucket by hour
-                            const parts = item.period.split(' ');
-                            const day = parts[0];
-                            const hour = parts[1] ? parseInt(parts[1].substring(0, 2), 10) : 0;
-                            const bucketHour = Math.floor(hour / 6) * 6;
-                            const key = `${day} ${String(bucketHour).padStart(2, '0')}:00`;
-                            if (!buckets[key]) buckets[key] = { sumOnline: 0, sumTotal: 0, day, bucketHour };
+                            const p = toPkt(item.period);
+                            const bucketHour = Math.floor(p.hour / 6) * 6;
+                            const key = `${p.day} ${String(bucketHour).padStart(2, '0')}:00`;
+                            if (!buckets[key]) buckets[key] = { sumOnline: 0, sumTotal: 0, day: p.day, bucketHour };
                             buckets[key].sumOnline += (item.online_checks || 0);
                             buckets[key].sumTotal += (item.total_checks || 0);
                         });
