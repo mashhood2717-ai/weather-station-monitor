@@ -95,7 +95,7 @@ export default function StationDetailModal({ station, onClose, isDark }) {
             ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
             ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '9px Space Grotesk'; ctx.textAlign = 'right';
+            ctx.font = '9px Inter'; ctx.textAlign = 'right';
             ctx.fillText((100 - 25 * i) + '%', pad.left - 6, y + 3);
         }
 
@@ -149,7 +149,7 @@ export default function StationDetailModal({ station, onClose, isDark }) {
         ctx.textAlign = 'center';
         for (let i = 0; i < labels.length; i += step) {
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '9px Space Grotesk';
+            ctx.font = '9px Inter';
             ctx.fillText(labels[i], getX(i), H - pad.bottom + 14);
         }
     }
@@ -189,7 +189,7 @@ export default function StationDetailModal({ station, onClose, isDark }) {
             ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
             ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '9px Space Grotesk'; ctx.textAlign = 'right';
+            ctx.font = '9px Inter'; ctx.textAlign = 'right';
             ctx.fillText((maxT - (range / 4) * i).toFixed(0) + '°', pad.left - 6, y + 3);
         }
 
@@ -234,7 +234,7 @@ export default function StationDetailModal({ station, onClose, isDark }) {
         ctx.textAlign = 'center';
         for (let i = 0; i < labels.length; i += step) {
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '9px Space Grotesk';
+            ctx.font = '9px Inter';
             ctx.fillText(labels[i], getX(i), H - pad.bottom + 14);
         }
     }

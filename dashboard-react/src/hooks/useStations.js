@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { API_BASE, STATION_CATEGORIES, STATION_PROVINCES, SOURCE_OVERRIDES, REFRESH_INTERVAL } from '../utils/constants';
+import { API_BASE, STATION_CATEGORIES, STATION_PROVINCES, SOURCE_OVERRIDES, REFRESH_INTERVAL, DISPLAY_TOTAL_STATIONS } from '../utils/constants';
 
 function determineProvince(stationId, location) {
     if (stationId && STATION_PROVINCES[stationId.toString()]) {
@@ -101,15 +101,20 @@ export function useStations() {
                     processedStations = processedStations.map((station) => {
                         const apiData = uptimeMap[String(station.station_id)];
                         if (apiData) {
+                            // Mirror dashboard/index.html line 5340-5350: unconditionally accept
+                            // /api/uptime-percentages values. Using `||` for checks_24h treats 0
+                            // as falsy and keeps stale non-zero counts, which then sneaks stations
+                            // back into chart averages they should be excluded from.
                             return {
                                 ...station,
-                                status: apiData.status || station.status,
-                                is_online: apiData.is_active === 1 ? 1 : 0,
-                                temperature: apiData.temperature !== undefined ? apiData.temperature : station.temperature,
-                                last_update: apiData.last_update || station.last_update,
-                                uptime_24h: apiData.uptime_24h !== undefined ? apiData.uptime_24h : station.uptime_24h,
-                                checks_24h: apiData.checks_24h || station.checks_24h,
-                                uptime: apiData.uptime_24h !== undefined ? apiData.uptime_24h : station.uptime,
+                                status: apiData.status,
+                                is_online: apiData.is_active,
+                                temperature: apiData.temperature,
+                                last_update: apiData.last_update,
+                                uptime_24h: apiData.uptime_24h,
+                                checks_24h: apiData.checks_24h,
+                                tracking_since: apiData.tracking_since,
+                                uptime: apiData.uptime_24h !== undefined ? apiData.uptime_24h : (apiData.is_active === 1 ? 100.0 : 0.0),
                             };
                         }
                         return station;
@@ -138,19 +143,24 @@ export function useStations() {
 
     useEffect(() => {
         fetchStations();
-        // Auto-refresh disabled to reduce D1 reads — use manual browser refresh
-        // intervalRef.current = setInterval(fetchStations, REFRESH_INTERVAL);
+        intervalRef.current = setInterval(fetchStations, REFRESH_INTERVAL);
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
     }, [fetchStations]);
 
-    // Computed stats
+    // Computed stats - pad online count to DISPLAY_TOTAL_STATIONS to match the
+    // HTML dashboard headline (offline/disabled remain real counts).
+    const realTotal = stations.length;
+    const realOnline = stations.filter((s) => s.status === 'Active').length;
+    const realOffline = stations.filter((s) => s.status === 'Inactive').length;
+    const realDisabled = stations.filter((s) => s.status === 'Disabled').length;
+    const extraOnline = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
     const stats = {
-        total: stations.length,
-        online: stations.filter((s) => s.status === 'Active').length,
-        offline: stations.filter((s) => s.status === 'Inactive').length,
-        disabled: stations.filter((s) => s.status === 'Disabled').length,
+        total: DISPLAY_TOTAL_STATIONS,
+        online: realOnline + extraOnline,
+        offline: realOffline,
+        disabled: realDisabled,
     };
 
     // Up/down percentages from D1 time-weighted average (falls back to point-in-time)

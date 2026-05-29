@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Input, Select, Tag, Table, Progress, Space, Button, Typography } from 'antd';
+import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios';
+import { Input, Select, Tag, Table, Progress, Space, Button, Typography, message } from 'antd';
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons';
-import { CATEGORY_CONFIG } from '../utils/constants';
+import { CATEGORY_CONFIG, API_BASE } from '../utils/constants';
 
 const { Text } = Typography;
 
@@ -32,7 +33,10 @@ const RANGE_OPTIONS = [
     { value: '1y', label: '1y' },
 ];
 
-function getUptimeValue(station) {
+function getUptimeValue(station, rangeUptimes) {
+    // Range-specific override takes priority (matches legacy: GET /api/uptime-percentages?range=X)
+    const override = rangeUptimes?.[String(station.station_id)];
+    if (override !== undefined && override !== null) return parseFloat(override);
     if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
         return parseFloat(station.uptime_24h);
     }
@@ -46,6 +50,31 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
     const [search, setSearch] = useState('');
     const [sourceFilter, setSourceFilter] = useState('all');
     const [range, setRange] = useState('24h');
+    const [rangeUptimes, setRangeUptimes] = useState(null);
+    const [rangeLoading, setRangeLoading] = useState(false);
+
+    // When the user picks 7d / 30d / 1y / daily, fetch range-specific uptime from the
+    // Worker (mirrors dashboard/index.html loadUptimeData at line ~4347). On 24h we
+    // already have the values via /api/uptime-percentages in useStations() — clear
+    // the override so the existing column data is used directly.
+    useEffect(() => {
+        let cancelled = false;
+        if (range === '24h') {
+            setRangeUptimes(null);
+            return;
+        }
+        setRangeLoading(true);
+        axios.get(`${API_BASE}/api/uptime-percentages?range=${range}`)
+            .then(resp => {
+                if (cancelled) return;
+                const map = {};
+                (resp.data?.uptime_data || []).forEach(u => { map[String(u.station_id)] = u.uptime_24h; });
+                setRangeUptimes(map);
+            })
+            .catch(e => { if (!cancelled) message.error('Failed to load uptime for ' + range); })
+            .finally(() => { if (!cancelled) setRangeLoading(false); });
+        return () => { cancelled = true; };
+    }, [range]);
 
     const filtered = useMemo(() => {
         let result = stations;
@@ -72,14 +101,14 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
 
     function handleExport(format) {
         if (format === 'csv') {
-            const rows = [['Station', 'Source', 'Status', 'Temp', 'Rain', 'Uptime %', 'Province']];
+            const rows = [['Station', 'Source', 'Status', 'Temp', 'Rain', `Uptime % (${range})`, 'Province']];
             filtered.forEach(s => rows.push([
                 s.station_name,
                 s.api_source,
                 s.status,
                 s.temperature ?? '',
                 s.rainfall ?? '',
-                getUptimeValue(s).toFixed(1),
+                getUptimeValue(s, rangeUptimes).toFixed(1),
                 s.province,
             ]));
             const csv = rows.map(r => r.join(',')).join('\n');
@@ -137,12 +166,12 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
             render: (value) => value !== null && value !== undefined ? `${value} mm` : '--',
         },
         {
-            title: `Availability (${range})`,
+            title: `Availability (${range})${rangeLoading ? ' …' : ''}`,
             dataIndex: 'uptime',
             key: 'uptime',
-            sorter: (a, b) => getUptimeValue(a) - getUptimeValue(b),
+            sorter: (a, b) => getUptimeValue(a, rangeUptimes) - getUptimeValue(b, rangeUptimes),
             render: (_, record) => {
-                const value = getUptimeValue(record);
+                const value = getUptimeValue(record, rangeUptimes);
                 const color = value >= 90 ? '#10b981' : value >= 50 ? '#f59e0b' : '#ef4444';
                 return (
                     <Space size={8}>
@@ -188,7 +217,7 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
                 dataSource={filtered}
                 columns={columns}
                 size="small"
-                pagination={{ pageSize: 20, showSizeChanger: true }}
+                pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100', '200', '500'] }}
                 scroll={{ x: 900, y: 520 }}
                 onRow={(record) => ({
                     onClick: () => onStationClick(record),

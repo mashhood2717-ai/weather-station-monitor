@@ -152,7 +152,7 @@ export default function UptimeTrendChart({ isDark }) {
             // Y-axis label
             const val = maxVal - ((maxVal - minVal) / 4) * i;
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '10px Space Grotesk, sans-serif';
+            ctx.font = '10px Inter, sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(val.toFixed(0) + '%', pad.left - 8, y + 3);
         }
@@ -163,7 +163,7 @@ export default function UptimeTrendChart({ isDark }) {
         for (let i = 0; i < labels.length; i += step) {
             const x = pad.left + (i / (labels.length - 1)) * plotW;
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '10px Space Grotesk, sans-serif';
+            ctx.font = '10px Inter, sans-serif';
             ctx.fillText(labels[i], x, H - pad.bottom + 18);
         }
 

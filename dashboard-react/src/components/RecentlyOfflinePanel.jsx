@@ -44,11 +44,15 @@ export default function RecentlyOfflinePanel({ stations, onStationClick }) {
                 return (s.api_source || '').toLowerCase().includes(sourceFilter.toLowerCase());
             });
         }
+        // Sort by last_seen (last time the station was confirmed online before going
+        // offline) descending — matches dashboard/index.html line 5532-5539. Using
+        // last_update would order by most-recently-polled, which is roughly identical
+        // for all offline stations within a sync window and gives no real ordering.
         return offline.sort((a, b) => {
-            const aTime = a.last_update || a.last_seen || '';
-            const bTime = b.last_update || b.last_seen || '';
-            return new Date(bTime) - new Date(aTime);
-        }).slice(0, 20);
+            const aTime = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+            const bTime = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+            return bTime - aTime;
+        }).slice(0, 30);
     }, [stations, sourceFilter]);
 
     return (
@@ -76,7 +80,7 @@ export default function RecentlyOfflinePanel({ stations, onStationClick }) {
             <List
                 dataSource={offlineStations}
                 locale={{ emptyText: 'No offline stations' }}
-                style={{ maxHeight: 520, overflow: 'auto' }}
+                style={{ maxHeight: 220, overflow: 'auto' }}
                 renderItem={(s) => {
                     const lastSeen = s.last_update || s.last_seen;
                     return (

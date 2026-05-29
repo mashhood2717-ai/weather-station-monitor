@@ -54,7 +54,7 @@ export default function CategoryUptimeChart({ stations, isDark }) {
             ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
             const val = 100 - 25 * i;
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '10px Space Grotesk';
+            ctx.font = '10px Inter';
             ctx.textAlign = 'right';
             ctx.fillText(val + '%', pad.left - 6, y + 3);
         }
@@ -75,12 +75,12 @@ export default function CategoryUptimeChart({ stations, isDark }) {
                 ctx.quadraticCurveTo(x, y, x + r, y); ctx.fill();
                 // Value on top
                 ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-                ctx.font = 'bold 11px Space Grotesk';
+                ctx.font = 'bold 11px Inter';
                 ctx.textAlign = 'center';
                 ctx.fillText(d.avgUptime + '%', x + barW / 2, y - 4);
                 // Label
                 ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-                ctx.font = '9px Space Grotesk';
+                ctx.font = '9px Inter';
                 ctx.fillText(d.name, x + barW / 2, H - pad.bottom + 14);
                 ctx.fillText(`(${d.active}/${d.total})`, x + barW / 2, H - pad.bottom + 25);
             });
@@ -104,10 +104,10 @@ export default function CategoryUptimeChart({ stations, isDark }) {
                 ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = d.color; ctx.fill();
                 ctx.strokeStyle = isDark ? '#1e293b' : '#fff'; ctx.lineWidth = 2; ctx.stroke();
                 ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-                ctx.font = '10px Space Grotesk'; ctx.textAlign = 'center';
+                ctx.font = '10px Inter'; ctx.textAlign = 'center';
                 ctx.fillText(d.avgUptime + '%', x, y - 10);
                 ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-                ctx.font = '9px Space Grotesk';
+                ctx.font = '9px Inter';
                 ctx.fillText(d.name, x, H - pad.bottom + 14);
             });
         }

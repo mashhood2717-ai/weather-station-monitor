@@ -162,7 +162,7 @@ export default function RainGauges({ isDark }) {
                             <div style={{ fontSize: 11, fontWeight: 600, color: subColor, textTransform: 'uppercase' }}>{c.title}</div>
                             <Statistic
                                 value={c.value}
-                                valueStyle={{ color: c.color, fontSize: 20, fontWeight: 700, fontFamily: "'Orbitron', 'Space Grotesk', sans-serif" }}
+                                valueStyle={{ color: c.color, fontSize: 20, fontWeight: 700, fontFamily: "'Orbitron', 'Inter', sans-serif" }}
                             />
                             <div style={{ fontSize: 11, color: subColor, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {c.sub}
@@ -199,7 +199,7 @@ export default function RainGauges({ isDark }) {
                         columns={columns}
                         dataSource={filteredRows}
                         size="small"
-                        pagination={{ pageSize: 25, showSizeChanger: true, pageSizeOptions: ['10', '25', '50', '100'] }}
+                        pagination={{ defaultPageSize: 25, showSizeChanger: true, pageSizeOptions: ['10', '25', '50', '75', '100'] }}
                         scroll={{ x: 'max-content' }}
                     />
                 </Spin>

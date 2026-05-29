@@ -3,25 +3,25 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: 'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
 html, body, #root {
-  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: 'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   overflow-x: hidden;
 }
 
-/* Force Space Grotesk on ALL Ant Design components */
+/* Force Inter on ALL Ant Design components */
 .ant-app, .ant-typography, .ant-btn, .ant-input, .ant-select, .ant-table, .ant-card, .ant-tag, .ant-modal, .ant-tooltip, .ant-radio-group, .ant-segmented, .ant-statistic, 
 .ant-btn-default, .ant-radio, .ant-checkbox, .ant-switch, .ant-pagination, .ant-breadcrumb, .ant-dropdown, .ant-menu, .ant-alert, .ant-divider, .ant-description, 
 .ant-empty, .ant-list, .ant-timeline, .ant-tree, .ant-collapse, .ant-progress, .ant-rate, .ant-skeleton, .ant-spin, .ant-drawer, .ant-popover, .ant-popconfirm,
 .ant-form, .ant-form-item, .ant-message, .ant-notification, .ant-picker, .ant-slider, .ant-space, .ant-watermark {
-  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: 'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
 /* Force on ALL text content */
 body, body * {
-  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: 'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
 .stats-grid {
@@ -139,6 +139,7 @@ body, body * {
   border-radius: 8px;
   font-size: 12px;
   line-height: 22px;
+  color: #1e293b;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border: 1px solid #f0f0f0;
 }
@@ -156,6 +157,33 @@ body, body * {
   display: inline-block;
   margin-right: 6px;
   vertical-align: middle;
+}
+
+/* Dark-mode overrides for Leaflet controls inside the map container */
+.map-dark .map-legend {
+  background: rgba(15, 23, 42, 0.92);
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+.map-dark .leaflet-popup-content-wrapper,
+.map-dark .leaflet-popup-tip {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+.map-dark .leaflet-popup-content-wrapper hr {
+  border-top-color: #334155 !important;
+}
+
+.map-dark .leaflet-control-zoom a {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+.map-dark .leaflet-control-zoom a:hover {
+  background: #334155;
 }
 
 /* Compact Radio.Button groups for chart range selectors */

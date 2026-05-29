@@ -31,22 +31,29 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
         return stations;
     }, [stations, networkFilter]);
 
+    // Match legacy dashboard/index.html (line ~3347): only average stations that
+    // actually had checks in the last 24h. Stations with checks_24h=0 carry stale
+    // fallback uptime values and would skew the category averages downward.
+    const avgUptimeFor = (list) => {
+        const uptimes = list
+            .filter(s => s.checks_24h && s.checks_24h > 0)
+            .map(getUptimeValue)
+            .filter(v => !isNaN(v));
+        return uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
+    };
+
     const data = useMemo(() => {
         if (groupBy === 'category') {
             return CATEGORY_LIST.map(cat => {
                 const config = CATEGORY_CONFIG[cat];
                 const list = filteredStations.filter(s => s.category === cat);
-                const total = list.length;
-                const active = list.filter(s => s.status === 'Active').length;
-                const uptimes = list.map(getUptimeValue).filter(v => !isNaN(v));
-                const avgUptime = uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
                 return {
                     key: cat,
                     name: config.name,
                     color: config.color,
-                    total,
-                    active,
-                    avgUptime: Number(avgUptime.toFixed(1)),
+                    total: list.length,
+                    active: list.filter(s => s.status === 'Active').length,
+                    avgUptime: Number(avgUptimeFor(list).toFixed(1)),
                 };
             });
         }
@@ -54,17 +61,13 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
         if (groupBy === 'province') {
             return PROVINCE_LIST.map(prov => {
                 const list = filteredStations.filter(s => s.province === prov);
-                const total = list.length;
-                const active = list.filter(s => s.status === 'Active').length;
-                const uptimes = list.map(getUptimeValue).filter(v => !isNaN(v));
-                const avgUptime = uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
                 return {
                     key: prov,
                     name: prov,
                     color: PROVINCE_CONFIG[prov]?.color || '#8c8c8c',
-                    total,
-                    active,
-                    avgUptime: Number(avgUptime.toFixed(1)),
+                    total: list.length,
+                    active: list.filter(s => s.status === 'Active').length,
+                    avgUptime: Number(avgUptimeFor(list).toFixed(1)),
                 };
             });
         }
@@ -74,17 +77,13 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                 if (src === 'WU') return s.category === 'wu';
                 return (s.api_source || '').toLowerCase().includes(src.toLowerCase());
             });
-            const total = list.length;
-            const active = list.filter(s => s.status === 'Active').length;
-            const uptimes = list.map(getUptimeValue).filter(v => !isNaN(v));
-            const avgUptime = uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
             return {
                 key: src,
                 name: src,
                 color: SOURCE_COLORS[src] || '#8c8c8c',
-                total,
-                active,
-                avgUptime: Number(avgUptime.toFixed(1)),
+                total: list.length,
+                active: list.filter(s => s.status === 'Active').length,
+                avgUptime: Number(avgUptimeFor(list).toFixed(1)),
             };
         });
     }, [filteredStations, groupBy]);
@@ -125,7 +124,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
             ctx.stroke();
             const val = 100 - 25 * i;
             ctx.fillStyle = isDark ? '#cbd5e1' : '#64748b';
-            ctx.font = '10px Space Grotesk, sans-serif';
+            ctx.font = '10px Inter, sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(val + '%', pad.left - 8, y + 3);
         }
@@ -149,11 +148,11 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                 ctx.quadraticCurveTo(x, y, x + r, y);
                 ctx.fill();
                 ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
-                ctx.font = '11px Space Grotesk, sans-serif';
+                ctx.font = '11px Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText(d.avgUptime + '%', x + barW / 2, y - 6);
                 ctx.fillStyle = isDark ? '#cbd5e1' : '#64748b';
-                ctx.font = '10px Space Grotesk, sans-serif';
+                ctx.font = '10px Inter, sans-serif';
                 ctx.fillText(d.name, x + barW / 2, H - pad.bottom + 16);
                 ctx.fillText(`(${d.active}/${d.total})`, x + barW / 2, H - pad.bottom + 28);
             });
@@ -183,18 +182,18 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.fillStyle = isDark ? '#f8fafc' : '#1e293b';
-            ctx.font = '10px Space Grotesk, sans-serif';
+            ctx.font = '10px Inter, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(d.avgUptime + '%', x, y - 10);
             ctx.fillStyle = isDark ? '#cbd5e1' : '#64748b';
-            ctx.font = '10px Space Grotesk, sans-serif';
+            ctx.font = '10px Inter, sans-serif';
             ctx.fillText(d.name, x, H - pad.bottom + 16);
         });
     }
 
     return (
         <Card
-            title="Availability Summary"
+            title={<span>Availability Summary <span style={{ fontSize: 11, fontWeight: 400, color: isDark ? '#94a3b8' : '#64748b', marginLeft: 6 }}>— 24h average</span></span>}
             size="small"
             styles={{ body: { padding: 16 } }}
             extra={(

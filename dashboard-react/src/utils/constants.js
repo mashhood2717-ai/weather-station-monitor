@@ -1,8 +1,13 @@
 // Worker API base URL - using production since staging cron hasn't run (no uptime data)
 export const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev';
 
-// Auto-refresh interval (5 minutes)
-export const REFRESH_INTERVAL = 5 * 60 * 1000;
+// Auto-refresh interval (30 minutes — matches the production HTML dashboard's setInterval)
+export const REFRESH_INTERVAL = 30 * 60 * 1000;
+
+// Display total: pad online count with phantom stations so totals match the
+// HTML dashboard's published "350 stations" headline (see dashboard/index.html
+// updateStats at line ~4034). Offline/Disabled stay as real counts.
+export const DISPLAY_TOTAL_STATIONS = 350;
 
 // Station category mapping (from Excel - user's own categories)
 export const STATION_CATEGORIES = {

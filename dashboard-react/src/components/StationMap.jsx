@@ -23,7 +23,7 @@ function createMarkerIcon(status) {
     });
 }
 
-export default function StationMap({ stations, onStationClick }) {
+export default function StationMap({ stations, isDark, onStationClick }) {
     const mapRef = useRef(null);
     const mapInstance = useRef(null);
     const clusterRef = useRef(null);
@@ -90,7 +90,7 @@ export default function StationMap({ stations, onStationClick }) {
                 : 'N/A';
 
             marker.bindPopup(`
-        <div style="min-width:180px; font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;">
+        <div style="min-width:180px; font-family: 'Inter', 'IBM Plex Sans', sans-serif;">
           <b style="font-size:14px;">${s.station_name}</b><br/>
           <span style="color:#8c8c8c; font-size:12px;">ID: ${s.station_id}</span><br/>
           <hr style="margin:6px 0;border:0;border-top:1px solid #f0f0f0;"/>
@@ -118,7 +118,7 @@ export default function StationMap({ stations, onStationClick }) {
             styles={{ body: { padding: 0, height: 540 } }}
             style={{ borderRadius: 12, overflow: 'hidden' }}
         >
-            <div ref={mapRef} style={{ width: '100%', height: 540 }} />
+            <div ref={mapRef} className={isDark ? 'map-dark' : ''} style={{ width: '100%', height: 540 }} />
         </Card>
     );
 }

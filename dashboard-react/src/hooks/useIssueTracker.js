@@ -50,6 +50,13 @@ export function useIssueTracker() {
         return resp.data || [];
     }, []);
 
+    const fetchCallsByCaller = useCallback(async (callerName, range = '7d') => {
+        const params = new URLSearchParams({ range });
+        if (callerName) params.set('caller', callerName);
+        const resp = await axios.get(`${API_BASE}/api/calls?${params}`);
+        return resp.data || null;
+    }, []);
+
     const logCall = useCallback(async (issueId, body) => {
         const resp = await axios.post(`${API_BASE}/api/issues/${issueId}/calls`, body);
         return resp.data;
@@ -83,6 +90,7 @@ export function useIssueTracker() {
         updateIssue,
         deleteIssue,
         fetchCalls,
+        fetchCallsByCaller,
         logCall,
         loadAll,
         exportCalls,

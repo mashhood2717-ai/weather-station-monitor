@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ConfigProvider, Layout, theme as antdTheme, App as AntApp, Spin, Row, Col } from 'antd';
+import { ConfigProvider, Layout, theme as antdTheme, App as AntApp, Spin, Row, Col, Space } from 'antd';
 import DashboardHeader from './components/DashboardHeader';
 import StatCards from './components/StatCards';
 import StatusDistribution from './components/StatusDistribution';
@@ -41,7 +41,7 @@ export default function App() {
         token: {
             colorPrimary: '#0ea5e9',
             borderRadius: 8,
-            fontFamily: "'Space Grotesk', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            fontFamily: "'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         },
     }), [isDark]);
 
@@ -51,7 +51,7 @@ export default function App() {
         <ConfigProvider theme={themeConfig}>
             <AntApp>
                 <Layout className="dashboard-layout" style={{ background: bgColor, minHeight: '100vh' }}>
-                    <Content style={{ padding: '16px 24px', maxWidth: 1600, margin: '0 auto', width: '100%' }}>
+                    <Content style={{ padding: '12px 16px', width: '100%' }}>
                         {/* Header */}
                         <DashboardHeader
                             isDark={isDark}
@@ -72,7 +72,7 @@ export default function App() {
                             <>
                                 {/* Tab Navigation */}
                                 <div style={{
-                                    display: 'flex', gap: 0, marginBottom: 20,
+                                    display: 'flex', gap: 0, marginBottom: 12,
                                     background: isDark ? '#1e293b' : '#f8fafc',
                                     borderRadius: 12, padding: 4,
                                     border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
@@ -95,55 +95,47 @@ export default function App() {
                                     ))}
                                 </div>
 
-                                {/* Tab 1: Station Monitoring */}
+                                {/* Tab 1: Station Monitoring — hero map layout */}
                                 {activeTab === 'monitoring' && (
                                     <>
-                                        {/* Stat Cards */}
+                                        {/* Thin stat strip */}
                                         <StatCards stats={stats} uptimeTrend={uptimeTrend} onFilterChange={setStatusFilter} isDark={isDark} />
 
-                                        {/* Status Distribution + Availability Summary */}
-                                        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-                                            <Col xs={24} lg={6} xl={5}>
-                                                <StatusDistribution stats={stats} isDark={isDark} displayTotal={DISPLAY_TOTAL_STATIONS} />
+                                        {/* Hero row: KPI rail | Station Map | Offline + Uptime Trend */}
+                                        <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+                                            <Col xs={24} md={24} lg={6} xl={5}>
+                                                <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+                                                    <StatusDistribution stats={stats} isDark={isDark} displayTotal={DISPLAY_TOTAL_STATIONS} />
+                                                    <AvailabilitySummaryChart stations={stations} isDark={isDark} />
+                                                </Space>
                                             </Col>
-                                            <Col xs={24} lg={18} xl={19}>
-                                                <AvailabilitySummaryChart stations={stations} isDark={isDark} />
-                                            </Col>
-                                        </Row>
-
-                                        {/* Uptime Trend Chart */}
-                                        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-                                            <Col xs={24}>
-                                                <UptimeTrendChart isDark={isDark} />
-                                            </Col>
-                                        </Row>
-
-                                        {/* Station Map */}
-                                        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-                                            <Col xs={24}>
+                                            <Col xs={24} md={24} lg={12} xl={14}>
                                                 <StationMap
                                                     stations={stations}
                                                     isDark={isDark}
                                                     onStationClick={(s) => setSelectedStation(s)}
                                                 />
                                             </Col>
+                                            <Col xs={24} md={24} lg={6} xl={5}>
+                                                <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+                                                    <RecentlyOfflinePanel
+                                                        stations={stations}
+                                                        onStationClick={(s) => setSelectedStation(s)}
+                                                    />
+                                                    <UptimeTrendChart isDark={isDark} />
+                                                </Space>
+                                            </Col>
                                         </Row>
 
-                                        {/* Station List + Offline Panel */}
-                                        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-                                            <Col xs={24} lg={16}>
+                                        {/* Station table — full width, bonded to the row above */}
+                                        <Row gutter={[12, 12]} style={{ marginTop: 8 }}>
+                                            <Col xs={24}>
                                                 <StationTable
                                                     stations={stations}
                                                     statusFilter={statusFilter}
                                                     categoryFilter={categoryFilter}
                                                     onFilterChange={setStatusFilter}
                                                     onCategoryChange={setCategoryFilter}
-                                                    onStationClick={(s) => setSelectedStation(s)}
-                                                />
-                                            </Col>
-                                            <Col xs={24} lg={8}>
-                                                <RecentlyOfflinePanel
-                                                    stations={stations}
                                                     onStationClick={(s) => setSelectedStation(s)}
                                                 />
                                             </Col>

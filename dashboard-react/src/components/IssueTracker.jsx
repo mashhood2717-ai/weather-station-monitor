@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Modal, Input, Select, Button, Tag, Card, Statistic, Row, Col, Table, Space, message, Popconfirm } from 'antd';
+import { Modal, Input, Select, Button, Tag, Card, Statistic, Row, Col, Table, Space, message, Popconfirm, Typography } from 'antd';
 import { useIssueTracker } from '../hooks/useIssueTracker';
 import { STATION_CATEGORIES } from '../utils/constants';
 
 const { TextArea } = Input;
 const { Option } = Select;
+const { Text } = Typography;
 
 const STATUS_CONFIG = {
     open: { color: 'gold', label: '🟡 Open' },
@@ -34,7 +35,7 @@ export default function IssueTracker({ stations = [], isDark }) {
     const {
         issues, callStats, loading,
         fetchIssues, fetchCallStats, createIssue, updateIssue,
-        fetchCalls, logCall, loadAll, exportCalls,
+        fetchCalls, fetchCallsByCaller, logCall, loadAll, exportCalls,
     } = useIssueTracker();
 
     const [statusFilter, setStatusFilter] = useState('');
@@ -49,6 +50,11 @@ export default function IssueTracker({ stations = [], isDark }) {
     const [detailIssue, setDetailIssue] = useState(null);
     const [detailCalls, setDetailCalls] = useState([]);
     const [callIssueId, setCallIssueId] = useState(null);
+
+    // Caller drill-down modal
+    const [callerModalOpen, setCallerModalOpen] = useState(false);
+    const [callerDetail, setCallerDetail] = useState(null);
+    const [callerLoading, setCallerLoading] = useState(false);
 
     // Forms
     const [newIssue, setNewIssue] = useState({ station_id: '', title: '', description: '', priority: 'medium', assigned_to: '', created_by: '' });
@@ -199,6 +205,21 @@ export default function IssueTracker({ stations = [], isDark }) {
         setCallModalOpen(true);
     };
 
+    const openCallerDetail = async (callerName) => {
+        setCallerModalOpen(true);
+        setCallerLoading(true);
+        setCallerDetail({ caller_name: callerName, calls: [] });
+        try {
+            const data = await fetchCallsByCaller(callerName, rangeFilter);
+            setCallerDetail(data || { caller_name: callerName, calls: [] });
+        } catch (e) {
+            message.error('Failed to load call history');
+            setCallerDetail({ caller_name: callerName, calls: [] });
+        } finally {
+            setCallerLoading(false);
+        }
+    };
+
     const cardBg = isDark ? '#1e293b' : '#f8fafc';
     const borderColor = isDark ? '#334155' : '#e2e8f0';
 
@@ -310,9 +331,20 @@ export default function IssueTracker({ stations = [], isDark }) {
                             <div style={{ textAlign: 'center', padding: 20, color: isDark ? '#94a3b8' : '#666' }}>No calls in this period</div>
                         ) : (
                             (callStats.by_person || []).map((p, i) => (
-                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < callStats.by_person.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                                <div
+                                    key={i}
+                                    onClick={() => openCallerDetail(p.caller_name)}
+                                    style={{
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        padding: '10px 8px', cursor: 'pointer', borderRadius: 6,
+                                        borderBottom: i < callStats.by_person.length - 1 ? `1px solid ${borderColor}` : 'none',
+                                        transition: 'background 0.15s',
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = isDark ? '#334155' : '#f1f5f9'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                >
                                     <div>
-                                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.caller_name}</div>
+                                        <div style={{ fontWeight: 600, fontSize: 13, color: isDark ? '#7dd3fc' : '#0284c7' }}>{p.caller_name}</div>
                                         <div style={{ fontSize: 12, color: isDark ? '#94a3b8' : '#666' }}>{p.issues_handled} issue{p.issues_handled !== 1 ? 's' : ''} handled</div>
                                     </div>
                                     <Tag>{p.total_calls} calls</Tag>
@@ -436,6 +468,82 @@ export default function IssueTracker({ stations = [], isDark }) {
                             <Button style={{ background: '#52c41a', color: '#fff' }} onClick={() => handleUpdateStatus('resolved')}>🟢 Resolved</Button>
                             <Button style={{ background: '#ff4d4f', color: '#fff' }} onClick={() => handleUpdateStatus('unresolvable')}>🔴 Can't Resolve</Button>
                         </Space>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Caller Drill-down Modal */}
+            <Modal
+                title={callerDetail ? `📞 ${callerDetail.caller_name} — Call History (${rangeFilter})` : 'Call History'}
+                open={callerModalOpen}
+                onCancel={() => { setCallerModalOpen(false); setCallerDetail(null); }}
+                footer={
+                    <Space>
+                        <Button onClick={() => exportCalls(rangeFilter, callerDetail?.caller_name || '')}>
+                            ⬇ Export CSV
+                        </Button>
+                        <Button type="primary" onClick={() => { setCallerModalOpen(false); setCallerDetail(null); }}>Close</Button>
+                    </Space>
+                }
+                width={900}
+            >
+                {callerLoading ? (
+                    <div style={{ textAlign: 'center', padding: 40 }}>Loading call history...</div>
+                ) : callerDetail && (
+                    <div>
+                        <Row gutter={[10, 10]} style={{ marginBottom: 16 }}>
+                            <Col span={6}><Card size="small"><Statistic title="Total Calls" value={callerDetail.total_calls || 0} valueStyle={{ fontSize: 20 }} /></Card></Col>
+                            <Col span={6}><Card size="small"><Statistic title="Issues Handled" value={callerDetail.issues_handled || 0} valueStyle={{ fontSize: 20 }} /></Card></Col>
+                            <Col span={6}><Card size="small"><Statistic title="Stations Called" value={callerDetail.stations_called || 0} valueStyle={{ fontSize: 20 }} /></Card></Col>
+                            <Col span={6}><Card size="small"><Statistic title="Total Duration" value={`${callerDetail.total_duration_minutes || 0} min`} valueStyle={{ fontSize: 20 }} /></Card></Col>
+                        </Row>
+
+                        {(callerDetail.by_outcome || []).length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                                <Space wrap>
+                                    {callerDetail.by_outcome.map(o => (
+                                        <Tag key={o.outcome} color={OUTCOME_COLORS[o.outcome] || 'default'}>
+                                            {o.outcome?.replace('_', ' ')}: {o.count}
+                                        </Tag>
+                                    ))}
+                                </Space>
+                            </div>
+                        )}
+
+                        <Table
+                            dataSource={callerDetail.calls || []}
+                            rowKey="id"
+                            size="small"
+                            pagination={{ defaultPageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '25', '50'] }}
+                            scroll={{ x: 800, y: 380 }}
+                            locale={{ emptyText: 'No calls found for this person in the selected range' }}
+                            columns={[
+                                {
+                                    title: 'Date/Time', dataIndex: 'call_time', key: 'call_time', width: 140,
+                                    sorter: (a, b) => (a.call_time || '').localeCompare(b.call_time || ''),
+                                    defaultSortOrder: 'descend',
+                                    render: (v) => v ? new Date(v + 'Z').toLocaleString() : '-',
+                                },
+                                {
+                                    title: 'Station', dataIndex: 'station_name', key: 'station', ellipsis: true,
+                                    render: (name, r) => name || getStationName(r.station_id),
+                                },
+                                { title: 'Contact', dataIndex: 'contact_person', key: 'contact', render: (v) => v || '-' },
+                                {
+                                    title: 'Issue', dataIndex: 'issue_title', key: 'issue', ellipsis: true,
+                                    render: (v) => v || <Text type="secondary">—</Text>,
+                                },
+                                {
+                                    title: 'Outcome', dataIndex: 'outcome', key: 'outcome', width: 130,
+                                    render: (v) => v ? <Tag color={OUTCOME_COLORS[v] || 'default'}>{v.replace('_', ' ')}</Tag> : '-',
+                                },
+                                { title: 'Duration', dataIndex: 'duration_minutes', key: 'duration', width: 90, render: (v) => v ? `${v} min` : '-' },
+                                {
+                                    title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true,
+                                    render: (v) => v || <Text type="secondary">—</Text>,
+                                },
+                            ]}
+                        />
                     </div>
                 )}
             </Modal>

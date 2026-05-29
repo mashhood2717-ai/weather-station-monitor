@@ -68,7 +68,7 @@ export default function StatusDistribution({ stats, isDark, displayTotal }) {
                 })}
                 </svg>
                 <div style={{ position: 'absolute', textAlign: 'center' }}>
-                    <div style={{ fontFamily: "'Orbitron', 'Space Grotesk', sans-serif", fontSize: 36, fontWeight: 800, color: isDark ? '#f8fafc' : '#1e293b' }}>
+                    <div style={{ fontFamily: "'Orbitron', 'Inter', sans-serif", fontSize: 36, fontWeight: 800, color: isDark ? '#f8fafc' : '#1e293b' }}>
                         {totalDisplay}
                     </div>
                     <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>

@@ -35,7 +35,7 @@ export default function StatCards({ stats, onFilterChange }) {
     }
 
     return (
-        <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: 12, marginTop: 16 }}>
+        <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: 8 }}>
             {cards.map((c) => (
                 <Card
                     key={c.title}
@@ -48,7 +48,7 @@ export default function StatCards({ stats, onFilterChange }) {
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
                         {c.emoji} {c.title}
                     </div>
-                    <Statistic value={c.value} valueStyle={{ color: c.color, fontSize: 20, fontWeight: 700, fontFamily: "'Orbitron', 'Space Grotesk', sans-serif" }} />
+                    <Statistic value={c.value} valueStyle={{ color: c.color, fontSize: 20, fontWeight: 700, fontFamily: "'Orbitron', 'Inter', sans-serif" }} />
                     {c.sub && (
                         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {c.sub}

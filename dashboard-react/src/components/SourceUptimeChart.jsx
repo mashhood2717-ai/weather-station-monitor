@@ -50,7 +50,7 @@ export default function SourceUptimeChart({ stations, isDark }) {
             ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
             ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '10px Space Grotesk'; ctx.textAlign = 'right';
+            ctx.font = '10px Inter'; ctx.textAlign = 'right';
             ctx.fillText((100 - 25 * i) + '%', pad.left - 6, y + 3);
         }
 
@@ -67,10 +67,10 @@ export default function SourceUptimeChart({ stations, isDark }) {
             ctx.lineTo(x + barW, pad.top + plotH); ctx.lineTo(x, pad.top + plotH); ctx.lineTo(x, y + r);
             ctx.quadraticCurveTo(x, y, x + r, y); ctx.fill();
             ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-            ctx.font = 'bold 11px Space Grotesk'; ctx.textAlign = 'center';
+            ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
             ctx.fillText(d.avgUptime + '%', x + barW / 2, y - 4);
             ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-            ctx.font = '10px Space Grotesk';
+            ctx.font = '10px Inter';
             ctx.fillText(d.name, x + barW / 2, H - pad.bottom + 14);
             ctx.fillText(`(${d.active}/${d.total})`, x + barW / 2, H - pad.bottom + 25);
         });
