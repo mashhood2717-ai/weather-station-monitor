@@ -820,6 +820,57 @@ export default {
           by_outcome: byOutcome.results,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+      } else if (path === '/api/calls' && request.method === 'GET') {
+        // Per-caller call detail records, optionally filtered by caller_name.
+        // Powers the "click team-member name to see full call history" drill-down.
+        const range = url.searchParams.get('range') || '7d';
+        const callerFilter = url.searchParams.get('caller') || '';
+
+        let timeFilter;
+        if (range === '24h') timeFilter = "datetime('now', '-1 day')";
+        else if (range === '7d') timeFilter = "datetime('now', '-7 days')";
+        else if (range === '30d') timeFilter = "datetime('now', '-30 days')";
+        else if (range === '1y') timeFilter = "datetime('now', '-1 year')";
+        else timeFilter = "datetime('now', '-7 days')";
+
+        let query = `
+          SELECT c.id, c.call_time, c.caller_name, c.contact_person, c.station_id,
+            s.station_name,
+            c.issue_id, i.title as issue_title, i.status as issue_status, i.assigned_to,
+            c.duration_minutes, c.outcome, c.notes
+          FROM issue_calls c
+          LEFT JOIN station_issues i ON c.issue_id = i.id
+          LEFT JOIN stations s ON c.station_id = s.station_id
+          WHERE c.call_time >= ${timeFilter}
+        `;
+        const binds = [];
+        if (callerFilter) { query += ' AND c.caller_name = ?'; binds.push(callerFilter); }
+        query += ' ORDER BY c.call_time DESC';
+
+        const result = await env.DB.prepare(query).bind(...binds).all();
+        const calls = result.results || [];
+
+        // Derive small per-caller summary from the same result set
+        const stations = new Set(), issues = new Set(), outcomes = {};
+        let totalDuration = 0;
+        for (const c of calls) {
+          if (c.station_id) stations.add(c.station_id);
+          if (c.issue_id) issues.add(c.issue_id);
+          if (c.outcome) outcomes[c.outcome] = (outcomes[c.outcome] || 0) + 1;
+          if (c.duration_minutes) totalDuration += c.duration_minutes;
+        }
+
+        return new Response(JSON.stringify({
+          caller_name: callerFilter || null,
+          range,
+          total_calls: calls.length,
+          stations_called: stations.size,
+          issues_handled: issues.size,
+          total_duration_minutes: totalDuration,
+          by_outcome: Object.entries(outcomes).map(([outcome, count]) => ({ outcome, count })),
+          calls,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
       } else if (path === '/api/export/calls' && request.method === 'GET') {
         const range = url.searchParams.get('range') || 'all';
         const callerFilter = url.searchParams.get('caller') || '';

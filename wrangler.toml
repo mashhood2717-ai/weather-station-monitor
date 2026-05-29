@@ -24,9 +24,10 @@ binding = "DB"
 database_name = "weatherlink-monitor-staging"
 database_id = "c86a9395-05a8-4dee-9d6e-acf000bd11ea"
 
-# Static Assets (Serve dashboard from Worker)
+# Static Assets — staging serves dashboard-staging/ (auto-refresh disabled).
+# Production env below serves the regular dashboard/ folder.
 [assets]
-directory = "dashboard"
+directory = "dashboard-staging"
 binding = "ASSETS"
 
 # Cron Triggers - DISABLED for staging (manual testing only)
