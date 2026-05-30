@@ -21,10 +21,16 @@ function formatDuration(minutes) {
 
 export default function StationDetailModal({ station, onClose, isDark }) {
     const [interval, setInterval_] = useState('24h');
+    const [chartType, setChartType] = useState('line'); // 'line' | 'bar' for uptime chart
     const [historyData, setHistoryData] = useState(null);
     const [loading, setLoading] = useState(false);
     const uptimeCanvasRef = useRef(null);
     const tempCanvasRef = useRef(null);
+    // Per-canvas position arrays for hover tooltips
+    const uptimePointsRef = useRef([]);
+    const tempPointsRef = useRef([]);
+    const [uptimeTooltip, setUptimeTooltip] = useState(null);
+    const [tempTooltip, setTempTooltip] = useState(null);
 
     const fetchHistory = useCallback(async (stationId, range) => {
         setLoading(true);
@@ -65,7 +71,7 @@ export default function StationDetailModal({ station, onClose, isDark }) {
             drawUptimeChart();
             drawTempChart();
         }
-    }, [historyData, isDark]);
+    }, [historyData, isDark, chartType]);
 
     function drawUptimeChart() {
         const hourlyData = historyData?.hourly_data;
@@ -103,46 +109,82 @@ export default function StationDetailModal({ station, onClose, isDark }) {
         const labels = hourlyData.map(h => h.period_label || h.period);
         const getX = (i) => pad.left + (i / Math.max(1, values.length - 1)) * plotW;
         const getY = (pct) => pad.top + plotH - (pct / 100) * plotH;
+        const colorFor = (v) => v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
 
-        // Gradient fill
-        const gradient = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
-        gradient.addColorStop(0, 'rgba(16,185,129,0.3)');
-        gradient.addColorStop(1, 'rgba(16,185,129,0.02)');
-        ctx.beginPath();
-        ctx.moveTo(getX(0), H - pad.bottom);
-        values.forEach((v, i) => ctx.lineTo(getX(i), getY(v)));
-        ctx.lineTo(getX(values.length - 1), H - pad.bottom);
-        ctx.closePath();
-        ctx.fillStyle = gradient;
-        ctx.fill();
-
-        // Line
-        ctx.beginPath();
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        values.forEach((v, i) => {
-            const color = v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
-            if (i === 0) {
-                ctx.strokeStyle = color;
-                ctx.moveTo(getX(i), getY(v));
-            } else {
-                ctx.strokeStyle = color;
-                ctx.lineTo(getX(i), getY(v));
+        if (chartType === 'bar') {
+            const n = values.length;
+            const slot = plotW / n;
+            const barW = Math.max(1, Math.min(24, slot * 0.7));
+            const points = [];
+            for (let i = 0; i < n; i++) {
+                const v = values[i];
+                const cx = pad.left + slot * i + slot / 2;
+                const x = cx - barW / 2;
+                const y = getY(v);
+                const barH = H - pad.bottom - y;
+                const r = Math.min(3, barW / 2);
+                ctx.fillStyle = colorFor(v);
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + barW - r, y);
+                ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+                ctx.lineTo(x + barW, y + barH);
+                ctx.lineTo(x, y + barH);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+                ctx.fill();
+                points.push({ x: cx, y, label: labels[i], value: v });
             }
-        });
-        ctx.stroke();
-
-        // Dots
-        values.forEach((v, i) => {
-            if (i % Math.max(1, Math.floor(values.length / 15)) !== 0 && i !== values.length - 1) return;
+            uptimePointsRef.current = points;
+        } else {
+            // Gradient fill
+            const gradient = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
+            gradient.addColorStop(0, 'rgba(16,185,129,0.3)');
+            gradient.addColorStop(1, 'rgba(16,185,129,0.02)');
             ctx.beginPath();
-            ctx.arc(getX(i), getY(v), 3, 0, Math.PI * 2);
-            ctx.fillStyle = v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
+            ctx.moveTo(getX(0), H - pad.bottom);
+            values.forEach((v, i) => ctx.lineTo(getX(i), getY(v)));
+            ctx.lineTo(getX(values.length - 1), H - pad.bottom);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
             ctx.fill();
-            ctx.strokeStyle = isDark ? '#1e293b' : '#fff';
-            ctx.lineWidth = 1.5;
+
+            // Line
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            values.forEach((v, i) => {
+                const color = colorFor(v);
+                if (i === 0) {
+                    ctx.strokeStyle = color;
+                    ctx.moveTo(getX(i), getY(v));
+                } else {
+                    ctx.strokeStyle = color;
+                    ctx.lineTo(getX(i), getY(v));
+                }
+            });
             ctx.stroke();
-        });
+
+            // Dots (sparse for visual cleanliness; hover still snaps to every point)
+            values.forEach((v, i) => {
+                if (i % Math.max(1, Math.floor(values.length / 15)) !== 0 && i !== values.length - 1) return;
+                ctx.beginPath();
+                ctx.arc(getX(i), getY(v), 3, 0, Math.PI * 2);
+                ctx.fillStyle = colorFor(v);
+                ctx.fill();
+                ctx.strokeStyle = isDark ? '#1e293b' : '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+
+            uptimePointsRef.current = values.map((v, i) => ({
+                x: getX(i),
+                y: getY(v),
+                label: labels[i],
+                value: v,
+            }));
+        }
 
         // X-axis labels
         const step = Math.max(1, Math.floor(labels.length / 6));
@@ -237,6 +279,38 @@ export default function StationDetailModal({ station, onClose, isDark }) {
             ctx.font = '9px Inter';
             ctx.fillText(labels[i], getX(i), H - pad.bottom + 14);
         }
+
+        tempPointsRef.current = values.map((v, i) => ({
+            x: getX(i),
+            y: getY(v),
+            label: labels[i],
+            value: v,
+        }));
+    }
+
+    // Shared hover handler — pass the points ref and tooltip setter.
+    function makeMouseMoveHandler(canvasRef, pointsRef, setTip) {
+        return (e) => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const points = pointsRef.current;
+            if (!points.length) return;
+            let best = null;
+            let bestDx = Infinity;
+            for (const p of points) {
+                const dx = Math.abs(mx - p.x);
+                if (dx < bestDx) { bestDx = dx; best = p; }
+            }
+            const slot = rect.width / Math.max(1, points.length);
+            if (best && bestDx < Math.max(slot, 20) && my >= 0 && my <= rect.height) {
+                setTip({ x: best.x, y: best.y, label: best.label, value: best.value });
+            } else {
+                setTip(null);
+            }
+        };
     }
 
     if (!station) return null;
@@ -268,7 +342,11 @@ export default function StationDetailModal({ station, onClose, isDark }) {
                 <span style={{ padding: '2px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: statusColor + '20', color: statusColor }}>
                     {station.status}
                 </span>
-                <div style={{ marginLeft: 'auto' }}>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Radio.Group value={chartType} onChange={(e) => setChartType(e.target.value)} size="small">
+                        <Radio.Button value="line">Line</Radio.Button>
+                        <Radio.Button value="bar">Bar</Radio.Button>
+                    </Radio.Group>
                     <Radio.Group value={interval} onChange={(e) => setInterval_(e.target.value)} size="small" buttonStyle="solid">
                         <Radio.Button value="24h">24h</Radio.Button>
                         <Radio.Button value="7d">7d</Radio.Button>
@@ -324,9 +402,40 @@ export default function StationDetailModal({ station, onClose, isDark }) {
                 </h3>
                 <div style={{ background: isDark ? '#0f172a' : '#f8fafc', borderRadius: 12, padding: 12 }}>
                     {loading ? <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div> :
-                        historyData?.hourly_data?.length > 0 ?
-                            <canvas ref={uptimeCanvasRef} style={{ width: '100%', height: 180 }} /> :
+                        historyData?.hourly_data?.length > 0 ? (
+                            <div style={{ position: 'relative' }}>
+                                <canvas
+                                    ref={uptimeCanvasRef}
+                                    style={{ width: '100%', height: 180, display: 'block' }}
+                                    onMouseMove={makeMouseMoveHandler(uptimeCanvasRef, uptimePointsRef, setUptimeTooltip)}
+                                    onMouseLeave={() => setUptimeTooltip(null)}
+                                />
+                                {uptimeTooltip && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        left: uptimeTooltip.x, top: uptimeTooltip.y - 10,
+                                        transform: 'translate(-50%, -100%)',
+                                        background: isDark ? '#0f172a' : '#1e293b',
+                                        color: '#fff',
+                                        padding: '6px 10px',
+                                        borderRadius: 6,
+                                        fontSize: 12,
+                                        lineHeight: 1.3,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                                        pointerEvents: 'none',
+                                        whiteSpace: 'nowrap',
+                                        border: isDark ? '1px solid #334155' : '1px solid rgba(255,255,255,0.1)',
+                                    }}>
+                                        <div style={{ opacity: 0.85 }}>{uptimeTooltip.label}</div>
+                                        <div style={{ fontWeight: 700, fontSize: 13, marginTop: 2 }}>
+                                            {Number(uptimeTooltip.value).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
                             <div style={{ textAlign: 'center', padding: 30, color: isDark ? '#64748b' : '#94a3b8' }}>No uptime data available</div>
+                        )
                     }
                 </div>
             </div>
@@ -338,9 +447,40 @@ export default function StationDetailModal({ station, onClose, isDark }) {
                 </h3>
                 <div style={{ background: isDark ? '#0f172a' : '#f8fafc', borderRadius: 12, padding: 12 }}>
                     {loading ? <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div> :
-                        historyData?.hourly_data?.some(h => h.avg_temperature !== null) ?
-                            <canvas ref={tempCanvasRef} style={{ width: '100%', height: 180 }} /> :
+                        historyData?.hourly_data?.some(h => h.avg_temperature !== null) ? (
+                            <div style={{ position: 'relative' }}>
+                                <canvas
+                                    ref={tempCanvasRef}
+                                    style={{ width: '100%', height: 180, display: 'block' }}
+                                    onMouseMove={makeMouseMoveHandler(tempCanvasRef, tempPointsRef, setTempTooltip)}
+                                    onMouseLeave={() => setTempTooltip(null)}
+                                />
+                                {tempTooltip && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        left: tempTooltip.x, top: tempTooltip.y - 10,
+                                        transform: 'translate(-50%, -100%)',
+                                        background: isDark ? '#0f172a' : '#1e293b',
+                                        color: '#fff',
+                                        padding: '6px 10px',
+                                        borderRadius: 6,
+                                        fontSize: 12,
+                                        lineHeight: 1.3,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                                        pointerEvents: 'none',
+                                        whiteSpace: 'nowrap',
+                                        border: isDark ? '1px solid #334155' : '1px solid rgba(255,255,255,0.1)',
+                                    }}>
+                                        <div style={{ opacity: 0.85 }}>{tempTooltip.label}</div>
+                                        <div style={{ fontWeight: 700, fontSize: 13, marginTop: 2 }}>
+                                            {Number(tempTooltip.value).toFixed(1)}°C
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
                             <div style={{ textAlign: 'center', padding: 30, color: isDark ? '#64748b' : '#94a3b8' }}>No temperature data available</div>
+                        )
                     }
                 </div>
             </div>

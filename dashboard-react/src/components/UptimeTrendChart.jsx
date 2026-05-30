@@ -7,8 +7,12 @@ export default function UptimeTrendChart({ isDark }) {
     const [range, setRange] = useState('24h');
     const [chartType, setChartType] = useState('bar');
     const [data, setData] = useState(null);
+    const [tooltip, setTooltip] = useState(null); // {x, y, label, value} or null
     const canvasRef = useRef(null);
     const chartRef = useRef(null);
+    // Populated during drawChart: one entry per data point with its on-canvas
+    // x/y position so mousemove can find the nearest point cheaply.
+    const dataPointsRef = useRef([]);
 
     useEffect(() => {
         async function fetchTrend() {
@@ -179,6 +183,7 @@ export default function UptimeTrendChart({ isDark }) {
             const n = values.length;
             const slot = plotW / n;
             const barW = Math.max(1, Math.min(28, slot * 0.7));
+            const points = [];
             for (let i = 0; i < n; i++) {
                 const v = values[i];
                 const cx = pad.left + slot * i + slot / 2;
@@ -199,7 +204,9 @@ export default function UptimeTrendChart({ isDark }) {
                 ctx.quadraticCurveTo(x, y, x + r, y);
                 ctx.closePath();
                 ctx.fill();
+                points.push({ x: cx, y, label: labels[i], value: v });
             }
+            dataPointsRef.current = points;
             return;
         }
 
@@ -237,6 +244,39 @@ export default function UptimeTrendChart({ isDark }) {
             ctx.strokeStyle = isDark ? '#1e293b' : '#fff';
             ctx.lineWidth = 1.5;
             ctx.stroke();
+        }
+
+        // Record every point (not just the dotted ones) so hover snaps to any
+        // index, not just the visible dots.
+        dataPointsRef.current = values.map((v, i) => ({
+            x: getX(i),
+            y: getY(v),
+            label: labels[i],
+            value: v,
+        }));
+    }
+
+    function handleMouseMove(e) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const points = dataPointsRef.current;
+        if (!points.length) return;
+        let best = null;
+        let bestDx = Infinity;
+        for (const p of points) {
+            const dx = Math.abs(mx - p.x);
+            if (dx < bestDx) { bestDx = dx; best = p; }
+        }
+        // Only show if we're reasonably close (one slot width) and inside the
+        // plot vertically.
+        const slot = rect.width / Math.max(1, points.length);
+        if (best && bestDx < Math.max(slot, 20) && my >= 0 && my <= rect.height) {
+            setTooltip({ x: best.x, y: best.y, label: best.label, value: best.value });
+        } else {
+            setTooltip(null);
         }
     }
 
@@ -277,7 +317,37 @@ export default function UptimeTrendChart({ isDark }) {
             )}
             styles={{ body: { padding: 16 } }}
         >
-            <canvas ref={canvasRef} style={{ width: '100%', height: 220 }} />
+            <div style={{ position: 'relative' }}>
+                <canvas
+                    ref={canvasRef}
+                    style={{ width: '100%', height: 220, display: 'block' }}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={() => setTooltip(null)}
+                />
+                {tooltip && (
+                    <div style={{
+                        position: 'absolute',
+                        left: tooltip.x,
+                        top: tooltip.y - 10,
+                        transform: 'translate(-50%, -100%)',
+                        background: isDark ? '#0f172a' : '#1e293b',
+                        color: '#fff',
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        lineHeight: 1.3,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                        pointerEvents: 'none',
+                        whiteSpace: 'nowrap',
+                        border: isDark ? '1px solid #334155' : '1px solid rgba(255,255,255,0.1)',
+                    }}>
+                        <div style={{ opacity: 0.85 }}>{tooltip.label}</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginTop: 2 }}>
+                            {Number(tooltip.value).toFixed(1)}%
+                        </div>
+                    </div>
+                )}
+            </div>
         </Card>
     );
 }
