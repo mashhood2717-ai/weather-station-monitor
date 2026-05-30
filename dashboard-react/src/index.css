@@ -208,9 +208,45 @@ body, body * {
 .tab-label-full { display: inline; }
 .tab-label-short { display: none; }
 
-/* Station map: desktop default height; mobile overrides below */
-.station-map-canvas { height: 540px; }
-.station-map-card .ant-card-body { height: 540px; }
+/* Station map + right column stretch to match the left column's natural
+   height (StatusDistribution + AvailabilitySummary). Min-height of 540
+   keeps things sane when the left column is unexpectedly short. */
+.station-map-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.station-map-card > .ant-card-body {
+    flex: 1;
+    min-height: 540px;
+}
+.station-map-canvas {
+    height: 100%;
+    min-height: 540px;
+}
+
+.hero-right-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+}
+/* RecentlyOfflinePanel: natural height. */
+.hero-right-stack > :first-child { flex: 0 0 auto; }
+/* UptimeTrendChart card itself: flex to fill remaining space, with body
+   flexing inside so the chart canvas can reach the bottom. */
+.hero-right-stack > :last-child {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.hero-right-stack > :last-child > .ant-card-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
 
 /* ============================================================
    Mobile (≤ 768px) — tighter layout, shorter labels, smaller map
@@ -236,8 +272,8 @@ body, body * {
 
   /* Map: drop height from 540 to 320 so it doesn't dominate the screen */
   .leaflet-container { height: 320px !important; }
-  .station-map-canvas { height: 320px !important; }
-  .station-map-card .ant-card-body { height: 320px !important; }
+  .station-map-canvas { height: 320px !important; min-height: 0 !important; }
+  .station-map-card .ant-card-body { height: 320px !important; min-height: 0 !important; }
 
   /* Compact cards — smaller body padding, smaller stat numbers */
   .ant-card-small .ant-card-body {
@@ -296,6 +332,6 @@ body, body * {
     font-size: 13px !important;
   }
   .leaflet-container { height: 280px !important; }
-  .station-map-canvas { height: 280px !important; }
-  .station-map-card .ant-card-body { height: 280px !important; }
+  .station-map-canvas { height: 280px !important; min-height: 0 !important; }
+  .station-map-card .ant-card-body { height: 280px !important; min-height: 0 !important; }
 }

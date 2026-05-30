@@ -155,14 +155,19 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
             title: 'Temp',
             dataIndex: 'temperature',
             key: 'temperature',
-            sorter: (a, b) => (a.temperature ?? -999) - (b.temperature ?? -999),
+            // First click sorts DESCENDING (hottest first) — what users
+            // actually want when they click "Temp". Null sentinel pushes
+            // stations with no temperature to the bottom in that direction.
+            sortDirections: ['descend', 'ascend'],
+            sorter: (a, b) => (a.temperature ?? -Infinity) - (b.temperature ?? -Infinity),
             render: (value) => value !== null && value !== undefined ? `${value}°C` : '--',
         },
         {
             title: 'Rain',
             dataIndex: 'rainfall',
             key: 'rainfall',
-            sorter: (a, b) => (a.rainfall ?? -1) - (b.rainfall ?? -1),
+            sortDirections: ['descend', 'ascend'],
+            sorter: (a, b) => (a.rainfall ?? -Infinity) - (b.rainfall ?? -Infinity),
             render: (value) => value !== null && value !== undefined ? `${value} mm` : '--',
         },
         {

@@ -30,8 +30,19 @@ export default function UptimeTrendChart({ isDark }) {
 
     useEffect(() => {
         if (!data || !canvasRef.current) return;
-        // Lazy import chart.js via CDN is already in HTML, use simple canvas drawing
         drawChart();
+    }, [data, isDark, chartType]);
+
+    // Redraw when the surrounding flex layout resizes the canvas's parent
+    // (left column growing/shrinking changes the row height, which flows
+    // down to this chart's height).
+    useEffect(() => {
+        if (!canvasRef.current) return;
+        const parent = canvasRef.current.parentElement;
+        if (!parent || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => { drawChart(); });
+        ro.observe(parent);
+        return () => ro.disconnect();
     }, [data, isDark, chartType]);
 
     // The Worker returns periods as UTC datetime strings WITHOUT a 'Z' suffix
@@ -49,14 +60,16 @@ export default function UptimeTrendChart({ isDark }) {
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.parentElement.getBoundingClientRect();
+        // Canvas fills its parent's height so the card can grow with the
+        // surrounding flex layout. Floor to keep the chart readable.
+        const H = Math.max(180, Math.floor(rect.height) || 220);
         canvas.width = rect.width * dpr;
-        canvas.height = 220 * dpr;
+        canvas.height = H * dpr;
         canvas.style.width = rect.width + 'px';
-        canvas.style.height = '220px';
+        canvas.style.height = H + 'px';
         ctx.scale(dpr, dpr);
 
         const W = rect.width;
-        const H = 220;
         const pad = { top: 20, right: 20, bottom: 40, left: 50 };
 
         // Process data
@@ -141,7 +154,10 @@ export default function UptimeTrendChart({ isDark }) {
 
         if (values.length === 0) return;
 
-        const minVal = Math.max(0, Math.min(...values) - 5);
+        // Y-axis from 0–100 so bars are rooted at the bottom of the
+        // card. Card height comes from the surrounding flex layout
+        // (matches the left column's natural height).
+        const minVal = 0;
         const maxVal = 100;
         const plotW = W - pad.left - pad.right;
         const plotH = H - pad.top - pad.bottom;
@@ -315,12 +331,12 @@ export default function UptimeTrendChart({ isDark }) {
                     </Radio.Group>
                 </div>
             )}
-            styles={{ body: { padding: 16 } }}
+            styles={{ body: { padding: 0 } }}
         >
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', flex: 1, minHeight: 220, width: '100%' }}>
                 <canvas
                     ref={canvasRef}
-                    style={{ width: '100%', height: 220, display: 'block' }}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
                     onMouseMove={handleMouseMove}
                     onMouseLeave={() => setTooltip(null)}
                 />

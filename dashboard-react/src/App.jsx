@@ -104,28 +104,28 @@ export default function App() {
                                         <StatCards stats={stats} uptimeTrend={uptimeTrend} onFilterChange={setStatusFilter} isDark={isDark} />
 
                                         {/* Hero row: KPI rail | Station Map | Offline + Uptime Trend */}
-                                        <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
-                                            <Col xs={24} md={24} lg={6} xl={5}>
+                                        <Row gutter={[12, 12]} align="stretch" style={{ marginTop: 12 }}>
+                                            <Col xs={24} md={24} lg={6} xl={6}>
                                                 <Space direction="vertical" size={12} style={{ display: 'flex' }}>
                                                     <StatusDistribution stats={stats} isDark={isDark} displayTotal={DISPLAY_TOTAL_STATIONS} />
                                                     <AvailabilitySummaryChart stations={stations} isDark={isDark} />
                                                 </Space>
                                             </Col>
-                                            <Col xs={24} md={24} lg={12} xl={14}>
+                                            <Col xs={24} md={24} lg={12} xl={12}>
                                                 <StationMap
                                                     stations={stations}
                                                     isDark={isDark}
                                                     onStationClick={(s) => setSelectedStation(s)}
                                                 />
                                             </Col>
-                                            <Col xs={24} md={24} lg={6} xl={5}>
-                                                <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+                                            <Col xs={24} md={24} lg={6} xl={6}>
+                                                <div className="hero-right-stack">
                                                     <RecentlyOfflinePanel
                                                         stations={stations}
                                                         onStationClick={(s) => setSelectedStation(s)}
                                                     />
                                                     <UptimeTrendChart isDark={isDark} />
-                                                </Space>
+                                                </div>
                                             </Col>
                                         </Row>
 

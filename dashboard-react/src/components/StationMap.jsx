@@ -64,7 +64,20 @@ export default function StationMap({ stations, isDark, onStationClick }) {
         });
         mapInstance.current.addLayer(clusterRef.current);
 
+        // Map container now stretches to match the left column's natural
+        // height — when that height changes (data refresh, window resize),
+        // Leaflet would otherwise show gray tiles in the new area until
+        // invalidateSize() is called.
+        let ro = null;
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+            ro = new ResizeObserver(() => {
+                if (mapInstance.current) mapInstance.current.invalidateSize();
+            });
+            ro.observe(mapRef.current);
+        }
+
         return () => {
+            if (ro) ro.disconnect();
             if (mapInstance.current) {
                 mapInstance.current.remove();
                 mapInstance.current = null;
