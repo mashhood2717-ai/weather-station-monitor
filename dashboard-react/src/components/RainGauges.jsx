@@ -436,8 +436,16 @@ export default function RainGauges({ isDark }) {
             // The Worker returns periods as UTC strings; for time-of-day formats
             // we add +5h to display in PKT.
             const g = chartData.granularity;
+            if (g === 'hourly') {
+                // "2026-05-30 14:00:00" UTC → "19:00" PKT
+                const m = t.period.match(/(\d{2}):00/);
+                if (!m) return t.period;
+                const utcHour = parseInt(m[1], 10);
+                const pktHour = (utcHour + 5) % 24;
+                return `${String(pktHour).padStart(2, '0')}:00`;
+            }
             if (g === '15min') {
-                // "2026-05-30 14:15:00" UTC → "19:15" PKT
+                // Kept for backward compat with any older cached responses.
                 const m = t.period.match(/(\d{2}):(\d{2})/);
                 if (!m) return t.period;
                 const utcHour = parseInt(m[1], 10);

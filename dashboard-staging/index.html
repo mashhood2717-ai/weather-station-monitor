@@ -6371,7 +6371,15 @@
         // Format a Worker-returned UTC bucket label into a PKT display label,
         // varying by granularity (mirrors the React chart).
         function rgFormatChartLabel(period, granularity) {
+            if (granularity === 'hourly') {
+                // "2026-05-30 14:00:00" UTC → "19:00" PKT
+                const m = period.match(/(\d{2}):00/);
+                if (!m) return period;
+                const pktHour = (parseInt(m[1], 10) + 5) % 24;
+                return String(pktHour).padStart(2, '0') + ':00';
+            }
             if (granularity === '15min') {
+                // Kept for backward compat with any older cached responses.
                 const m = period.match(/(\d{2}):(\d{2})/);
                 if (!m) return period;
                 const pktHour = (parseInt(m[1], 10) + 5) % 24;

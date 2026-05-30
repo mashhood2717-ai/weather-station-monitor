@@ -213,22 +213,22 @@ export default {
         if (!gaugeId) return jsonResponse({ error: 'missing gauge id' }, { status: 400 }, corsHeaders);
 
         const range = url.searchParams.get('range') || '24h';
-        // Bucket sizes per range:
-        //   24h    → 15-min   (96 buckets, one per poll)
-        //   daily  → 15-min   (today since PKT midnight, up to 96 buckets)
-        //   7d     → 6-hour   (28 buckets)
-        //   30d    → daily    (30 buckets)
+        // Bucket sizes per range (matches the stations chart):
+        //   24h    → 1-hour   (24 buckets, 4 polls each)
+        //   daily  → 1-hour   (today since PKT midnight, up to 24 buckets)
+        //   7d     → 6-hour   (28 buckets, 24 polls each)
+        //   30d    → daily    (30 buckets, 96 polls each)
         //   1y     → monthly  (12 buckets)
         //   all    → monthly  (open-ended, however many months we've collected)
-        const bucket15min = `strftime('%Y-%m-%d %H:%M:00', datetime(strftime('%s', timestamp) / 900   * 900,   'unixepoch'))`;
+        const bucket1hour = `strftime('%Y-%m-%d %H:00:00', timestamp)`;
         const bucket6hour = `strftime('%Y-%m-%d %H:00:00', datetime(strftime('%s', timestamp) / 21600 * 21600, 'unixepoch'))`;
         let groupExpr, whereTime, granularity;
         switch (range) {
           case 'daily':
             // Today only, since PKT midnight (= UTC midnight - 5 hours)
-            groupExpr   = bucket15min;
+            groupExpr   = bucket1hour;
             whereTime   = "timestamp >= datetime('now', 'start of day', '-5 hours')";
-            granularity = '15min';
+            granularity = 'hourly';
             break;
           case '7d':
             groupExpr   = bucket6hour;
@@ -252,13 +252,15 @@ export default {
             break;
           case '24h':
           default:
-            groupExpr   = bucket15min;
+            groupExpr   = bucket1hour;
             whereTime   = "timestamp >= datetime('now', '-24 hours')";
-            granularity = '15min';
+            granularity = 'hourly';
             break;
         }
 
-        return await cacheAndReturn(`history:${gaugeId}:${range}`, CACHE_TTL_MS, async () => {
+        // Cache key bumped to v2 so 15-min-bucketed responses cached under
+        // the old key don't keep getting served after this deploy.
+        return await cacheAndReturn(`history:v2:${gaugeId}:${range}`, CACHE_TTL_MS, async () => {
           const result = await env.DB.prepare(`
             SELECT
               ${groupExpr} AS period,
