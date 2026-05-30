@@ -115,10 +115,11 @@ export default function StationMap({ stations, isDark, onStationClick }) {
         <Card
             title="Station Coverage"
             size="small"
-            styles={{ body: { padding: 0, height: 540 } }}
+            className="station-map-card"
+            styles={{ body: { padding: 0 } }}
             style={{ borderRadius: 12, overflow: 'hidden' }}
         >
-            <div ref={mapRef} className={isDark ? 'map-dark' : ''} style={{ width: '100%', height: 540 }} />
+            <div ref={mapRef} className={`station-map-canvas ${isDark ? 'map-dark' : ''}`.trim()} style={{ width: '100%' }} />
         </Card>
     );
 }

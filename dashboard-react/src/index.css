@@ -203,3 +203,99 @@ body, body * {
 .dashboard-layout {
   min-height: 100vh;
 }
+
+/* Tab label visibility — default desktop view */
+.tab-label-full { display: inline; }
+.tab-label-short { display: none; }
+
+/* Station map: desktop default height; mobile overrides below */
+.station-map-canvas { height: 540px; }
+.station-map-card .ant-card-body { height: 540px; }
+
+/* ============================================================
+   Mobile (≤ 768px) — tighter layout, shorter labels, smaller map
+   ============================================================ */
+@media (max-width: 768px) {
+  .ant-layout-content {
+    padding: 6px 6px !important;
+  }
+
+  /* Header */
+  .dashboard-layout h4.ant-typography {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+  }
+
+  /* Tabs: switch to short labels, allow wrapping if needed */
+  .tab-label-full { display: none; }
+  .tab-label-short { display: inline; }
+  .dashboard-tab-btn {
+    padding: 10px 6px !important;
+    font-size: 13px !important;
+  }
+
+  /* Map: drop height from 540 to 320 so it doesn't dominate the screen */
+  .leaflet-container { height: 320px !important; }
+  .station-map-canvas { height: 320px !important; }
+  .station-map-card .ant-card-body { height: 320px !important; }
+
+  /* Compact cards — smaller body padding, smaller stat numbers */
+  .ant-card-small .ant-card-body {
+    padding: 10px !important;
+  }
+  .stats-grid .ant-card-body {
+    padding: 8px !important;
+  }
+  .stats-grid .ant-statistic-content {
+    font-size: 16px !important;
+  }
+  .stats-grid .ant-statistic-content-value {
+    font-size: 16px !important;
+  }
+
+  /* Donut: shrink slightly to leave room for the legend on phones */
+  .ant-card-small .ant-card-body svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Tighter Row gutters via Ant - already set in App.jsx to 12, but ensure no inflation */
+  .ant-row {
+    margin-left: -6px !important;
+    margin-right: -6px !important;
+  }
+  .ant-row > .ant-col {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  /* Tables: comfortable horizontal scroll, smaller font */
+  .ant-table-small .ant-table-cell {
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+  }
+
+  /* Recently Offline list: tighter padding */
+  .ant-list-item {
+    padding: 8px 10px !important;
+  }
+}
+
+/* ============================================================
+   Very small phones (≤ 480px) — last bits of polish
+   ============================================================ */
+@media (max-width: 480px) {
+  .ant-layout-content {
+    padding: 4px 4px !important;
+  }
+  .dashboard-tab-btn {
+    padding: 8px 4px !important;
+    font-size: 12px !important;
+  }
+  .dashboard-layout h4.ant-typography {
+    font-size: 13px !important;
+  }
+  .leaflet-container { height: 280px !important; }
+  .station-map-canvas { height: 280px !important; }
+  .station-map-card .ant-card-body { height: 280px !important; }
+}

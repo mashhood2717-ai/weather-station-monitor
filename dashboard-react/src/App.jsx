@@ -71,18 +71,18 @@ export default function App() {
                         ) : (
                             <>
                                 {/* Tab Navigation */}
-                                <div style={{
+                                <div className="dashboard-tabs" style={{
                                     display: 'flex', gap: 0, marginBottom: 12,
                                     background: isDark ? '#1e293b' : '#f8fafc',
                                     borderRadius: 12, padding: 4,
                                     border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
                                 }}>
                                     {[
-                                        { key: 'monitoring', label: '📊 Station Monitoring' },
-                                        { key: 'issues', label: '📋 Issue Tracker & Call Logs' },
-                                        { key: 'rain', label: '🌧️ Rain Gauges' },
+                                        { key: 'monitoring', emoji: '📊', long: 'Station Monitoring', short: 'Stations' },
+                                        { key: 'issues', emoji: '📋', long: 'Issue Tracker & Call Logs', short: 'Issues' },
+                                        { key: 'rain', emoji: '🌧️', long: 'Rain Gauges', short: 'Rain' },
                                     ].map(tab => (
-                                        <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                                        <button key={tab.key} onClick={() => setActiveTab(tab.key)} className="dashboard-tab-btn" style={{
                                             flex: 1, padding: '12px 20px', border: 'none',
                                             background: activeTab === tab.key ? (isDark ? '#0b1220' : '#fff') : 'transparent',
                                             color: activeTab === tab.key ? (isDark ? '#f1f5f9' : '#1e293b') : (isDark ? '#94a3b8' : '#64748b'),
@@ -90,7 +90,9 @@ export default function App() {
                                             transition: 'all 0.2s',
                                             boxShadow: activeTab === tab.key ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
                                         }}>
-                                            {tab.label}
+                                            <span style={{ marginRight: 6 }}>{tab.emoji}</span>
+                                            <span className="tab-label-full">{tab.long}</span>
+                                            <span className="tab-label-short">{tab.short}</span>
                                         </button>
                                     ))}
                                 </div>
