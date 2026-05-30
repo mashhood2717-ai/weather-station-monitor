@@ -2195,6 +2195,7 @@
                             <option value="1y">1y</option>
                         </select>
                         <button class="filter-btn" onclick="exportAllRainGaugesCsv()" title="Export all gauges (15-min raw rows)">📥 Export CSV</button>
+                        <button class="filter-btn" onclick="rgDownloadAllPdf()" title="One-page network report (all gauges)">📄 All Gauges PDF</button>
                         <button class="filter-btn" onclick="fetchRainGaugesData()" title="Refresh">🔄 Refresh</button>
                     </div>
                 </div>
@@ -6226,6 +6227,144 @@
             } catch (e) {
                 console.error('PDF generation failed:', e);
                 alert('Failed to generate PDF: ' + (e.message || e));
+            }
+        }
+
+        // Network-wide PDF: one row per gauge with the same numbers shown in
+        // the table. Sorted by range uptime so worst performers sink down.
+        async function rgDownloadAllPdf() {
+            if (!rainGaugesData || !rainGaugesData.length) {
+                alert('No gauges loaded yet — wait for the table to populate.');
+                return;
+            }
+            try {
+                const { jsPDF } = window.jspdf || {};
+                if (!jsPDF) { alert('PDF library not loaded yet — please try again in a moment.'); return; }
+                const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+                const pageW = doc.internal.pageSize.getWidth();
+                const pageH = doc.internal.pageSize.getHeight();
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(16);
+                doc.text('Rain Gauges — Network Report', 40, 50);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                doc.setTextColor(120);
+                const generatedAt = new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' });
+                doc.text(`Range: ${(rgRange || '24h').toUpperCase()}    Generated: ${generatedAt} PKT`, 40, 68);
+                doc.setTextColor(0);
+
+                // Aggregate stats (computed the same way the tiles do — gauges
+                // with real checks in the selected window).
+                const total = rainGaugesData.length;
+                const online = rainGaugesData.filter(g => g.status === 'online').length;
+                const withChecks = rainGaugesData.filter(g =>
+                    (g.checks_24h || 0) > 0 && g.uptime_24h !== null && g.uptime_24h !== undefined
+                );
+                const avgUptime = withChecks.length
+                    ? withChecks.reduce((a, g) => a + Number(g.uptime_24h), 0) / withChecks.length
+                    : null;
+
+                doc.autoTable({
+                    startY: 82,
+                    head: [['Total', 'Online', 'Offline', `Avg Uptime (${rgRange})`, `Avg Downtime (${rgRange})`, 'Gauges w/ data']],
+                    body: [[
+                        total,
+                        online,
+                        total - online,
+                        avgUptime !== null ? `${avgUptime.toFixed(1)}%` : '—',
+                        avgUptime !== null ? `${(100 - avgUptime).toFixed(1)}%` : '—',
+                        withChecks.length,
+                    ]],
+                    theme: 'grid',
+                    headStyles: { fillColor: [14, 165, 233], fontSize: 9 },
+                    bodyStyles: { fontSize: 10, halign: 'center' },
+                    margin: { left: 40, right: 40 },
+                });
+
+                const rows = rainGaugesData.slice().sort((a, b) => {
+                    const av = a.uptime_24h == null ? -1 : Number(a.uptime_24h);
+                    const bv = b.uptime_24h == null ? -1 : Number(b.uptime_24h);
+                    return bv - av;
+                }).map(g => [
+                    g.name || g.id,
+                    (g.status || '—').toUpperCase(),
+                    g.uptime_24h != null ? `${Number(g.uptime_24h).toFixed(1)}%` : '—',
+                    g.checks_24h != null ? g.checks_24h : 0,
+                    g.uptime_1h  != null ? `${Number(g.uptime_1h).toFixed(1)}%`  : '—',
+                    g.checks_1h  != null ? g.checks_1h  : 0,
+                    g.rain_daily != null ? Number(g.rain_daily).toFixed(1) : '—',
+                    g.rain_24h   != null ? Number(g.rain_24h).toFixed(1)   : '—',
+                    g.rain_7d    != null ? Number(g.rain_7d).toFixed(1)    : '—',
+                    g.rain_30d   != null ? Number(g.rain_30d).toFixed(1)   : '—',
+                ]);
+
+                doc.autoTable({
+                    startY: ((doc.lastAutoTable && doc.lastAutoTable.finalY) || 120) + 14,
+                    head: [[
+                        'Gauge',
+                        'Status',
+                        `Uptime ${(rgRange || '24h').toUpperCase()}`,
+                        'Polls',
+                        'Uptime 1H',
+                        'Polls',
+                        'Today (mm)',
+                        '24h (mm)',
+                        '7d (mm)',
+                        '30d (mm)',
+                    ]],
+                    body: rows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [16, 185, 129], fontSize: 9 },
+                    bodyStyles: { fontSize: 9 },
+                    columnStyles: {
+                        0: { cellWidth: 180 },
+                        1: { halign: 'center' },
+                        2: { halign: 'right' },
+                        3: { halign: 'right' },
+                        4: { halign: 'right' },
+                        5: { halign: 'right' },
+                        6: { halign: 'right' },
+                        7: { halign: 'right' },
+                        8: { halign: 'right' },
+                        9: { halign: 'right' },
+                    },
+                    didParseCell: function (data) {
+                        if (data.section !== 'body') return;
+                        if (data.column.index === 1) {
+                            const v = String(data.cell.raw || '').toUpperCase();
+                            if (v === 'ONLINE')  data.cell.styles.textColor = [16, 134, 89];
+                            if (v === 'OFFLINE') data.cell.styles.textColor = [220, 38, 38];
+                        }
+                        if (data.column.index === 2 || data.column.index === 4) {
+                            const raw = String(data.cell.raw || '').replace('%', '');
+                            const v = Number(raw);
+                            if (Number.isFinite(v)) {
+                                if (v >= 90) data.cell.styles.textColor = [16, 134, 89];
+                                else if (v >= 50) data.cell.styles.textColor = [180, 120, 20];
+                                else data.cell.styles.textColor = [220, 38, 38];
+                            }
+                        }
+                    },
+                    margin: { left: 40, right: 40 },
+                    didDrawPage: function () {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(120);
+                        doc.text(
+                            `Page ${doc.internal.getNumberOfPages()}  ·  ${rainGaugesData.length} gauges  ·  weatherwalay.com`,
+                            pageW / 2,
+                            pageH - 18,
+                            { align: 'center' }
+                        );
+                        doc.setTextColor(0);
+                    },
+                });
+
+                doc.save(`rain-gauges-network-${rgRange || '24h'}-${new Date().toISOString().slice(0, 10)}.pdf`);
+            } catch (e) {
+                console.error('All-gauges PDF failed:', e);
+                alert('Failed to generate report: ' + (e.message || e));
             }
         }
 

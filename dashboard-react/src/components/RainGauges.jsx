@@ -241,6 +241,144 @@ export default function RainGauges({ isDark }) {
         }
     }, [selectedGauge, detail, chartRange]);
 
+    // Build a network-wide PDF: one row per gauge with the key uptime/rain
+    // numbers already shown in the table. No per-gauge chart (would explode
+    // page count); aggregate stats land in the header instead.
+    const downloadAllPdf = useCallback(async () => {
+        if (!gauges.length) {
+            message.warning('No gauges loaded yet');
+            return;
+        }
+        try {
+            const [{ jsPDF }, autoTableMod] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable'),
+            ]);
+            const autoTable = autoTableMod.default || autoTableMod;
+            const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+
+            // Header
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text('Rain Gauges — Network Report', 40, 50);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(120);
+            const generatedAt = new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' });
+            doc.text(`Range: ${range.toUpperCase()}    Generated: ${generatedAt} PKT`, 40, 68);
+            doc.setTextColor(0);
+
+            // Aggregate stats strip (mirrors the tiles on the dashboard)
+            autoTable(doc, {
+                startY: 82,
+                head: [['Total', 'Online', 'Offline', `Avg Uptime (${range})`, `Avg Downtime (${range})`, 'Gauges w/ data']],
+                body: [[
+                    stats.total,
+                    stats.online,
+                    stats.offline,
+                    stats.avgUptime !== null ? `${stats.avgUptime}%` : '—',
+                    stats.avgDowntime !== null ? `${stats.avgDowntime}%` : '—',
+                    stats.uptimeStationCount || 0,
+                ]],
+                theme: 'grid',
+                headStyles: { fillColor: [14, 165, 233], fontSize: 9 },
+                bodyStyles: { fontSize: 10, halign: 'center' },
+                margin: { left: 40, right: 40 },
+            });
+
+            // Per-gauge table — sorted by uptime (range) descending so the
+            // worst-performing gauges sink to the bottom and the report
+            // reads like a leaderboard.
+            const rows = gauges.slice().sort((a, b) => {
+                const av = a.uptime_24h == null ? -1 : Number(a.uptime_24h);
+                const bv = b.uptime_24h == null ? -1 : Number(b.uptime_24h);
+                return bv - av;
+            }).map(g => [
+                g.name || g.id,
+                (g.status || '—').toUpperCase(),
+                g.uptime_24h != null ? `${Number(g.uptime_24h).toFixed(1)}%` : '—',
+                g.checks_24h ?? 0,
+                g.uptime_1h != null ? `${Number(g.uptime_1h).toFixed(1)}%` : '—',
+                g.checks_1h ?? 0,
+                g.rain_daily != null ? Number(g.rain_daily).toFixed(1) : '—',
+                g.rain_24h   != null ? Number(g.rain_24h).toFixed(1)   : '—',
+                g.rain_7d    != null ? Number(g.rain_7d).toFixed(1)    : '—',
+                g.rain_30d   != null ? Number(g.rain_30d).toFixed(1)   : '—',
+            ]);
+
+            autoTable(doc, {
+                startY: (doc.lastAutoTable?.finalY || 120) + 14,
+                head: [[
+                    'Gauge',
+                    'Status',
+                    `Uptime ${range.toUpperCase()}`,
+                    'Polls',
+                    'Uptime 1H',
+                    'Polls',
+                    'Today (mm)',
+                    '24h (mm)',
+                    '7d (mm)',
+                    '30d (mm)',
+                ]],
+                body: rows,
+                theme: 'striped',
+                headStyles: { fillColor: [16, 185, 129], fontSize: 9 },
+                bodyStyles: { fontSize: 9 },
+                columnStyles: {
+                    0: { cellWidth: 180 },
+                    1: { halign: 'center' },
+                    2: { halign: 'right' },
+                    3: { halign: 'right' },
+                    4: { halign: 'right' },
+                    5: { halign: 'right' },
+                    6: { halign: 'right' },
+                    7: { halign: 'right' },
+                    8: { halign: 'right' },
+                    9: { halign: 'right' },
+                },
+                didParseCell: (data) => {
+                    // Color the status cell + uptime cells
+                    if (data.section !== 'body') return;
+                    if (data.column.index === 1) {
+                        const v = String(data.cell.raw || '').toUpperCase();
+                        if (v === 'ONLINE')  data.cell.styles.textColor = [16, 134, 89];
+                        if (v === 'OFFLINE') data.cell.styles.textColor = [220, 38, 38];
+                    }
+                    if (data.column.index === 2 || data.column.index === 4) {
+                        const raw = String(data.cell.raw || '').replace('%', '');
+                        const v = Number(raw);
+                        if (Number.isFinite(v)) {
+                            if (v >= 90) data.cell.styles.textColor = [16, 134, 89];
+                            else if (v >= 50) data.cell.styles.textColor = [180, 120, 20];
+                            else data.cell.styles.textColor = [220, 38, 38];
+                        }
+                    }
+                },
+                margin: { left: 40, right: 40 },
+                didDrawPage: (data) => {
+                    // Footer with page number
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(120);
+                    doc.text(
+                        `Page ${doc.internal.getNumberOfPages()}  ·  ${gauges.length} gauges  ·  weatherwalay.com`,
+                        pageW / 2,
+                        pageH - 18,
+                        { align: 'center' },
+                    );
+                    doc.setTextColor(0);
+                },
+            });
+
+            doc.save(`rain-gauges-network-${range}-${new Date().toISOString().slice(0, 10)}.pdf`);
+        } catch (e) {
+            console.error('All-gauges PDF failed:', e);
+            message.error('Failed to generate report: ' + (e.message || e));
+        }
+    }, [gauges, range, stats]);
+
     // Fetch history whenever the modal is open and the chart range changes.
     useEffect(() => {
         if (!selectedGauge) return;
@@ -604,6 +742,7 @@ export default function RainGauges({ isDark }) {
                                 window.location.href = `${RAIN_GAUGES_API_BASE}/api/rain-gauges-export?range=${range}`;
                             }}
                         >📥 Export CSV</Button>
+                        <Button onClick={downloadAllPdf} title="One-page network report (all gauges)">📄 All Gauges PDF</Button>
                         <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>Refresh</Button>
                     </Space>
                 </div>
