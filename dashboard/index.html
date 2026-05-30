@@ -2166,12 +2166,20 @@
                         <h2 class="list-title" style="margin: 0;">🌧️ Rain Gauges Data</h2>
                         <span id="rgLastUpdated" style="font-size:11px; color:var(--text-secondary);"></span>
                     </div>
-                    <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap;">
+                    <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap; align-items:center;">
                         <input type="text" class="search-box" id="rgSearchBox" oninput="renderRainGaugesTable()" placeholder="🔍 Search gauge..." style="width: 180px;">
                         <select id="rgStatusFilter" class="source-filter" onchange="renderRainGaugesTable()" style="min-width: 120px;">
                             <option value="all">All Status</option>
                             <option value="online">Online Only</option>
                             <option value="offline">Offline Only</option>
+                        </select>
+                        <span style="font-size:13px; color:var(--text-secondary);">Range:</span>
+                        <select id="rgRangeFilter" class="source-filter" onchange="rgRange=this.value; fetchRainGaugesData()" style="min-width: 90px;">
+                            <option value="24h">24h</option>
+                            <option value="daily">Daily</option>
+                            <option value="7d">7d</option>
+                            <option value="30d">30d</option>
+                            <option value="1y">1y</option>
                         </select>
                         <button class="filter-btn" onclick="fetchRainGaugesData()" title="Refresh">🔄 Refresh</button>
                     </div>
@@ -2182,6 +2190,8 @@
                             <tr>
                                 <th style="min-width:220px; cursor:pointer; user-select:none;" onclick="rgSort('name')">Gauge Name <span id="rgSortArrow_name"></span></th>
                                 <th style="text-align:center; cursor:pointer; user-select:none;" onclick="rgSort('status')">Status <span id="rgSortArrow_status"></span></th>
+                                <th style="cursor:pointer; user-select:none;" onclick="rgSort('uptime_24h')"><span id="rgUptimeRangeHeader">Uptime (24h)</span> <span id="rgSortArrow_uptime_24h"></span></th>
+                                <th style="cursor:pointer; user-select:none;" onclick="rgSort('uptime_1h')">Uptime 1h <span id="rgSortArrow_uptime_1h"></span></th>
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_daily')">Today (mm) <span id="rgSortArrow_rain_daily"></span></th>
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_24h')">24h (mm) <span id="rgSortArrow_rain_24h"></span></th>
                                 <th style="text-align:right; cursor:pointer; user-select:none;" onclick="rgSort('rain_7d')">7 Days (mm) <span id="rgSortArrow_rain_7d"></span></th>
@@ -2191,7 +2201,7 @@
                             </tr>
                         </thead>
                         <tbody id="rainGaugesTable">
-                            <tr><td colspan="8" style="text-align: center; padding: 20px;">Loading gauges...</td></tr>
+                            <tr><td colspan="10" style="text-align: center; padding: 20px;">Loading gauges...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2308,6 +2318,31 @@
                     <button class="apply-btn" onclick="updateIssueStatus('resolved')" style="background:#52c41a;">🟢 Resolved</button>
                     <button class="apply-btn" onclick="updateIssueStatus('unresolvable')" style="background:#ff4d4f;">🔴 Can't Resolve</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rain Gauge Detail Modal -->
+    <div id="rainGaugeDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:840px;">
+            <button class="modal-close" onclick="closeRainGaugeDetail()">&times;</button>
+            <div class="modal-header">
+                <h2 id="rgDetailTitle">🌧️  Gauge Detail</h2>
+                <div class="modal-badges">
+                    <span id="rgDetailStatus" class="status-badge"></span>
+                    <span id="rgDetailId" style="font-size:12px; color:var(--text-secondary); margin-left:8px;"></span>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <div style="font-weight:600; font-size:13px; margin-bottom:8px; color:var(--text-secondary);">Uptime across all windows</div>
+                <div id="rgDetailUptimeGrid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px;">
+                    <div style="text-align:center; padding:20px; color:var(--text-secondary);">Loading…</div>
+                </div>
+
+                <div style="font-weight:600; font-size:13px; margin-bottom:8px; color:var(--text-secondary);">Rain totals (live from upstream)</div>
+                <div id="rgDetailRainGrid" style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px;"></div>
+
+                <div id="rgDetailMeta" style="margin-top:14px; font-size:12px; color:var(--text-secondary);"></div>
             </div>
         </div>
     </div>
@@ -2866,6 +2901,11 @@
         const WORKER_API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
             ? location.origin
             : 'https://weatherlink-monitor.mashhood2717.workers.dev'; // Production Worker URL
+
+        // Dedicated rain-gauges Worker on a DIFFERENT Cloudflare account
+        // (Weatherwalayofficial@gmail.com — kept fully separate from stations).
+        // Powers the live proxy + uptime aggregates + per-gauge detail.
+        const RAIN_GAUGES_WORKER = 'https://weatherwalay-rain-gauges.weatherwalayofficial.workers.dev';
 
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
@@ -5793,26 +5833,50 @@
         // RAIN GAUGES DASHBOARD
         // ============================================================
         let rainGaugesData = [];
+        let rgRange = '24h'; // selectable: 24h | daily | 7d | 30d | 1y
 
         async function fetchRainGaugesData() {
             const tableBody = document.getElementById('rainGaugesTable');
-            tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading gauges...</td></tr>';
+            const colCount = document.querySelectorAll('#tab-rain table thead th').length || 10;
+            tableBody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; padding: 20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading gauges...</td></tr>`;
 
             try {
-                const res = await fetch(`${WORKER_API}/api/rain-gauges`);
-                const data = await res.json();
+                // Parallel fetch: live proxy (rain totals) + Worker-tracked uptime
+                // for the selected range. Promise.allSettled so a slow/down uptime
+                // endpoint never blocks the rain totals.
+                const [proxyResp, uptimeResp] = await Promise.allSettled([
+                    fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauges`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauges-uptime?range=${rgRange}`).then(r => r.json()),
+                ]);
 
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to fetch rain gauges');
+                if (proxyResp.status !== 'fulfilled' || !proxyResp.value?.success) {
+                    throw new Error(proxyResp.value?.error || proxyResp.reason?.message || 'Failed to fetch rain gauges');
+                }
+                const liveGauges = proxyResp.value.gauges || [];
+
+                // Build a map of gauge_id -> uptime fields. If the uptime fetch
+                // failed we just leave the columns blank — proxy data still shows.
+                const uptimeMap = {};
+                if (uptimeResp.status === 'fulfilled' && uptimeResp.value?.success) {
+                    (uptimeResp.value.gauges || []).forEach(u => { uptimeMap[u.gauge_id] = u; });
+                } else if (uptimeResp.status === 'rejected') {
+                    console.warn('Uptime fetch failed (proxy still works):', uptimeResp.reason?.message);
                 }
 
-                rainGaugesData = data.gauges || [];
+                rainGaugesData = liveGauges.map(g => ({
+                    ...g,
+                    uptime_24h: uptimeMap[g.id]?.uptime_24h ?? null,
+                    uptime_1h:  uptimeMap[g.id]?.uptime_1h  ?? null,
+                    checks_24h: uptimeMap[g.id]?.checks_24h ?? 0,
+                    checks_1h:  uptimeMap[g.id]?.checks_1h  ?? 0,
+                    last_online: uptimeMap[g.id]?.last_online ?? null,
+                }));
 
                 // Last updated indicator
                 const lu = document.getElementById('rgLastUpdated');
                 if (lu) {
-                    if (data.last_updated) {
-                        const d = new Date(data.last_updated);
+                    if (proxyResp.value.last_updated) {
+                        const d = new Date(proxyResp.value.last_updated);
                         lu.textContent = `Last updated: ${d.toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
                     } else {
                         lu.textContent = '';
@@ -5823,8 +5887,25 @@
                 renderRainGaugesTable();
             } catch (error) {
                 console.error('Error in fetchRainGaugesData:', error);
-                tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--danger); padding: 20px;">Error: ${error.message}</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; color: var(--danger); padding: 20px;">Error: ${error.message}</td></tr>`;
             }
+        }
+
+        // Render a small progress-bar style uptime cell (same colour thresholds
+        // as the stations table).
+        function rgFormatUptime(value, checks) {
+            if (value === null || value === undefined || !checks) {
+                return '<span style="color: var(--text-secondary)">—</span>';
+            }
+            const v = Number(value);
+            const color = v >= 90 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
+            const w = Math.min(100, Math.max(0, v));
+            return `<div style="display:flex; align-items:center; gap:6px;">
+                <div style="background: rgba(148,163,184,0.25); width:48px; height:6px; border-radius:3px; overflow:hidden;">
+                    <div style="background:${color}; width:${w}%; height:100%;"></div>
+                </div>
+                <strong style="color:${color}; font-size:12px;">${v.toFixed(1)}%</strong>
+            </div>`;
         }
 
         function updateRainGaugesStats() {
@@ -5871,8 +5952,12 @@
             const tbody = document.getElementById('rainGaugesTable');
             tbody.innerHTML = '';
 
+            // Keep the range column header label in sync with the dropdown
+            const hdr = document.getElementById('rgUptimeRangeHeader');
+            if (hdr) hdr.textContent = `Uptime (${rgRange})`;
+
             if (rainGaugesData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No rain gauges found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px;">No rain gauges found</td></tr>';
                 return;
             }
 
@@ -5900,20 +5985,26 @@
                 return sortDir === 'asc' ? cmp : -cmp;
             });
 
-            // Update sort arrows on column headers
-            ['name','status','rain_daily','rain_24h','rain_7d','rain_30d','rain_this_year','rain_all_time'].forEach(k => {
+            // Update sort arrows on column headers (includes the two uptime cols)
+            ['name','status','uptime_24h','uptime_1h','rain_daily','rain_24h','rain_7d','rain_30d','rain_this_year','rain_all_time'].forEach(k => {
                 const el = document.getElementById('rgSortArrow_' + k);
                 if (el) el.textContent = k === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : '';
             });
 
             if (rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-secondary);">No gauges match the current filters</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-secondary);">No gauges match the current filters</td></tr>';
                 return;
             }
 
             const frag = document.createDocumentFragment();
             rows.forEach(g => {
                 const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                // Use a data attribute so the row click can look up the gauge
+                // without storing the whole object on every row.
+                tr.dataset.gaugeId = g.id;
+                tr.addEventListener('click', () => openRainGaugeDetail(g.id));
+
                 const statusHtml = g.status === 'online'
                     ? `<span class="status-badge status-active">Online</span>`
                     : `<span class="status-badge status-inactive">Offline</span>`;
@@ -5921,6 +6012,8 @@
                 tr.innerHTML = `
                     <td><strong>${g.name}</strong><br><small style="color: var(--text-secondary)">${g.id}</small></td>
                     <td style="text-align:center;">${statusHtml}</td>
+                    <td>${rgFormatUptime(g.uptime_24h, g.checks_24h)}</td>
+                    <td>${rgFormatUptime(g.uptime_1h, g.checks_1h)}</td>
                     <td style="text-align:right;">${rgFormatMm(g.rain_daily)}</td>
                     <td style="text-align:right;">${rgFormatMm(g.rain_24h)}</td>
                     <td style="text-align:right;">${rgFormatMm(g.rain_7d)}</td>
@@ -5944,6 +6037,80 @@
                 rgSortState.dir = (key === 'name' || key === 'status') ? 'asc' : 'desc';
             }
             renderRainGaugesTable();
+        }
+
+        // ---- Rain gauge detail modal ----
+        // Fetches /api/rain-gauge-detail/:id which returns all 5 uptime windows
+        // (1h, 24h, 7d, 30d, 1y) in a single query. The rain totals come from
+        // the proxy fetch we already have on the row.
+        async function openRainGaugeDetail(gaugeId) {
+            const gauge = rainGaugesData.find(g => g.id === gaugeId);
+            if (!gauge) return;
+
+            // Populate header + reset bodies
+            document.getElementById('rgDetailTitle').textContent = `🌧️  ${gauge.name}`;
+            const statusEl = document.getElementById('rgDetailStatus');
+            statusEl.className = `status-badge ${gauge.status === 'online' ? 'status-active' : 'status-inactive'}`;
+            statusEl.textContent = gauge.status === 'online' ? 'Online' : 'Offline';
+            document.getElementById('rgDetailId').textContent = `ID: ${gauge.id}`;
+
+            const uptimeGrid = document.getElementById('rgDetailUptimeGrid');
+            uptimeGrid.innerHTML = '<div style="grid-column: span 5; text-align:center; padding:20px; color:var(--text-secondary);">Loading…</div>';
+
+            // Render rain totals immediately (already known from proxy data)
+            const rainGrid = document.getElementById('rgDetailRainGrid');
+            const rainCells = [
+                { label: 'Today',     key: 'rain_daily' },
+                { label: '24h',       key: 'rain_24h' },
+                { label: '7 days',    key: 'rain_7d' },
+                { label: '30 days',   key: 'rain_30d' },
+                { label: 'This year', key: 'rain_this_year' },
+                { label: 'All time',  key: 'rain_all_time' },
+            ];
+            rainGrid.innerHTML = rainCells.map(({ label, key }) => {
+                const v = gauge[key];
+                const formatted = (v === null || v === undefined || !Number.isFinite(Number(v))) ? '—' : `${Number(v).toFixed(1)} mm`;
+                return `<div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:10px; text-align:center;">
+                    <div style="font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase;">${label}</div>
+                    <div style="font-size:18px; font-weight:700; color:var(--text-primary); margin-top:2px;">${formatted}</div>
+                </div>`;
+            }).join('');
+
+            document.getElementById('rainGaugeDetailModal').style.display = 'flex';
+
+            // Now fetch the all-windows uptime
+            try {
+                const resp = await fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauge-detail/${encodeURIComponent(gaugeId)}`);
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error || 'Failed to load detail');
+
+                const windows = data.windows || {};
+                uptimeGrid.innerHTML = ['1h', '24h', '7d', '30d', '1y'].map(w => {
+                    const win = windows[w] || {};
+                    const v = win.uptime;
+                    const checks = win.checks || 0;
+                    const color = (v === null || v === undefined) ? '#94a3b8'
+                        : v >= 90 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
+                    const display = (v === null || v === undefined) ? '—' : `${Number(v).toFixed(1)}%`;
+                    return `<div style="background:var(--card-bg); border:1px solid var(--border-color); border-top:3px solid ${color}; border-radius:8px; padding:10px; text-align:center;">
+                        <div style="font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase;">${w}</div>
+                        <div style="font-size:22px; font-weight:700; color:${color}; margin-top:4px;">${display}</div>
+                        <div style="font-size:11px; color:var(--text-secondary);">${checks} polls</div>
+                    </div>`;
+                }).join('');
+
+                const meta = document.getElementById('rgDetailMeta');
+                const lastOnline = data.last_online ? new Date(data.last_online + 'Z').toLocaleString('en-PK', { timeZone: 'Asia/Karachi' }) : '—';
+                const trackingSince = data.tracking_since ? new Date(data.tracking_since + 'Z').toLocaleString('en-PK', { timeZone: 'Asia/Karachi' }) : '—';
+                meta.textContent = `Last seen online: ${lastOnline} · Tracked since: ${trackingSince} · ${data.total_rows || 0} polls stored`;
+            } catch (e) {
+                console.error('rain-gauge-detail fetch failed:', e);
+                uptimeGrid.innerHTML = `<div style="grid-column: span 5; text-align:center; color:var(--danger); padding:20px;">Failed to load uptime detail: ${e.message}</div>`;
+            }
+        }
+
+        function closeRainGaugeDetail() {
+            document.getElementById('rainGaugeDetailModal').style.display = 'none';
         }
 
         // ============================================================
