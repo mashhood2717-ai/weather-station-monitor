@@ -2419,7 +2419,11 @@
                     <span id="modalStationCategory" class="category-badge community">🏠 Community</span>
                     <span id="modalStationStatus" class="status-badge"></span>
                 </div>
-                <div class="modal-intervals" style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                <div class="modal-intervals" style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <div class="chart-toggle-group" style="display:flex; gap:0;">
+                        <button class="chart-toggle" id="modalChartLine" data-modal-chart="line">Line</button>
+                        <button class="chart-toggle active" id="modalChartBar" data-modal-chart="bar">Bar</button>
+                    </div>
                     <button class="modal-interval-btn active" data-days="0" data-hours="24" id="int24">24h</button>
                     <button class="modal-interval-btn" data-days="7" data-hours="0" id="int7">7d</button>
                     <button class="modal-interval-btn" data-days="30" data-hours="0" id="int30">30d</button>
@@ -4669,6 +4673,9 @@
         // Station detail modal charts
         let stationUptimeChart = null;
         let stationTempChart = null;
+        // Bar (default) vs line for the uptime chart on the station detail
+        // modal. Persisted so a hard refresh keeps the user's choice.
+        let stationChartType = localStorage.getItem('stationChartType') === 'line' ? 'line' : 'bar';
 
         // Open station modal and load details
         async function openStationModal(stationId) {
@@ -4814,6 +4821,9 @@
                 document.getElementById('downtimeRecords').innerHTML = `<div style="text-align: center; padding: 20px;">✅ No outages recorded (${periodLabel.toLowerCase()})</div>`;
             }
 
+            // Cache for the Bar/Line toggle to redraw without re-fetching.
+            if (currentModalStation) currentModalStation.__lastHourly = data.hourly_data;
+
             // Create uptime chart
             createStationUptimeChart(data.hourly_data);
 
@@ -4879,22 +4889,33 @@
                 return;
             }
 
+            // Color bars by uptime threshold so problems pop visually.
+            // Line mode keeps the single green stroke (legacy look).
+            const barColors = uptimeValues.map(v => {
+                if (v === null || isNaN(v)) return 'rgba(148,163,184,0.4)';
+                if (v >= 90) return '#10b981';
+                if (v >= 50) return '#f59e0b';
+                return '#ef4444';
+            });
+            const useBar = stationChartType === 'bar';
+
             stationUptimeChart = new Chart(ctx, {
-                type: 'line',
+                type: useBar ? 'bar' : 'line',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Availability %',
                         data: uptimeValues,
-                        borderColor: '#10b981',
-                        borderWidth: 2,
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        fill: true,
+                        borderColor: useBar ? '#10b981' : '#10b981',
+                        borderWidth: useBar ? 0 : 2,
+                        backgroundColor: useBar ? barColors : 'rgba(16, 185, 129, 0.1)',
+                        fill: !useBar,
                         tension: 0.4,
-                        pointRadius: 4,
+                        pointRadius: useBar ? 0 : 4,
                         pointBackgroundColor: '#10b981',
                         pointBorderColor: '#10b981',
-                        spanGaps: true
+                        spanGaps: true,
+                        borderRadius: useBar ? 4 : 0,
                     }]
                 },
                 options: {
@@ -5806,6 +5827,24 @@
                     else initCategoryUptimeChart();
                 }
             });
+
+            // Station detail modal — Bar / Line toggle for the uptime chart.
+            function setModalChartType(t) {
+                stationChartType = t;
+                localStorage.setItem('stationChartType', t);
+                document.getElementById('modalChartBar')?.classList.toggle('active', t === 'bar');
+                document.getElementById('modalChartLine')?.classList.toggle('active', t === 'line');
+                // If a chart is currently rendered, redraw it with the same data.
+                if (stationUptimeChart && stationUptimeChart.data?.labels?.length) {
+                    const hourly = (currentModalStation && currentModalStation.__lastHourly) || null;
+                    if (hourly) createStationUptimeChart(hourly);
+                }
+            }
+            document.getElementById('modalChartBar')?.addEventListener('click', () => setModalChartType('bar'));
+            document.getElementById('modalChartLine')?.addEventListener('click', () => setModalChartType('line'));
+            // Reflect the persisted choice on first load.
+            document.getElementById('modalChartBar')?.classList.toggle('active', stationChartType === 'bar');
+            document.getElementById('modalChartLine')?.classList.toggle('active', stationChartType === 'line');
 
             document.getElementById('btnLine')?.addEventListener('click', () => {
                 categoryChartType = 'line';
