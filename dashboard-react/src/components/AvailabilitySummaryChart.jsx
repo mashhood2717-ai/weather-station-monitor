@@ -5,7 +5,12 @@ import { CATEGORY_CONFIG, CATEGORY_LIST, PROVINCE_CONFIG, PROVINCE_LIST } from '
 const SOURCE_LIST = ['Davis', 'Misol', 'WU'];
 const SOURCE_COLORS = { Davis: '#3b82f6', Misol: '#10b981', WU: '#f59e0b' };
 
-function getUptimeValue(station) {
+function getUptimeValue(station, windowKey) {
+    // windowKey is '24h' (default) or '1h'
+    if (windowKey === '1h') {
+        if (station.uptime_1h !== undefined && station.uptime_1h !== null) return parseFloat(station.uptime_1h);
+        return NaN;
+    }
     if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
         return parseFloat(station.uptime_24h);
     }
@@ -15,10 +20,16 @@ function getUptimeValue(station) {
     return NaN;
 }
 
+function getChecksValue(station, windowKey) {
+    if (windowKey === '1h') return station.checks_1h || 0;
+    return station.checks_24h || 0;
+}
+
 export default function AvailabilitySummaryChart({ stations, isDark }) {
     const [groupBy, setGroupBy] = useState('category');
     const [chartType, setChartType] = useState('bar');
     const [networkFilter, setNetworkFilter] = useState('all');
+    const [windowKey, setWindowKey] = useState('24h'); // '24h' | '1h'
     const canvasRef = useRef(null);
 
     const filteredStations = useMemo(() => {
@@ -31,13 +42,12 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
         return stations;
     }, [stations, networkFilter]);
 
-    // Match legacy dashboard/index.html (line ~3347): only average stations that
-    // actually had checks in the last 24h. Stations with checks_24h=0 carry stale
-    // fallback uptime values and would skew the category averages downward.
+    // Only average stations that actually had checks in the selected window.
+    // For 24h: at least 1 poll in last 24h. For 1h: at least 1 poll in last hour.
     const avgUptimeFor = (list) => {
         const uptimes = list
-            .filter(s => s.checks_24h && s.checks_24h > 0)
-            .map(getUptimeValue)
+            .filter(s => getChecksValue(s, windowKey) > 0)
+            .map(s => getUptimeValue(s, windowKey))
             .filter(v => !isNaN(v));
         return uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
     };
@@ -86,7 +96,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                 avgUptime: Number(avgUptimeFor(list).toFixed(1)),
             };
         });
-    }, [filteredStations, groupBy]);
+    }, [filteredStations, groupBy, windowKey]);
 
     useEffect(() => {
         drawChart();
@@ -193,11 +203,11 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
 
     return (
         <Card
-            title={<span>Availability Summary <span style={{ fontSize: 11, fontWeight: 400, color: isDark ? '#94a3b8' : '#64748b', marginLeft: 6 }}>— 24h average</span></span>}
+            title={<span>Availability Summary <span style={{ fontSize: 11, fontWeight: 400, color: isDark ? '#94a3b8' : '#64748b', marginLeft: 6 }}>— {windowKey === '1h' ? 'last hour' : '24h average'}</span></span>}
             size="small"
             styles={{ body: { padding: 16 } }}
             extra={(
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Select
                         size="small"
                         value={networkFilter}
@@ -221,7 +231,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                 </div>
             )}
         >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <Segmented
                     size="small"
                     value={groupBy}
@@ -230,6 +240,15 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                         { label: 'Category', value: 'category' },
                         { label: 'Source', value: 'source' },
                         { label: 'Province', value: 'province' },
+                    ]}
+                />
+                <Segmented
+                    size="small"
+                    value={windowKey}
+                    onChange={setWindowKey}
+                    options={[
+                        { label: '24h', value: '24h' },
+                        { label: '1h', value: '1h' },
                     ]}
                 />
             </div>

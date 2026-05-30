@@ -85,6 +85,8 @@ export function useStations() {
                     province: determineProvince(s.station_id, s.location || s.station_name || ''),
                     uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
                     checks_24h: s.checks_24h || 0,
+                    uptime_1h: s.uptime_1h !== undefined ? s.uptime_1h : null,
+                    checks_1h: s.checks_1h || 0,
                     uptime: s.uptime_24h !== undefined && s.uptime_24h !== null ? s.uptime_24h : (s.is_active === 1 ? 100.0 : 0.0),
                     install_date: s.install_date || null,
                 };
@@ -113,6 +115,8 @@ export function useStations() {
                                 last_update: apiData.last_update,
                                 uptime_24h: apiData.uptime_24h,
                                 checks_24h: apiData.checks_24h,
+                                uptime_1h: apiData.uptime_1h,
+                                checks_1h: apiData.checks_1h,
                                 tracking_since: apiData.tracking_since,
                                 uptime: apiData.uptime_24h !== undefined ? apiData.uptime_24h : (apiData.is_active === 1 ? 100.0 : 0.0),
                             };

@@ -2425,14 +2425,20 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
         result = allStations;
       }
 
-      // Get uptime data from database for all stations based on time range
+      // Get uptime data from database for all stations based on time range.
+      // We also compute a separate 1-hour aggregate from the same row scan so the
+      // dashboard can offer a snappy "last hour" view without an extra query —
+      // the WHERE clause already pulls all rows in the broader window, and the
+      // 1h subset is just two more CASE evaluations per row.
       let uptimeSQL = `
-        SELECT 
+        SELECT
           station_id,
           COUNT(*) as total_checks,
           SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
+          SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as checks_1h,
+          SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') AND is_online = 1 THEN 1 ELSE 0 END) as online_1h,
           MIN(timestamp) as first_check
-        FROM status_logs 
+        FROM status_logs
         WHERE timestamp >= ${timeFilter}
         GROUP BY station_id
       `;
@@ -2440,12 +2446,14 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
       // For custom range, add end date filter
       if (range === 'custom' && startDate && endDate) {
         uptimeSQL = `
-          SELECT 
+          SELECT
             station_id,
             COUNT(*) as total_checks,
             SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
+            SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as checks_1h,
+            SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') AND is_online = 1 THEN 1 ELSE 0 END) as online_1h,
             MIN(timestamp) as first_check
-          FROM status_logs 
+          FROM status_logs
           WHERE timestamp >= '${startDate}' AND timestamp <= '${endDate}'
           GROUP BY station_id
         `;
@@ -2459,6 +2467,8 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
           total: row.total_checks,
           online: row.online_checks,
           percentage: row.total_checks > 0 ? ((row.online_checks / row.total_checks) * 100).toFixed(1) : 0,
+          checks_1h: row.checks_1h || 0,
+          uptime_1h: row.checks_1h > 0 ? parseFloat(((row.online_1h / row.checks_1h) * 100).toFixed(1)) : null,
           first_check: row.first_check
         };
       }
@@ -2485,6 +2495,8 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
           longitude: s.longitude,
           uptime_24h: uptimePercentage,
           checks_24h: uptimeInfo?.total || 0,
+          uptime_1h: uptimeInfo?.uptime_1h ?? null,
+          checks_1h: uptimeInfo?.checks_1h ?? 0,
           tracking_since: uptimeInfo?.first_check || null
         };
       });

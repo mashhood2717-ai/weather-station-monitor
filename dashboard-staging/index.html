@@ -1863,6 +1863,9 @@
                     <button id="btnCategory" class="chart-toggle active" data-group="category">Category</button>
                     <button id="btnSource" class="chart-toggle" data-group="source">Source</button>
                     <button id="btnProvince" class="chart-toggle" data-group="province">Province</button>
+                    <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Window:</div>
+                    <button id="btnWindow24h" class="chart-toggle active" data-window="24h">24h</button>
+                    <button id="btnWindow1h" class="chart-toggle" data-window="1h">1h</button>
                     <div style="margin-left:16px; font-size:13px; color:var(--text-secondary);">Type:</div>
                     <button id="btnBar" class="chart-toggle active" data-type="bar">Bar</button>
                     <button id="btnLine" class="chart-toggle" data-type="line">Line</button>
@@ -3290,6 +3293,32 @@
         let categoryUptimeChart = null;
         let categoryChartType = 'bar';
         let chartGroupMode = 'category'; // 'category', 'source', or 'province'
+        let chartWindow = '24h'; // '24h' or '1h' — controls which uptime field the bars read.
+
+        // Pick the right uptime / checks field per station based on the selected window.
+        // Falls back to 24h if 1h fields aren't populated yet (e.g. cached old Worker response).
+        function stationUptimeForWindow(s) {
+            if (chartWindow === '1h') {
+                const checks = (s.checks_1h !== undefined && s.checks_1h !== null) ? s.checks_1h : 0;
+                if (checks > 0 && s.uptime_1h !== undefined && s.uptime_1h !== null) {
+                    return { checks, uptime: parseFloat(s.uptime_1h) };
+                }
+                return { checks: 0, uptime: NaN };
+            }
+            const checks = s.checks_24h || 0;
+            const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
+            return { checks, uptime: val !== undefined && val !== null ? parseFloat(val) : NaN };
+        }
+
+        // Update the "— 24h average" / "— last hour" subtitle on the chart card.
+        function updateChartWindowSubtitle() {
+            const title = document.getElementById('categoryChartTitle');
+            if (!title) return;
+            const next = title.nextElementSibling;
+            if (next && next.tagName === 'SPAN') {
+                next.textContent = chartWindow === '1h' ? '— last hour' : '— 24h average';
+            }
+        }
 
         function getChartLabelColor() {
             const color = getComputedStyle(document.documentElement).getPropertyValue('--text-primary');
@@ -3355,15 +3384,12 @@
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
 
-                // Compute average uptime using stations that have real checks (checks_24h > 0).
-                // Prefer `uptime_24h` when present, otherwise fall back to `uptime` which may be supplied by realtime API.
+                // Compute average uptime using stations that have real checks in the selected window
+                // (24h or 1h). `stationUptimeForWindow()` returns the appropriate field set.
                 const uptimes = catStations
-                    .filter(s => s.checks_24h && s.checks_24h > 0)
-                    .map(s => {
-                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
-                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
-                    })
-                    .filter(v => !isNaN(v));
+                    .map(s => stationUptimeForWindow(s))
+                    .filter(o => o.checks > 0 && !isNaN(o.uptime))
+                    .map(o => o.uptime);
 
                 let avgUptime = 0;
                 if (uptimes.length > 0) {
@@ -3506,12 +3532,9 @@
                 const active = srcStations.filter(s => s.status === 'Active').length;
 
                 const uptimes = srcStations
-                    .filter(s => s.checks_24h && s.checks_24h > 0)
-                    .map(s => {
-                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
-                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
-                    })
-                    .filter(v => !isNaN(v));
+                    .map(s => stationUptimeForWindow(s))
+                    .filter(o => o.checks > 0 && !isNaN(o.uptime))
+                    .map(o => o.uptime);
 
                 let avgUptime = 0;
                 if (uptimes.length > 0) {
@@ -3653,12 +3676,9 @@
                 // Compute average uptime using stations that have real checks (checks_24h > 0).
                 // Prefer `uptime_24h` when present, otherwise fall back to `uptime` which may be supplied by realtime API.
                 const uptimes = provStations
-                    .filter(s => s.checks_24h && s.checks_24h > 0)
-                    .map(s => {
-                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
-                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
-                    })
-                    .filter(v => !isNaN(v));
+                    .map(s => stationUptimeForWindow(s))
+                    .filter(o => o.checks > 0 && !isNaN(o.uptime))
+                    .map(o => o.uptime);
 
                 let avgUptime = 0;
                 if (uptimes.length > 0) {
@@ -3789,14 +3809,11 @@
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
 
-                // Use only stations with real checks for averaging
+                // Use only stations with real checks in the selected window
                 const uptimes = catStations
-                    .filter(s => s.checks_24h && s.checks_24h > 0)
-                    .map(s => {
-                        const val = (s.uptime_24h !== undefined && s.uptime_24h !== null) ? s.uptime_24h : s.uptime;
-                        return val !== undefined && val !== null ? parseFloat(val) : NaN;
-                    })
-                    .filter(v => !isNaN(v));
+                    .map(s => stationUptimeForWindow(s))
+                    .filter(o => o.checks > 0 && !isNaN(o.uptime))
+                    .map(o => o.uptime);
 
                 let avgUptime = 0;
                 if (uptimes.length > 0) {
@@ -5340,6 +5357,8 @@
                                 longitude: item.longitude,
                                 uptime_24h: item.uptime_24h,
                                 checks_24h: item.checks_24h,
+                                uptime_1h: item.uptime_1h,
+                                checks_1h: item.checks_1h,
                                 tracking_since: item.tracking_since
                             };
                         });
@@ -5358,6 +5377,8 @@
                                 // Use real 24h uptime if available
                                 station.uptime_24h = apiData.uptime_24h;
                                 station.checks_24h = apiData.checks_24h;
+                                station.uptime_1h = apiData.uptime_1h;
+                                station.checks_1h = apiData.checks_1h;
                                 station.tracking_since = apiData.tracking_since;
                                 // Fallback uptime for sorting
                                 station.uptime = apiData.uptime_24h !== undefined ? apiData.uptime_24h : (apiData.is_active === 1 ? 100.0 : 0.0);
@@ -5549,6 +5570,8 @@
                         province: determineProvince(s.station_id, s.location || s.station_name || ''),
                         uptime_24h: s.uptime_24h !== undefined ? s.uptime_24h : null,
                         checks_24h: s.checks_24h || 0,
+                        uptime_1h: s.uptime_1h !== undefined ? s.uptime_1h : null,
+                        checks_1h: s.checks_1h || 0,
                         uptime: s.uptime_24h !== undefined && s.uptime_24h !== null ? s.uptime_24h : (s.is_active === 1 ? 100.0 : 0.0)
                     };
                 });
@@ -5672,6 +5695,23 @@
                 document.getElementById('categoryChartTitle').textContent = 'Province Availability Summary';
                 if (currentCategory === 'all') initProvinceUptimeChart();
             });
+
+            // 24h | 1h window toggle — repaints the currently-visible chart with the other field set.
+            function setChartWindow(windowVal) {
+                chartWindow = windowVal;
+                localStorage.setItem('chartWindow', windowVal);
+                document.getElementById('btnWindow24h')?.classList.toggle('active', windowVal === '24h');
+                document.getElementById('btnWindow1h')?.classList.toggle('active', windowVal === '1h');
+                updateChartWindowSubtitle();
+                if (chartGroupMode === 'source') initSourceUptimeChart();
+                else if (chartGroupMode === 'province') initProvinceUptimeChart();
+                else initCategoryUptimeChart();
+            }
+            document.getElementById('btnWindow24h')?.addEventListener('click', () => setChartWindow('24h'));
+            document.getElementById('btnWindow1h')?.addEventListener('click', () => setChartWindow('1h'));
+            // Restore preference from localStorage on load
+            const savedWindow = localStorage.getItem('chartWindow');
+            if (savedWindow === '1h') setChartWindow('1h');
 
             // Chart type toggles (Bar / Line)
             document.getElementById('btnBar')?.addEventListener('click', () => {
