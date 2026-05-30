@@ -270,17 +270,28 @@ export default function RainGauges({ isDark }) {
             doc.text(`Range: ${range.toUpperCase()}    Generated: ${generatedAt} PKT`, 40, 68);
             doc.setTextColor(0);
 
-            // Aggregate stats strip (mirrors the tiles on the dashboard)
+            // Aggregate stats strip — computed inline (mirrors the tiles).
+            // `stats` is declared further down via useMemo so we can't depend
+            // on it here without a temporal-dead-zone crash.
+            const total = gauges.length;
+            const online = gauges.filter(g => g.status === 'online').length;
+            const withChecks = gauges.filter(g =>
+                (g.checks_24h || 0) > 0 && g.uptime_24h !== null && g.uptime_24h !== undefined
+            );
+            const avgUptime = withChecks.length
+                ? withChecks.reduce((a, g) => a + Number(g.uptime_24h), 0) / withChecks.length
+                : null;
+
             autoTable(doc, {
                 startY: 82,
                 head: [['Total', 'Online', 'Offline', `Avg Uptime (${range})`, `Avg Downtime (${range})`, 'Gauges w/ data']],
                 body: [[
-                    stats.total,
-                    stats.online,
-                    stats.offline,
-                    stats.avgUptime !== null ? `${stats.avgUptime}%` : '—',
-                    stats.avgDowntime !== null ? `${stats.avgDowntime}%` : '—',
-                    stats.uptimeStationCount || 0,
+                    total,
+                    online,
+                    total - online,
+                    avgUptime !== null ? `${avgUptime.toFixed(1)}%` : '—',
+                    avgUptime !== null ? `${(100 - avgUptime).toFixed(1)}%` : '—',
+                    withChecks.length,
                 ]],
                 theme: 'grid',
                 headStyles: { fillColor: [14, 165, 233], fontSize: 9 },
@@ -377,7 +388,7 @@ export default function RainGauges({ isDark }) {
             console.error('All-gauges PDF failed:', e);
             message.error('Failed to generate report: ' + (e.message || e));
         }
-    }, [gauges, range, stats]);
+    }, [gauges, range]);
 
     // Fetch history whenever the modal is open and the chart range changes.
     useEffect(() => {
