@@ -1,6 +1,13 @@
 // Worker API base URL - using production since staging cron hasn't run (no uptime data)
 export const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev';
 
+// Dedicated rain-gauges Worker — DIFFERENT Cloudflare account
+// (Weatherwalayofficial@gmail.com) than the stations Worker, kept fully
+// separate so neither side can affect the other's quotas/availability.
+// Single environment (no staging/prod split) — there's only one upstream
+// rain-gauge backend so a second env would just be overhead.
+export const RAIN_GAUGES_API_BASE = 'https://weatherwalay-rain-gauges.weatherwalayofficial.workers.dev';
+
 // Auto-refresh interval (30 minutes — matches the production HTML dashboard's setInterval)
 export const REFRESH_INTERVAL = 30 * 60 * 1000;
 
