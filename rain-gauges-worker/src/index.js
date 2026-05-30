@@ -299,7 +299,9 @@ export default {
       // --- Per-gauge CSV export ---
       // Always at native 15-min poll granularity (one CSV row per poll), no
       // bucketing — gives users the raw timeline of online/offline state for
-      // their own analysis. range= filters which rows are included.
+      // their own analysis. range= filters which rows are included. The gauge
+      // name comes from the upstream API (we only store IDs in D1) so we do
+      // one upstream fetch per request to join names in.
       if (path.startsWith('/api/rain-gauge-export/') && request.method === 'GET') {
         const gaugeId = decodeURIComponent(path.split('/').pop());
         if (!gaugeId) return jsonResponse({ error: 'missing gauge id' }, { status: 400 }, corsHeaders);
@@ -316,17 +318,27 @@ export default {
           default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
         }
 
-        const result = await env.DB.prepare(`
-          SELECT timestamp, is_online
-          FROM rain_gauge_logs
-          WHERE gauge_id = ? AND ${whereTime}
-          ORDER BY timestamp ASC
-        `).bind(gaugeId).all();
-        const rows = result.results || [];
+        // Fetch rows + the upstream name map in parallel. If upstream is down,
+        // we still export the CSV but with blank names rather than failing.
+        const [result, upstream] = await Promise.allSettled([
+          env.DB.prepare(`
+            SELECT timestamp, is_online
+            FROM rain_gauge_logs
+            WHERE gauge_id = ? AND ${whereTime}
+            ORDER BY timestamp ASC
+          `).bind(gaugeId).all(),
+          fetchUpstreamGauges(env),
+        ]);
+        const rows = (result.status === 'fulfilled' ? result.value.results : []) || [];
+        const upstreamGauges = upstream.status === 'fulfilled' ? upstream.value.gauges : [];
+        const gauge = upstreamGauges.find(g => g.id === gaugeId);
+        const gaugeName = gauge?.name || '';
 
         // Build CSV with both UTC and PKT timestamps for analyst convenience
-        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'is_online', 'status'];
+        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'gauge_name', 'is_online', 'status'];
         const lines = [headers.join(',')];
+        // CSV-escape names (commas, quotes inside names break the row otherwise)
+        const csvEscape = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
         for (const r of rows) {
           // r.timestamp is "YYYY-MM-DD HH:MM:SS" UTC. PKT = +5h.
           const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
@@ -336,6 +348,7 @@ export default {
             r.timestamp,
             pkt,
             gaugeId,
+            csvEscape(gaugeName),
             r.is_online,
             r.is_online === 1 ? 'online' : 'offline',
           ].join(','));
@@ -366,16 +379,25 @@ export default {
           default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
         }
 
-        const result = await env.DB.prepare(`
-          SELECT timestamp, gauge_id, is_online
-          FROM rain_gauge_logs
-          WHERE ${whereTime}
-          ORDER BY timestamp ASC, gauge_id ASC
-        `).all();
-        const rows = result.results || [];
+        // Same trick: rows from D1 + names from upstream, in parallel.
+        const [result, upstream] = await Promise.allSettled([
+          env.DB.prepare(`
+            SELECT timestamp, gauge_id, is_online
+            FROM rain_gauge_logs
+            WHERE ${whereTime}
+            ORDER BY timestamp ASC, gauge_id ASC
+          `).all(),
+          fetchUpstreamGauges(env),
+        ]);
+        const rows = (result.status === 'fulfilled' ? result.value.results : []) || [];
+        const nameMap = {};
+        if (upstream.status === 'fulfilled') {
+          for (const g of upstream.value.gauges) nameMap[g.id] = g.name || '';
+        }
 
-        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'is_online', 'status'];
+        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'gauge_name', 'is_online', 'status'];
         const lines = [headers.join(',')];
+        const csvEscape = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
         for (const r of rows) {
           const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
           const pktMs = utcDate.getTime() + 5 * 60 * 60 * 1000;
@@ -384,6 +406,7 @@ export default {
             r.timestamp,
             pkt,
             r.gauge_id,
+            csvEscape(nameMap[r.gauge_id] || ''),
             r.is_online,
             r.is_online === 1 ? 'online' : 'offline',
           ].join(','));
