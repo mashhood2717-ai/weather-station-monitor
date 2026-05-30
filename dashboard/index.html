@@ -6071,8 +6071,8 @@
                 tr.addEventListener('click', () => openRainGaugeDetail(g.id));
 
                 const statusHtml = g.status === 'online'
-                    ? `<span class="status-badge status-active">Online</span>`
-                    : `<span class="status-badge status-inactive">Offline</span>`;
+                    ? `<span class="status-badge online">Online</span>`
+                    : `<span class="status-badge offline">Offline</span>`;
 
                 tr.innerHTML = `
                     <td><strong>${g.name}</strong><br><small style="color: var(--text-secondary)">${g.id}</small></td>
@@ -6496,7 +6496,7 @@
             // Populate header + reset bodies
             document.getElementById('rgDetailTitle').textContent = `🌧️  ${gauge.name}`;
             const statusEl = document.getElementById('rgDetailStatus');
-            statusEl.className = `status-badge ${gauge.status === 'online' ? 'status-active' : 'status-inactive'}`;
+            statusEl.className = `status-badge ${gauge.status === 'online' ? 'online' : 'offline'}`;
             statusEl.textContent = gauge.status === 'online' ? 'Online' : 'Offline';
             document.getElementById('rgDetailId').textContent = `ID: ${gauge.id}`;
 
