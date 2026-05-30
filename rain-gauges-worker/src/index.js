@@ -379,13 +379,14 @@ export default {
           default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
         }
 
-        // Same trick: rows from D1 + names from upstream, in parallel.
+        // Rows from D1 (grouped by gauge so each gauge's history is contiguous)
+        // + name map from upstream, in parallel.
         const [result, upstream] = await Promise.allSettled([
           env.DB.prepare(`
             SELECT timestamp, gauge_id, is_online
             FROM rain_gauge_logs
             WHERE ${whereTime}
-            ORDER BY timestamp ASC, gauge_id ASC
+            ORDER BY gauge_id ASC, timestamp ASC
           `).all(),
           fetchUpstreamGauges(env),
         ]);
@@ -395,21 +396,39 @@ export default {
           for (const g of upstream.value.gauges) nameMap[g.id] = g.name || '';
         }
 
+        // Re-order so the output is sorted by GAUGE NAME (analyst-friendly).
+        // The SQL gives us rows already grouped by gauge_id and ordered within
+        // each group by timestamp; here we just rearrange the groups by name.
+        // Group by gauge_id, then sort the groups by name.
+        const groupsById = new Map();
+        for (const r of rows) {
+          if (!groupsById.has(r.gauge_id)) groupsById.set(r.gauge_id, []);
+          groupsById.get(r.gauge_id).push(r);
+        }
+        const sortedGroups = [...groupsById.entries()].sort((a, b) => {
+          const na = (nameMap[a[0]] || '').toLowerCase();
+          const nb = (nameMap[b[0]] || '').toLowerCase();
+          return na.localeCompare(nb);
+        });
+
         const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'gauge_name', 'is_online', 'status'];
         const lines = [headers.join(',')];
         const csvEscape = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
-        for (const r of rows) {
-          const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
-          const pktMs = utcDate.getTime() + 5 * 60 * 60 * 1000;
-          const pkt = new Date(pktMs).toISOString().replace('T', ' ').substring(0, 19);
-          lines.push([
-            r.timestamp,
-            pkt,
-            r.gauge_id,
-            csvEscape(nameMap[r.gauge_id] || ''),
-            r.is_online,
-            r.is_online === 1 ? 'online' : 'offline',
-          ].join(','));
+        for (const [gaugeId, gaugeRows] of sortedGroups) {
+          const name = nameMap[gaugeId] || '';
+          for (const r of gaugeRows) {
+            const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
+            const pktMs = utcDate.getTime() + 5 * 60 * 60 * 1000;
+            const pkt = new Date(pktMs).toISOString().replace('T', ' ').substring(0, 19);
+            lines.push([
+              r.timestamp,
+              pkt,
+              gaugeId,
+              csvEscape(name),
+              r.is_online,
+              r.is_online === 1 ? 'online' : 'offline',
+            ].join(','));
+          }
         }
 
         const csv = lines.join('\r\n');

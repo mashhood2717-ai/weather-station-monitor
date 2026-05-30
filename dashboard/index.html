@@ -21,6 +21,9 @@
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- jsPDF + autotable for rain-gauge PDF reports (lazily used; only fires on button click) -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 
     <style>
         /* Loading overlay and progress */
@@ -2369,6 +2372,7 @@
                             <button class="chart-toggle" data-rg-range="all" onclick="rgSetChartRange('all')">All</button>
                         </div>
                         <button class="filter-btn" onclick="rgExportSelectedCsv()" title="Export this gauge's raw 15-min rows for selected range">📥 Export CSV</button>
+                        <button class="filter-btn" onclick="rgDownloadPdf()" title="Download a one-page PDF report for this gauge">📄 Download PDF</button>
                     </div>
                 </div>
                 <div style="position:relative; height:220px;">
@@ -6123,6 +6127,108 @@
             window.location.href = `${RAIN_GAUGES_WORKER}/api/rain-gauge-export/${encodeURIComponent(rgCurrentGaugeId)}?range=${rgChartRange}`;
         }
 
+        // Cache the detail (5-window uptime) response so the PDF can include it
+        // without re-fetching. Populated by openRainGaugeDetail.
+        let rgLastDetail = null;
+
+        async function rgDownloadPdf() {
+            if (!rgCurrentGaugeId) return;
+            const gauge = rainGaugesData.find(g => g.id === rgCurrentGaugeId);
+            if (!gauge) return;
+            try {
+                // jsPDF is loaded via CDN; the global is window.jspdf in UMD builds.
+                const { jsPDF } = window.jspdf || {};
+                if (!jsPDF) { alert('PDF library not loaded yet — please try again in a moment.'); return; }
+                const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+                const pageW = doc.internal.pageSize.getWidth();
+                const pageH = doc.internal.pageSize.getHeight();
+
+                // Title
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(16);
+                doc.text('Rain Gauge Report', 40, 50);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(12);
+                doc.text(gauge.name, 40, 70);
+                doc.setFontSize(9);
+                doc.setTextColor(120);
+                doc.text(`ID: ${gauge.id}    Status: ${(gauge.status || '').toUpperCase()}`, 40, 86);
+                const generatedAt = new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' });
+                doc.text(`Generated: ${generatedAt} PKT`, 40, 100);
+                doc.setTextColor(0);
+
+                // Uptime windows table
+                const win = (rgLastDetail && rgLastDetail.windows) || {};
+                const uptimeRows = ['1h', '24h', '7d', '30d', '1y'].map(w => [
+                    w.toUpperCase(),
+                    win[w] && win[w].uptime != null ? `${Number(win[w].uptime).toFixed(1)}%` : '—',
+                    (win[w] && win[w].checks) || 0,
+                ]);
+                doc.autoTable({
+                    startY: 120,
+                    head: [['Window', 'Uptime', 'Polls']],
+                    body: uptimeRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [16, 185, 129] },
+                    margin: { left: 40, right: 40 },
+                });
+
+                // Embed chart canvas if it has been drawn
+                let cursor = (doc.lastAutoTable && doc.lastAutoTable.finalY) || 240;
+                let chartY = cursor + 16;
+                const chartCanvas = document.getElementById('rgDetailChart');
+                if (chartCanvas) {
+                    try {
+                        const png = chartCanvas.toDataURL('image/png');
+                        doc.setFontSize(10);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(`Uptime history (${rgChartRange})`, 40, chartY);
+                        chartY += 6;
+                        const imgW = pageW - 80;
+                        const imgH = 180;
+                        doc.addImage(png, 'PNG', 40, chartY, imgW, imgH);
+                        chartY += imgH + 16;
+                    } catch (e) {
+                        console.warn('chart embed failed', e);
+                    }
+                }
+
+                if (chartY > pageH - 200) { doc.addPage(); chartY = 50; }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.text('Rain totals (live from upstream)', 40, chartY);
+                doc.autoTable({
+                    startY: chartY + 6,
+                    head: [['Period', 'Rainfall']],
+                    body: [
+                        ['Today',     gauge.rain_daily     != null ? `${Number(gauge.rain_daily).toFixed(1)} mm` : '—'],
+                        ['Last 24h',  gauge.rain_24h       != null ? `${Number(gauge.rain_24h).toFixed(1)} mm`  : '—'],
+                        ['Last 7d',   gauge.rain_7d        != null ? `${Number(gauge.rain_7d).toFixed(1)} mm`   : '—'],
+                        ['Last 30d',  gauge.rain_30d       != null ? `${Number(gauge.rain_30d).toFixed(1)} mm`  : '—'],
+                        ['This year', gauge.rain_this_year != null ? `${Number(gauge.rain_this_year).toFixed(1)} mm` : '—'],
+                        ['All time',  gauge.rain_all_time  != null ? `${Number(gauge.rain_all_time).toFixed(1)} mm`  : '—'],
+                    ],
+                    theme: 'striped',
+                    headStyles: { fillColor: [59, 130, 246] },
+                    margin: { left: 40, right: 40 },
+                });
+
+                if (rgLastDetail && rgLastDetail.tracking_since) {
+                    const footY = (doc.lastAutoTable && doc.lastAutoTable.finalY + 16) || pageH - 30;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(120);
+                    const since = new Date(rgLastDetail.tracking_since + 'Z').toLocaleString('en-PK', { timeZone: 'Asia/Karachi' });
+                    doc.text(`Tracked since: ${since}  ·  ${rgLastDetail.total_rows} polls stored`, 40, footY);
+                }
+
+                doc.save(`rain-gauge-${gauge.id}-${new Date().toISOString().slice(0, 10)}.pdf`);
+            } catch (e) {
+                console.error('PDF generation failed:', e);
+                alert('Failed to generate PDF: ' + (e.message || e));
+            }
+        }
+
         // Format a Worker-returned UTC bucket label into a PKT display label,
         // varying by granularity (mirrors the React chart).
         function rgFormatChartLabel(period, granularity) {
@@ -6280,6 +6386,8 @@
                 const data = await resp.json();
                 if (!data.success) throw new Error(data.error || 'Failed to load detail');
 
+                rgLastDetail = data; // cache for the PDF report
+
                 const windows = data.windows || {};
                 uptimeGrid.innerHTML = ['1h', '24h', '7d', '30d', '1y'].map(w => {
                     const win = windows[w] || {};
@@ -6311,6 +6419,7 @@
             if (rgChartInstance) { rgChartInstance.destroy(); rgChartInstance = null; }
             rgChartData = null;
             rgCurrentGaugeId = null;
+            rgLastDetail = null;
         }
 
         // ============================================================

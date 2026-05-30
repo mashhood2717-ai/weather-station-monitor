@@ -138,6 +138,109 @@ export default function RainGauges({ isDark }) {
         setChartType('bar');
     };
 
+    // Build a per-gauge PDF on demand. Uses jsPDF + autotable (lazy-imported
+    // so it doesn't bloat the initial bundle). Includes: title, header info,
+    // uptime windows table, rain totals table, and a screenshot of the
+    // in-modal chart canvas.
+    const downloadPdf = useCallback(async () => {
+        if (!selectedGauge) return;
+        try {
+            const [{ jsPDF }, autoTableMod] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable'),
+            ]);
+            const autoTable = autoTableMod.default || autoTableMod;
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+
+            // Title
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(`Rain Gauge Report`, 40, 50);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(12);
+            doc.text(`${selectedGauge.name}`, 40, 70);
+            doc.setFontSize(9);
+            doc.setTextColor(120);
+            doc.text(`ID: ${selectedGauge.id}    Status: ${(selectedGauge.status || '').toUpperCase()}`, 40, 86);
+            const generatedAt = new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' });
+            doc.text(`Generated: ${generatedAt} PKT`, 40, 100);
+            doc.setTextColor(0);
+
+            // Uptime windows table
+            const win = detail?.windows || {};
+            const uptimeRows = ['1h', '24h', '7d', '30d', '1y'].map(w => [
+                w.toUpperCase(),
+                win[w]?.uptime != null ? `${win[w].uptime.toFixed(1)}%` : '—',
+                win[w]?.checks ?? 0,
+            ]);
+            autoTable(doc, {
+                startY: 120,
+                head: [['Window', 'Uptime', 'Polls']],
+                body: uptimeRows,
+                theme: 'striped',
+                headStyles: { fillColor: [16, 185, 129] },
+                margin: { left: 40, right: 40 },
+            });
+
+            // Embed the chart canvas if present
+            const cursor = doc.lastAutoTable?.finalY || 240;
+            let chartY = cursor + 16;
+            const canvas = chartCanvasRef.current;
+            if (canvas) {
+                try {
+                    const png = canvas.toDataURL('image/png');
+                    doc.setFontSize(10);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`Uptime history (${chartRange})`, 40, chartY);
+                    chartY += 6;
+                    const imgW = pageW - 80;
+                    const imgH = 180;
+                    doc.addImage(png, 'PNG', 40, chartY, imgW, imgH);
+                    chartY += imgH + 16;
+                } catch (e) {
+                    console.warn('chart embed failed:', e);
+                }
+            }
+
+            // Rain totals table
+            if (chartY > pageH - 200) { doc.addPage(); chartY = 50; }
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.text('Rain totals (live from upstream)', 40, chartY);
+            autoTable(doc, {
+                startY: chartY + 6,
+                head: [['Period', 'Rainfall']],
+                body: [
+                    ['Today',     selectedGauge.rain_daily != null ? `${Number(selectedGauge.rain_daily).toFixed(1)} mm` : '—'],
+                    ['Last 24h',  selectedGauge.rain_24h  != null ? `${Number(selectedGauge.rain_24h).toFixed(1)} mm`  : '—'],
+                    ['Last 7d',   selectedGauge.rain_7d   != null ? `${Number(selectedGauge.rain_7d).toFixed(1)} mm`   : '—'],
+                    ['Last 30d',  selectedGauge.rain_30d  != null ? `${Number(selectedGauge.rain_30d).toFixed(1)} mm`  : '—'],
+                    ['This year', selectedGauge.rain_this_year != null ? `${Number(selectedGauge.rain_this_year).toFixed(1)} mm` : '—'],
+                    ['All time',  selectedGauge.rain_all_time  != null ? `${Number(selectedGauge.rain_all_time).toFixed(1)} mm`  : '—'],
+                ],
+                theme: 'striped',
+                headStyles: { fillColor: [59, 130, 246] },
+                margin: { left: 40, right: 40 },
+            });
+
+            // Footer
+            const footY = doc.lastAutoTable?.finalY + 16 || pageH - 30;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            if (detail?.tracking_since) {
+                doc.text(`Tracked since: ${new Date(detail.tracking_since + 'Z').toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}  ·  ${detail.total_rows} polls stored`, 40, footY);
+            }
+
+            doc.save(`rain-gauge-${selectedGauge.id}-${new Date().toISOString().slice(0, 10)}.pdf`);
+        } catch (e) {
+            console.error('PDF generation failed:', e);
+            message.error('Failed to generate PDF: ' + (e.message || e));
+        }
+    }, [selectedGauge, detail, chartRange]);
+
     // Fetch history whenever the modal is open and the chart range changes.
     useEffect(() => {
         if (!selectedGauge) return;
@@ -597,6 +700,10 @@ export default function RainGauges({ isDark }) {
                                         window.location.href = url;
                                     }}
                                 >📥 Export CSV</Button>
+                                <Button
+                                    size="small"
+                                    onClick={downloadPdf}
+                                >📄 Download PDF</Button>
                             </Space>
                         </div>
                         <Spin spinning={chartLoading}>
