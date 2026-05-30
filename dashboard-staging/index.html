@@ -2122,7 +2122,7 @@
 
         <!-- Tab 3: Rain Gauges -->
         <div id="tab-rain" class="tab-content" style="display: none;">
-            <div class="stats-grid" style="grid-template-columns: repeat(7, 1fr);">
+            <div class="stats-grid" style="grid-template-columns: repeat(9, 1fr);">
                 <div class="stat-card">
                     <div class="stat-label">Total Gauges</div>
                     <div class="stat-value" id="rgTotalCount">0</div>
@@ -2137,6 +2137,16 @@
                     <div class="stat-label">Offline</div>
                     <div class="stat-value" id="rgOfflineCount">0</div>
                     <div class="stat-station">Currently inactive</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #10b981;">
+                    <div class="stat-label" id="rgAvgUptimeLabel">Avg Uptime (24h)</div>
+                    <div class="stat-value" id="rgAvgUptimeValue" style="color:#10b981;">—</div>
+                    <div class="stat-station" id="rgAvgUptimeSub">—</div>
+                </div>
+                <div class="stat-card" style="border-left: 3px solid #ef4444;">
+                    <div class="stat-label" id="rgAvgDowntimeLabel">Avg Downtime (24h)</div>
+                    <div class="stat-value" id="rgAvgDowntimeValue" style="color:#ef4444;">—</div>
+                    <div class="stat-station" id="rgAvgDowntimeSub">—</div>
                 </div>
                 <div class="stat-card rain">
                     <div class="stat-label">Daily Max Rainfall</div>
@@ -2181,6 +2191,7 @@
                             <option value="30d">30d</option>
                             <option value="1y">1y</option>
                         </select>
+                        <button class="filter-btn" onclick="exportAllRainGaugesCsv()" title="Export all gauges (15-min raw rows)">📥 Export CSV</button>
                         <button class="filter-btn" onclick="fetchRainGaugesData()" title="Refresh">🔄 Refresh</button>
                     </div>
                 </div>
@@ -2324,7 +2335,7 @@
 
     <!-- Rain Gauge Detail Modal -->
     <div id="rainGaugeDetailModal" class="modal-overlay" style="display:none;">
-        <div class="modal-content" style="max-width:840px;">
+        <div class="modal-content" style="max-width:960px;">
             <button class="modal-close" onclick="closeRainGaugeDetail()">&times;</button>
             <div class="modal-header">
                 <h2 id="rgDetailTitle">🌧️  Gauge Detail</h2>
@@ -2339,7 +2350,32 @@
                     <div style="text-align:center; padding:20px; color:var(--text-secondary);">Loading…</div>
                 </div>
 
-                <div style="font-weight:600; font-size:13px; margin-bottom:8px; color:var(--text-secondary);">Rain totals (live from upstream)</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+                    <div style="font-weight:600; font-size:13px; color:var(--text-secondary);">
+                        Uptime history
+                        <span id="rgChartAvgBadge" style="display:none; margin-left:10px; font-size:11px; font-weight:500; padding:2px 8px; border-radius:10px;"></span>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; gap:2px;">
+                            <button class="chart-toggle active" data-rg-type="bar" onclick="rgSetChartType('bar')">Bar</button>
+                            <button class="chart-toggle" data-rg-type="line" onclick="rgSetChartType('line')">Line</button>
+                        </div>
+                        <div style="display:flex; gap:2px;">
+                            <button class="chart-toggle active" data-rg-range="24h" onclick="rgSetChartRange('24h')">24h</button>
+                            <button class="chart-toggle" data-rg-range="daily" onclick="rgSetChartRange('daily')">Daily</button>
+                            <button class="chart-toggle" data-rg-range="7d" onclick="rgSetChartRange('7d')">7d</button>
+                            <button class="chart-toggle" data-rg-range="30d" onclick="rgSetChartRange('30d')">30d</button>
+                            <button class="chart-toggle" data-rg-range="1y" onclick="rgSetChartRange('1y')">1y</button>
+                            <button class="chart-toggle" data-rg-range="all" onclick="rgSetChartRange('all')">All</button>
+                        </div>
+                        <button class="filter-btn" onclick="rgExportSelectedCsv()" title="Export this gauge's raw 15-min rows for selected range">📥 Export CSV</button>
+                    </div>
+                </div>
+                <div style="position:relative; height:220px;">
+                    <canvas id="rgDetailChart"></canvas>
+                </div>
+
+                <div style="font-weight:600; font-size:13px; margin-top:18px; margin-bottom:8px; color:var(--text-secondary);">Rain totals (live from upstream)</div>
                 <div id="rgDetailRainGrid" style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px;"></div>
 
                 <div id="rgDetailMeta" style="margin-top:14px; font-size:12px; color:var(--text-secondary);"></div>
@@ -5915,6 +5951,26 @@
             document.getElementById('rgOnlineCount').textContent = online;
             document.getElementById('rgOfflineCount').textContent = total - online;
 
+            // Aggregate uptime/downtime across all gauges with real data in the
+            // currently selected range. Mirrors the React dashboard's tiles.
+            const withChecks = rainGaugesData.filter(g => g.checks_24h > 0 && g.uptime_24h !== null && g.uptime_24h !== undefined);
+            const avgUptime = withChecks.length
+                ? withChecks.reduce((a, g) => a + Number(g.uptime_24h), 0) / withChecks.length
+                : null;
+            const uptimeLabel = document.getElementById('rgAvgUptimeLabel');
+            const uptimeValue = document.getElementById('rgAvgUptimeValue');
+            const uptimeSub   = document.getElementById('rgAvgUptimeSub');
+            const downtimeLabel = document.getElementById('rgAvgDowntimeLabel');
+            const downtimeValue = document.getElementById('rgAvgDowntimeValue');
+            const downtimeSub   = document.getElementById('rgAvgDowntimeSub');
+            if (uptimeLabel) uptimeLabel.textContent = `Avg Uptime (${rgRange})`;
+            if (downtimeLabel) downtimeLabel.textContent = `Avg Downtime (${rgRange})`;
+            if (uptimeValue) uptimeValue.textContent = avgUptime !== null ? `${avgUptime.toFixed(1)}%` : '—';
+            if (downtimeValue) downtimeValue.textContent = avgUptime !== null ? `${(100 - avgUptime).toFixed(1)}%` : '—';
+            const subLabel = withChecks.length ? `${withChecks.length} gauges avg` : '—';
+            if (uptimeSub) uptimeSub.textContent = subLabel;
+            if (downtimeSub) downtimeSub.textContent = subLabel;
+
             const periods = [
                 { key: 'rain_daily',     valueEl: 'rgMaxDailyValue',   stationEl: 'rgMaxDailyStation' },
                 { key: 'rain_7d',        valueEl: 'rgMaxWeeklyValue',  stationEl: 'rgMaxWeeklyStation' },
@@ -5931,6 +5987,10 @@
                 document.getElementById(p.valueEl).textContent = max ? `${Number(max[p.key]).toFixed(1)} mm` : '0.0 mm';
                 document.getElementById(p.stationEl).textContent = max ? max.name : '—';
             }
+        }
+
+        function exportAllRainGaugesCsv() {
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/rain-gauges-export?range=${rgRange}`;
         }
 
         function rgFormatMm(v) {
@@ -6040,12 +6100,145 @@
         }
 
         // ---- Rain gauge detail modal ----
+        // Local state for the in-modal chart
+        let rgCurrentGaugeId = null;
+        let rgChartRange = '24h';   // 24h | daily | 7d | 30d | 1y | all
+        let rgChartType  = 'bar';   // 'bar' | 'line'
+        let rgChartInstance = null;
+
+        function rgSetChartType(type) {
+            rgChartType = type;
+            document.querySelectorAll('[data-rg-type]').forEach(b => b.classList.toggle('active', b.dataset.rgType === type));
+            renderRainGaugeChart();
+        }
+
+        function rgSetChartRange(range) {
+            rgChartRange = range;
+            document.querySelectorAll('[data-rg-range]').forEach(b => b.classList.toggle('active', b.dataset.rgRange === range));
+            loadRainGaugeHistory();
+        }
+
+        function rgExportSelectedCsv() {
+            if (!rgCurrentGaugeId) return;
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/rain-gauge-export/${encodeURIComponent(rgCurrentGaugeId)}?range=${rgChartRange}`;
+        }
+
+        // Format a Worker-returned UTC bucket label into a PKT display label,
+        // varying by granularity (mirrors the React chart).
+        function rgFormatChartLabel(period, granularity) {
+            if (granularity === '15min') {
+                const m = period.match(/(\d{2}):(\d{2})/);
+                if (!m) return period;
+                const pktHour = (parseInt(m[1], 10) + 5) % 24;
+                return String(pktHour).padStart(2, '0') + ':' + m[2];
+            }
+            if (granularity === '6hour') {
+                const parts = period.split(' ');
+                if (parts.length < 2) return period;
+                const dateStr = parts[0];
+                const m = parts[1].match(/(\d{2}):/);
+                const pktHour = m ? (parseInt(m[1], 10) + 5) % 24 : 0;
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + String(pktHour).padStart(2, '0') + ':00';
+            }
+            if (granularity === 'daily') {
+                const d = new Date(period + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+            if (granularity === 'monthly') {
+                const [Y, M] = period.split('-');
+                if (!Y || !M) return period;
+                const d = new Date(parseInt(Y, 10), parseInt(M, 10) - 1, 1);
+                return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+            return period;
+        }
+
+        let rgChartData = null;
+        async function loadRainGaugeHistory() {
+            if (!rgCurrentGaugeId) return;
+            try {
+                const resp = await fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauge-history/${encodeURIComponent(rgCurrentGaugeId)}?range=${rgChartRange}`);
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error || 'history fetch failed');
+                rgChartData = data;
+                // Update overall badge
+                const badge = document.getElementById('rgChartAvgBadge');
+                if (badge) {
+                    const v = data.overall_uptime;
+                    const color = v >= 95 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444';
+                    const bg = v >= 95 ? 'rgba(16,185,129,0.15)' : v >= 80 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
+                    badge.style.display = 'inline-block';
+                    badge.style.background = bg;
+                    badge.style.color = color;
+                    badge.textContent = `Avg: ${v}%`;
+                }
+                renderRainGaugeChart();
+            } catch (e) {
+                console.warn('history fetch failed', e.message);
+            }
+        }
+
+        function renderRainGaugeChart() {
+            if (!rgChartData || !rgChartData.trend) return;
+            const canvas = document.getElementById('rgDetailChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            if (rgChartInstance) { rgChartInstance.destroy(); rgChartInstance = null; }
+
+            const labels = rgChartData.trend.map(t => rgFormatChartLabel(t.period, rgChartData.granularity));
+            const values = rgChartData.trend.map(t => Number(t.uptime_pct) || 0);
+            const colors = values.map(v => v >= 95 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444');
+
+            const isLine = rgChartType === 'line';
+            rgChartInstance = new Chart(ctx, {
+                type: isLine ? 'line' : 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Uptime %',
+                        data: values,
+                        backgroundColor: isLine ? 'rgba(16,185,129,0.15)' : colors,
+                        borderColor: isLine ? '#10b981' : colors,
+                        borderWidth: isLine ? 2 : 0,
+                        fill: isLine,
+                        tension: isLine ? 0.3 : 0,
+                        pointRadius: isLine ? 3 : 0,
+                        pointBackgroundColor: '#10b981',
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: v => v + '%' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+                        x: { ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, autoSkipPadding: 10 }, grid: { display: false } },
+                    },
+                },
+            });
+        }
+
         // Fetches /api/rain-gauge-detail/:id which returns all 5 uptime windows
         // (1h, 24h, 7d, 30d, 1y) in a single query. The rain totals come from
         // the proxy fetch we already have on the row.
         async function openRainGaugeDetail(gaugeId) {
             const gauge = rainGaugesData.find(g => g.id === gaugeId);
             if (!gauge) return;
+
+            // Remember which gauge is open (for chart reload + CSV export buttons)
+            rgCurrentGaugeId = gaugeId;
+            rgChartRange = '24h';
+            rgChartType = 'bar';
+            // Reset toggle button active states inside modal
+            document.querySelectorAll('[data-rg-range]').forEach(b => b.classList.toggle('active', b.dataset.rgRange === '24h'));
+            document.querySelectorAll('[data-rg-type]').forEach(b => b.classList.toggle('active', b.dataset.rgType === 'bar'));
+            // Reset chart state
+            if (rgChartInstance) { rgChartInstance.destroy(); rgChartInstance = null; }
+            rgChartData = null;
+            const badge = document.getElementById('rgChartAvgBadge');
+            if (badge) badge.style.display = 'none';
 
             // Populate header + reset bodies
             document.getElementById('rgDetailTitle').textContent = `🌧️  ${gauge.name}`;
@@ -6077,6 +6270,9 @@
             }).join('');
 
             document.getElementById('rainGaugeDetailModal').style.display = 'flex';
+
+            // Kick off the history chart fetch in parallel with the all-windows fetch
+            loadRainGaugeHistory();
 
             // Now fetch the all-windows uptime
             try {
@@ -6111,6 +6307,10 @@
 
         function closeRainGaugeDetail() {
             document.getElementById('rainGaugeDetailModal').style.display = 'none';
+            // Tear down the chart so a re-open starts fresh
+            if (rgChartInstance) { rgChartInstance.destroy(); rgChartInstance = null; }
+            rgChartData = null;
+            rgCurrentGaugeId = null;
         }
 
         // ============================================================

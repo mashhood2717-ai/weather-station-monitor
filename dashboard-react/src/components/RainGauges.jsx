@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Card, Statistic, Row, Col, Input, Select, Button, Table, Tag, Space, Spin, Progress, Typography, Modal, message } from 'antd';
+import { Card, Statistic, Row, Col, Input, Select, Button, Table, Tag, Space, Spin, Progress, Typography, Modal, Radio, message } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
 
@@ -52,6 +52,13 @@ export default function RainGauges({ isDark }) {
     const [selectedGauge, setSelectedGauge] = useState(null);
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
+
+    // In-modal chart state
+    const [chartRange, setChartRange] = useState('24h'); // 24h | 7d | 30d | 1y
+    const [chartType, setChartType] = useState('bar');   // 'bar' | 'line'
+    const [chartData, setChartData] = useState(null);
+    const [chartLoading, setChartLoading] = useState(false);
+    const chartCanvasRef = useRef(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -126,7 +133,174 @@ export default function RainGauges({ isDark }) {
     const closeDetail = () => {
         setSelectedGauge(null);
         setDetail(null);
+        setChartData(null);
+        setChartRange('24h');
+        setChartType('bar');
     };
+
+    // Fetch history whenever the modal is open and the chart range changes.
+    useEffect(() => {
+        if (!selectedGauge) return;
+        let cancelled = false;
+        setChartLoading(true);
+        axios.get(`${RAIN_GAUGES_API_BASE}/api/rain-gauge-history/${encodeURIComponent(selectedGauge.id)}?range=${chartRange}`)
+            .then(r => { if (!cancelled && r.data?.success) setChartData(r.data); })
+            .catch(e => { if (!cancelled) console.warn('history fetch failed', e.message); })
+            .finally(() => { if (!cancelled) setChartLoading(false); });
+        return () => { cancelled = true; };
+    }, [selectedGauge, chartRange]);
+
+    // Canvas chart — uptime % per bucket. Bar by default; line on toggle.
+    // Matches UptimeTrendChart.jsx (stations) styling so it feels consistent.
+    useEffect(() => {
+        if (!chartData?.trend || !chartCanvasRef.current) return;
+        const canvas = chartCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const W = rect.width;
+        const H = 200;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.scale(dpr, dpr);
+
+        const pad = { top: 16, right: 12, bottom: 32, left: 40 };
+        const plotW = W - pad.left - pad.right;
+        const plotH = H - pad.top - pad.bottom;
+        const trend = chartData.trend;
+        if (!trend.length) {
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+            ctx.textAlign = 'center';
+            ctx.font = '12px Inter, sans-serif';
+            ctx.fillText('Not enough data yet — chart will fill in as polls accumulate', W / 2, H / 2);
+            return;
+        }
+
+        const values = trend.map(t => Number(t.uptime_pct) || 0);
+        const labels = trend.map(t => {
+            // The Worker returns periods as UTC strings; for time-of-day formats
+            // we add +5h to display in PKT.
+            const g = chartData.granularity;
+            if (g === '15min') {
+                // "2026-05-30 14:15:00" UTC → "19:15" PKT
+                const m = t.period.match(/(\d{2}):(\d{2})/);
+                if (!m) return t.period;
+                const utcHour = parseInt(m[1], 10);
+                const min = m[2];
+                const pktHour = (utcHour + 5) % 24;
+                return `${String(pktHour).padStart(2, '0')}:${min}`;
+            }
+            if (g === '6hour') {
+                // "2026-05-30 18:00:00" UTC → "MMM DD HH:00" PKT
+                const parts = t.period.split(' ');
+                if (parts.length < 2) return t.period;
+                const dateStr = parts[0];
+                const m = parts[1].match(/(\d{2}):/);
+                const utcHour = m ? parseInt(m[1], 10) : 0;
+                const pktHour = (utcHour + 5) % 24;
+                const d = new Date(dateStr + 'T00:00:00');
+                return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${String(pktHour).padStart(2, '0')}:00`;
+            }
+            if (g === 'daily') {
+                const d = new Date(t.period + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+            if (g === 'monthly') {
+                // "2026-05" → "May 2026"
+                const [Y, M] = t.period.split('-');
+                if (!Y || !M) return t.period;
+                const d = new Date(parseInt(Y, 10), parseInt(M, 10) - 1, 1);
+                return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+            return t.period;
+        });
+
+        const minVal = Math.max(0, Math.min(...values) - 5);
+        const maxVal = 100;
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Y-axis grid + labels
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = pad.top + (plotH / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(W - pad.right, y);
+            ctx.stroke();
+            const val = maxVal - ((maxVal - minVal) / 4) * i;
+            ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+            ctx.font = '10px Inter, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(val.toFixed(0) + '%', pad.left - 6, y + 3);
+        }
+
+        // X-axis labels (every nth so they don't overlap)
+        const labelStep = Math.max(1, Math.floor(values.length / 7));
+        ctx.textAlign = 'center';
+        for (let i = 0; i < labels.length; i += labelStep) {
+            const x = pad.left + (i / Math.max(1, values.length - 1)) * plotW;
+            ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+            ctx.font = '10px Inter, sans-serif';
+            ctx.fillText(labels[i], x, H - pad.bottom + 16);
+        }
+
+        const yOf = (v) => pad.top + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
+
+        if (chartType === 'bar') {
+            const slot = plotW / values.length;
+            const barW = Math.max(2, Math.min(28, slot * 0.7));
+            for (let i = 0; i < values.length; i++) {
+                const v = values[i];
+                const cx = pad.left + slot * i + slot / 2;
+                const y = yOf(v);
+                const color = v >= 95 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444';
+                ctx.fillStyle = color;
+                ctx.fillRect(cx - barW / 2, y, barW, pad.top + plotH - y);
+            }
+        } else {
+            // Filled area + line
+            const gradient = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.30)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.02)');
+            ctx.beginPath();
+            ctx.moveTo(pad.left, H - pad.bottom);
+            values.forEach((v, i) => {
+                const x = pad.left + (i / Math.max(1, values.length - 1)) * plotW;
+                ctx.lineTo(x, yOf(v));
+            });
+            ctx.lineTo(pad.left + plotW, H - pad.bottom);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2;
+            values.forEach((v, i) => {
+                const x = pad.left + (i / Math.max(1, values.length - 1)) * plotW;
+                if (i === 0) ctx.moveTo(x, yOf(v));
+                else ctx.lineTo(x, yOf(v));
+            });
+            ctx.stroke();
+
+            // Dots
+            values.forEach((v, i) => {
+                const x = pad.left + (i / Math.max(1, values.length - 1)) * plotW;
+                ctx.beginPath();
+                ctx.arc(x, yOf(v), 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#10b981';
+                ctx.fill();
+                ctx.strokeStyle = isDark ? '#1e293b' : '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+    }, [chartData, chartType, isDark]);
 
     const stats = useMemo(() => {
         const total = gauges.length;
@@ -142,10 +316,22 @@ export default function RainGauges({ isDark }) {
             return max;
         };
 
+        // Aggregate uptime/downtime across all gauges with real data in the
+        // currently selected range. Mirrors the stations dashboard's "Avg
+        // Uptime / Avg Downtime" tiles. Computed client-side from data we
+        // already fetched — no extra API call.
+        const withChecks = gauges.filter(g => g.checks_24h > 0 && g.uptime_24h !== null && g.uptime_24h !== undefined);
+        const avgUptime = withChecks.length
+            ? withChecks.reduce((a, g) => a + Number(g.uptime_24h), 0) / withChecks.length
+            : null;
+
         return {
             total,
             online,
             offline: total - online,
+            avgUptime: avgUptime !== null ? Number(avgUptime.toFixed(1)) : null,
+            avgDowntime: avgUptime !== null ? Number((100 - avgUptime).toFixed(1)) : null,
+            uptimeStationCount: withChecks.length,
             maxDaily:   maxBy('rain_daily'),
             maxWeekly:  maxBy('rain_7d'),
             maxMonthly: maxBy('rain_30d'),
@@ -184,6 +370,18 @@ export default function RainGauges({ isDark }) {
         { title: '🌧️ Total Gauges', value: stats.total, color: '#0ea5e9', sub: 'DynaSys Network' },
         { title: '🟢 Online', value: stats.online, color: '#10b981', sub: 'Currently active' },
         { title: '🔴 Offline', value: stats.offline, color: '#ef4444', sub: 'Currently inactive' },
+        {
+            title: `📈 Avg Uptime (${range})`,
+            value: stats.avgUptime !== null ? `${stats.avgUptime}%` : '—',
+            color: '#10b981',
+            sub: stats.uptimeStationCount ? `${stats.uptimeStationCount} gauges avg` : '—',
+        },
+        {
+            title: `📉 Avg Downtime (${range})`,
+            value: stats.avgDowntime !== null ? `${stats.avgDowntime}%` : '—',
+            color: '#ef4444',
+            sub: stats.uptimeStationCount ? `${stats.uptimeStationCount} gauges avg` : '—',
+        },
         maxCard('💧 Daily Max Rainfall',   '#3b82f6', stats.maxDaily,   'rain_daily'),
         maxCard('💦 Weekly Max Rainfall',  '#06b6d4', stats.maxWeekly,  'rain_7d'),
         maxCard('☔ Monthly Max Rainfall', '#8b5cf6', stats.maxMonthly, 'rain_30d'),
@@ -297,6 +495,12 @@ export default function RainGauges({ isDark }) {
                             <Text strong style={{ fontSize: 13, color: subColor }}>Range:</Text>
                             <Select value={range} onChange={setRange} style={{ width: 110 }} options={RANGE_OPTIONS} />
                         </Space>
+                        <Button
+                            onClick={() => {
+                                // 15-min raw rows for ALL gauges in the selected range.
+                                window.location.href = `${RAIN_GAUGES_API_BASE}/api/rain-gauges-export?range=${range}`;
+                            }}
+                        >📥 Export CSV</Button>
                         <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>Refresh</Button>
                     </Space>
                 </div>
@@ -317,13 +521,13 @@ export default function RainGauges({ isDark }) {
                 </Spin>
             </Card>
 
-            {/* Gauge detail modal — shows all 5 uptime windows + current rain totals */}
+            {/* Gauge detail modal — shows all 5 uptime windows + chart + rain totals */}
             <Modal
                 title={selectedGauge ? `🌧️  ${selectedGauge.name}` : 'Gauge Detail'}
                 open={!!selectedGauge}
                 onCancel={closeDetail}
                 footer={<Button onClick={closeDetail}>Close</Button>}
-                width={760}
+                width={920}
             >
                 {selectedGauge && (
                     <div>
@@ -359,6 +563,46 @@ export default function RainGauges({ isDark }) {
                                     );
                                 })}
                             </Row>
+                        </Spin>
+
+                        {/* Uptime/downtime chart over time — bucketed by the selected range */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: subColor }}>
+                                Uptime history
+                                {chartData && (
+                                    <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 10,
+                                        background: chartData.overall_uptime >= 95 ? 'rgba(16,185,129,0.15)' : chartData.overall_uptime >= 80 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                                        color: chartData.overall_uptime >= 95 ? '#10b981' : chartData.overall_uptime >= 80 ? '#f59e0b' : '#ef4444' }}>
+                                        Avg: {chartData.overall_uptime}%
+                                    </span>
+                                )}
+                            </div>
+                            <Space size={6} wrap>
+                                <Radio.Group size="small" value={chartType} onChange={e => setChartType(e.target.value)} buttonStyle="solid">
+                                    <Radio.Button value="bar">Bar</Radio.Button>
+                                    <Radio.Button value="line">Line</Radio.Button>
+                                </Radio.Group>
+                                <Radio.Group size="small" value={chartRange} onChange={e => setChartRange(e.target.value)} buttonStyle="solid">
+                                    <Radio.Button value="24h">24h</Radio.Button>
+                                    <Radio.Button value="daily">Daily</Radio.Button>
+                                    <Radio.Button value="7d">7d</Radio.Button>
+                                    <Radio.Button value="30d">30d</Radio.Button>
+                                    <Radio.Button value="1y">1y</Radio.Button>
+                                    <Radio.Button value="all">All</Radio.Button>
+                                </Radio.Group>
+                                <Button
+                                    size="small"
+                                    onClick={() => {
+                                        const url = `${RAIN_GAUGES_API_BASE}/api/rain-gauge-export/${encodeURIComponent(selectedGauge.id)}?range=${chartRange}`;
+                                        window.location.href = url;
+                                    }}
+                                >📥 Export CSV</Button>
+                            </Space>
+                        </div>
+                        <Spin spinning={chartLoading}>
+                            <div style={{ width: '100%', height: 200, position: 'relative' }}>
+                                <canvas ref={chartCanvasRef} style={{ width: '100%', height: 200 }} />
+                            </div>
                         </Spin>
 
                         <div style={{ fontWeight: 600, fontSize: 13, marginTop: 18, marginBottom: 8, color: subColor }}>Rain totals (live from upstream)</div>

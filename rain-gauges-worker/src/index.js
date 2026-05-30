@@ -205,6 +205,201 @@ export default {
         });
       }
 
+      // --- Per-gauge time-bucketed history (powers the in-modal chart) ---
+      // Returns uptime % per bucket over the selected range. Bucket size adapts
+      // to range so each chart has a sensible number of points (24-50ish).
+      if (path.startsWith('/api/rain-gauge-history/') && request.method === 'GET') {
+        const gaugeId = decodeURIComponent(path.split('/').pop());
+        if (!gaugeId) return jsonResponse({ error: 'missing gauge id' }, { status: 400 }, corsHeaders);
+
+        const range = url.searchParams.get('range') || '24h';
+        // Bucket sizes per range:
+        //   24h    → 15-min   (96 buckets, one per poll)
+        //   daily  → 15-min   (today since PKT midnight, up to 96 buckets)
+        //   7d     → 6-hour   (28 buckets)
+        //   30d    → daily    (30 buckets)
+        //   1y     → monthly  (12 buckets)
+        //   all    → monthly  (open-ended, however many months we've collected)
+        const bucket15min = `strftime('%Y-%m-%d %H:%M:00', datetime(strftime('%s', timestamp) / 900   * 900,   'unixepoch'))`;
+        const bucket6hour = `strftime('%Y-%m-%d %H:00:00', datetime(strftime('%s', timestamp) / 21600 * 21600, 'unixepoch'))`;
+        let groupExpr, whereTime, granularity;
+        switch (range) {
+          case 'daily':
+            // Today only, since PKT midnight (= UTC midnight - 5 hours)
+            groupExpr   = bucket15min;
+            whereTime   = "timestamp >= datetime('now', 'start of day', '-5 hours')";
+            granularity = '15min';
+            break;
+          case '7d':
+            groupExpr   = bucket6hour;
+            whereTime   = "timestamp >= datetime('now', '-7 days')";
+            granularity = '6hour';
+            break;
+          case '30d':
+            groupExpr   = "strftime('%Y-%m-%d', timestamp)";
+            whereTime   = "timestamp >= datetime('now', '-30 days')";
+            granularity = 'daily';
+            break;
+          case '1y':
+            groupExpr   = "strftime('%Y-%m', timestamp)";
+            whereTime   = "timestamp >= datetime('now', '-1 year')";
+            granularity = 'monthly';
+            break;
+          case 'all':
+            groupExpr   = "strftime('%Y-%m', timestamp)";
+            whereTime   = "1=1"; // no time bound
+            granularity = 'monthly';
+            break;
+          case '24h':
+          default:
+            groupExpr   = bucket15min;
+            whereTime   = "timestamp >= datetime('now', '-24 hours')";
+            granularity = '15min';
+            break;
+        }
+
+        return await cacheAndReturn(`history:${gaugeId}:${range}`, CACHE_TTL_MS, async () => {
+          const result = await env.DB.prepare(`
+            SELECT
+              ${groupExpr} AS period,
+              COUNT(*) AS total_checks,
+              SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) AS online_checks
+            FROM rain_gauge_logs
+            WHERE gauge_id = ? AND ${whereTime}
+            GROUP BY period
+            ORDER BY period ASC
+          `).bind(gaugeId).all();
+
+          const rows = result.results || [];
+          const trend = rows.map(r => ({
+            period: r.period,
+            total_checks: r.total_checks || 0,
+            online_checks: r.online_checks || 0,
+            uptime_pct: r.total_checks > 0
+              ? parseFloat(((r.online_checks / r.total_checks) * 100).toFixed(1))
+              : 0,
+          }));
+
+          // Overall average for the badge in the chart header
+          let totalOnline = 0, totalChecks = 0;
+          for (const r of rows) { totalOnline += r.online_checks || 0; totalChecks += r.total_checks || 0; }
+          const overall = totalChecks > 0 ? parseFloat(((totalOnline / totalChecks) * 100).toFixed(1)) : 0;
+
+          return jsonResponse({
+            success: true,
+            gauge_id: gaugeId,
+            range,
+            granularity,
+            trend,
+            overall_uptime: overall,
+          }, {}, corsHeaders);
+        });
+      }
+
+      // --- Per-gauge CSV export ---
+      // Always at native 15-min poll granularity (one CSV row per poll), no
+      // bucketing — gives users the raw timeline of online/offline state for
+      // their own analysis. range= filters which rows are included.
+      if (path.startsWith('/api/rain-gauge-export/') && request.method === 'GET') {
+        const gaugeId = decodeURIComponent(path.split('/').pop());
+        if (!gaugeId) return jsonResponse({ error: 'missing gauge id' }, { status: 400 }, corsHeaders);
+
+        const range = url.searchParams.get('range') || '24h';
+        let whereTime;
+        switch (range) {
+          case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
+          case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
+          case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;
+          case '1y':    whereTime = "timestamp >= datetime('now', '-1 year')";  break;
+          case 'all':   whereTime = "1=1";                                       break;
+          case '24h':
+          default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
+        }
+
+        const result = await env.DB.prepare(`
+          SELECT timestamp, is_online
+          FROM rain_gauge_logs
+          WHERE gauge_id = ? AND ${whereTime}
+          ORDER BY timestamp ASC
+        `).bind(gaugeId).all();
+        const rows = result.results || [];
+
+        // Build CSV with both UTC and PKT timestamps for analyst convenience
+        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'is_online', 'status'];
+        const lines = [headers.join(',')];
+        for (const r of rows) {
+          // r.timestamp is "YYYY-MM-DD HH:MM:SS" UTC. PKT = +5h.
+          const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
+          const pktMs = utcDate.getTime() + 5 * 60 * 60 * 1000;
+          const pkt = new Date(pktMs).toISOString().replace('T', ' ').substring(0, 19);
+          lines.push([
+            r.timestamp,
+            pkt,
+            gaugeId,
+            r.is_online,
+            r.is_online === 1 ? 'online' : 'offline',
+          ].join(','));
+        }
+
+        const csv = lines.join('\r\n');
+        const filename = `rain-gauge-${gaugeId}-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+        return new Response(csv, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
+      // --- All-gauges CSV export (every gauge, native 15-min rows) ---
+      if (path === '/api/rain-gauges-export' && request.method === 'GET') {
+        const range = url.searchParams.get('range') || '24h';
+        let whereTime;
+        switch (range) {
+          case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
+          case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
+          case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;
+          case '1y':    whereTime = "timestamp >= datetime('now', '-1 year')";  break;
+          case 'all':   whereTime = "1=1";                                       break;
+          case '24h':
+          default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
+        }
+
+        const result = await env.DB.prepare(`
+          SELECT timestamp, gauge_id, is_online
+          FROM rain_gauge_logs
+          WHERE ${whereTime}
+          ORDER BY timestamp ASC, gauge_id ASC
+        `).all();
+        const rows = result.results || [];
+
+        const headers = ['timestamp_utc', 'timestamp_pkt', 'gauge_id', 'is_online', 'status'];
+        const lines = [headers.join(',')];
+        for (const r of rows) {
+          const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
+          const pktMs = utcDate.getTime() + 5 * 60 * 60 * 1000;
+          const pkt = new Date(pktMs).toISOString().replace('T', ' ').substring(0, 19);
+          lines.push([
+            r.timestamp,
+            pkt,
+            r.gauge_id,
+            r.is_online,
+            r.is_online === 1 ? 'online' : 'offline',
+          ].join(','));
+        }
+
+        const csv = lines.join('\r\n');
+        const filename = `rain-gauges-all-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+        return new Response(csv, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
       // --- Per-gauge detail (powers the dashboard's gauge-click modal) ---
       // Returns all uptime windows (1h, 24h, 7d, 30d, 1y) for one gauge in a
       // single query. Scans only that gauge's last-year rows, so the SQL is
