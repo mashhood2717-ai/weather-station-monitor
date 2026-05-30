@@ -1,0 +1,35 @@
+# Dedicated Worker for rain-gauge uptime tracking.
+# Single environment — there's only one upstream rain-gauge backend and one set
+# of dashboard consumers, so a staging/production split would just add overhead.
+# Kept fully separate from the stations Worker (different Cloudflare account
+# entirely: Weatherwalayofficial@gmail.com) so issues on either side never
+# block the other.
+#
+# Deploy: `npx wrangler deploy` (credentials sourced from rain-gauges-worker/.env)
+# URL:    https://weatherwalay-rain-gauges.weatherwalayofficial.workers.dev
+
+name = "weatherwalay-rain-gauges"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "fcf601b3bc6d53b2abd422084c57e6a8"
+
+workers_dev = true
+
+# D1 binding — filled in after `wrangler d1 create weatherwalay-rain-gauges-db`.
+[[d1_databases]]
+binding = "DB"
+database_name = "weatherwalay-rain-gauges-db"
+database_id = "c69f2314-dda8-47af-ad57-c22ba66a420c"
+
+# Cron — every 15 minutes. Lightweight: 1 fetch upstream + 1 batched INSERT per
+# gauge (87 rows). At 96 fires/day × 87 inserts = 8,352 writes/day = 8.4% of D1
+# free tier. The 1h cron from the stations side that previously caused
+# "15.97B reads" was a different pattern; this is INSERT-only and cheap.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+ENVIRONMENT = "production"
+RAIN_GAUGE_UPSTREAM_URL = "https://rain-gauge-backend.onrender.com/api"

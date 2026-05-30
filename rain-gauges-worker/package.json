@@ -1,0 +1,11 @@
+{
+  "name": "weatherwalay-rain-gauges-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dedicated Cloudflare Worker for rain-gauge uptime tracking, separate from the stations Worker.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --remote",
+    "schema": "wrangler d1 execute weatherwalay-rain-gauges-db --remote --file=./schema.sql"
+  }
+}
