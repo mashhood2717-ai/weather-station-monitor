@@ -5,7 +5,7 @@ import { API_BASE } from '../utils/constants';
 
 export default function UptimeTrendChart({ isDark }) {
     const [range, setRange] = useState('24h');
-    const [chartType, setChartType] = useState('line');
+    const [chartType, setChartType] = useState('bar');
     const [data, setData] = useState(null);
     const canvasRef = useRef(null);
     const chartRef = useRef(null);
