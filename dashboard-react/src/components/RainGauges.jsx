@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Card, Statistic, Row, Col, Input, Select, Button, Table, Tag, Space, Spin, Progress, Typography, Modal, Radio, message } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
+import WeatherStationsView from './WeatherStationsView';
 
 const { Text } = Typography;
 
@@ -40,6 +41,11 @@ function MmCell({ value }) {
 }
 
 export default function RainGauges({ isDark }) {
+    // Sub-toggle inside this tab: rain gauges (87) vs weather stations (3).
+    // The two views have completely different columns / charts / modals, so
+    // they're separate components — this state just picks which one to render.
+    const [subView, setSubView] = useState('rg'); // 'rg' | 'ws'
+
     const [gauges, setGauges] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -716,6 +722,19 @@ export default function RainGauges({ isDark }) {
 
     return (
         <div>
+            {/* Sub-view toggle: Rain Gauges vs Weather Stations. The two have
+                different shapes and live charts so we render them as separate
+                components rather than trying to unify the table. */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 8 }}>
+                <Radio.Group value={subView} onChange={(e) => setSubView(e.target.value)} buttonStyle="solid" size="middle">
+                    <Radio.Button value="rg">🌧️ Rain Gauges (87)</Radio.Button>
+                    <Radio.Button value="ws">🌤️ Weather Stations (3)</Radio.Button>
+                </Radio.Group>
+            </div>
+
+            {subView === 'ws' && <WeatherStationsView isDark={isDark} />}
+            {subView === 'rg' && (
+                <>
             {/* Stat Cards */}
             <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
                 {cardCfgs.map((c) => (
@@ -906,6 +925,8 @@ export default function RainGauges({ isDark }) {
                     </div>
                 )}
             </Modal>
+                </>
+            )}
         </div>
     );
 }

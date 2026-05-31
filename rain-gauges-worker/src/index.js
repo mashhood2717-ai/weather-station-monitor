@@ -92,6 +92,28 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+// MSLP (Mean Sea Level Pressure) offset per WS device, in hPa. GarajCloud
+// reports absolute (station-level) pressure; weather services usually quote
+// MSLP, so we add an offset based on elevation. All 3 current WS sit in
+// Lahore (~210 m elevation) → +28 hPa. New stations added later will get
+// 0 here by default until the user provides the correct factor (see the
+// "future stations" note in the README/changelog).
+const WS_PRESSURE_MSLP_OFFSET = {
+  '69ce3e190d2c18ad513b7bc8': 28, // WS - Head Office WASA Lhr
+  '69cf9c07e70efc69444abd48': 28, // WS - New Head Office WASA Lhr
+  '69f9957a25977997e892cff7': 28, // WS - Farrukhabad Lhr
+};
+
+// 16-point compass conversion. GarajCloud reports wind direction in degrees;
+// most operators read cardinal labels faster, so we surface both.
+const CARDINAL_16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+function degreesToCardinal(deg) {
+  const n = Number(deg);
+  if (!Number.isFinite(n)) return '';
+  const idx = Math.round(((n % 360 + 360) % 360) / 22.5) % 16;
+  return CARDINAL_16[idx];
+}
+
 // D1 caps `env.DB.batch()` at 100 statements per call. Chunk transparently so
 // we don't silently drop writes once we cross 100 devices. Empty input → no-op.
 async function batchInChunks(env, stmts, chunkSize = 100) {
@@ -236,12 +258,32 @@ export default {
     }
 
     try {
-      // --- Live proxy: rain totals + current status from upstream ---
+      // --- Live proxy: rain gauges only (87) ---
+      // Weather stations are excluded here — they live at /api/weather-stations
+      // and use a separate frontend view because their columns are different
+      // (sensor readings, not rainfall windows).
       if (path === '/api/rain-gauges' && request.method === 'GET') {
-        return await cacheAndReturn(`upstream:${path}`, CACHE_TTL_MS, async () => {
+        return await cacheAndReturn(`upstream-rg:${path}`, CACHE_TTL_MS, async () => {
           const { last_updated, gauges } = await fetchUpstreamGauges(env);
+          const rg = gauges.filter(g => g.type === 'rain_gauge');
           return jsonResponse(
-            { success: true, last_updated, count: gauges.length, gauges },
+            { success: true, last_updated, count: rg.length, gauges: rg },
+            {},
+            corsHeaders
+          );
+        });
+      }
+
+      // --- Live proxy: weather stations only (3) ---
+      // Returns the same upstream device list filtered to weather stations,
+      // with their sensor fields (temperature/humidity/wind_*/pressure/heat_index).
+      // The 6 rain-window fields will be null on these rows.
+      if (path === '/api/weather-stations' && request.method === 'GET') {
+        return await cacheAndReturn(`upstream-ws:${path}`, CACHE_TTL_MS, async () => {
+          const { last_updated, gauges } = await fetchUpstreamGauges(env);
+          const ws = gauges.filter(g => g.type === 'weather_station');
+          return jsonResponse(
+            { success: true, last_updated, count: ws.length, stations: ws },
             {},
             corsHeaders
           );
@@ -356,6 +398,98 @@ export default {
             granularity,
             trend,
             overall_uptime: overall,
+          }, {}, corsHeaders);
+        });
+      }
+
+      // --- Per-station historical sensor readings (powers the WS chart modal) ---
+      // 24h and Daily return RAW 15-min rows (every poll = a dot on the chart);
+      // longer ranges aggregate so the chart stays readable. Cache key includes
+      // the range so swaps don't collide.
+      if (path.startsWith('/api/weather-station-history/') && request.method === 'GET') {
+        const stationId = decodeURIComponent(path.split('/').pop());
+        if (!stationId) return jsonResponse({ error: 'missing station id' }, { status: 400 }, corsHeaders);
+
+        const range = url.searchParams.get('range') || '24h';
+        // For 24h and Daily we want EVERY 15-min reading as its own chart
+        // point (matching the storage cadence). For 7d/30d/1y we aggregate
+        // to keep the chart readable.
+        const isRaw = range === '24h' || range === 'daily';
+        let whereTime, sql, granularity;
+        switch (range) {
+          case 'daily':
+            whereTime   = "timestamp >= datetime('now', 'start of day', '-5 hours')";
+            granularity = '15min';
+            break;
+          case '7d':
+            whereTime   = "timestamp >= datetime('now', '-7 days')";
+            granularity = '6hour';
+            break;
+          case '30d':
+            whereTime   = "timestamp >= datetime('now', '-30 days')";
+            granularity = 'daily';
+            break;
+          case '1y':
+            whereTime   = "timestamp >= datetime('now', '-1 year')";
+            granularity = 'monthly';
+            break;
+          case '24h':
+          default:
+            whereTime   = "timestamp >= datetime('now', '-24 hours')";
+            granularity = '15min';
+            break;
+        }
+
+        if (isRaw) {
+          sql = `
+            SELECT timestamp AS period, 1 AS samples,
+                   temperature, humidity, wind_speed, wind_direction, pressure, heat_index
+            FROM weather_station_readings
+            WHERE device_id = ? AND ${whereTime}
+            ORDER BY timestamp ASC
+          `;
+        } else {
+          const groupExpr =
+            granularity === '6hour'  ? "strftime('%Y-%m-%d %H:00:00', datetime(strftime('%s', timestamp) / 21600 * 21600, 'unixepoch'))"
+          : granularity === 'daily'  ? "strftime('%Y-%m-%d', timestamp)"
+          : /* monthly */              "strftime('%Y-%m', timestamp)";
+          sql = `
+            SELECT ${groupExpr} AS period,
+                   COUNT(*) AS samples,
+                   AVG(temperature)    AS temperature,
+                   AVG(humidity)       AS humidity,
+                   AVG(wind_speed)     AS wind_speed,
+                   AVG(wind_direction) AS wind_direction,
+                   AVG(pressure)       AS pressure,
+                   AVG(heat_index)     AS heat_index
+            FROM weather_station_readings
+            WHERE device_id = ? AND ${whereTime}
+            GROUP BY period
+            ORDER BY period ASC
+          `;
+        }
+
+        // Cache key bumped to v2 since the shape (raw vs bucketed) changed.
+        return await cacheAndReturn(`ws-history:v2:${stationId}:${range}`, CACHE_TTL_MS, async () => {
+          const result = await env.DB.prepare(sql).bind(stationId).all();
+
+          const rows = (result.results || []).map(r => ({
+            period: r.period,
+            samples: r.samples || 0,
+            temperature:    r.temperature    != null ? Number(Number(r.temperature).toFixed(1))    : null,
+            humidity:       r.humidity       != null ? Number(Number(r.humidity).toFixed(1))       : null,
+            wind_speed:     r.wind_speed     != null ? Number(Number(r.wind_speed).toFixed(2))     : null,
+            wind_direction: r.wind_direction != null ? Number(Number(r.wind_direction).toFixed(0)) : null,
+            pressure:       r.pressure       != null ? Number(Number(r.pressure).toFixed(1))       : null,
+            heat_index:     r.heat_index     != null ? Number(Number(r.heat_index).toFixed(1))     : null,
+          }));
+
+          return jsonResponse({
+            success: true,
+            station_id: stationId,
+            range,
+            granularity,
+            trend: rows,
           }, {}, corsHeaders);
         });
       }
@@ -497,6 +631,157 @@ export default {
 
         const csv = lines.join('\r\n');
         const filename = `rain-gauges-all-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+        return new Response(csv, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
+      // --- Per-station WS readings CSV export ---
+      // Pulls historical temp/humidity/wind/pressure/heat_index from
+      // weather_station_readings. Returns both raw and display-converted
+      // values (m/s → km/h, deg → cardinal, absolute → MSLP) so analysts
+      // have both.
+      if (path.startsWith('/api/weather-station-export/') && request.method === 'GET') {
+        const stationId = decodeURIComponent(path.split('/').pop());
+        if (!stationId) return jsonResponse({ error: 'missing station id' }, { status: 400 }, corsHeaders);
+        const range = url.searchParams.get('range') || '24h';
+        let whereTime;
+        switch (range) {
+          case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
+          case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
+          case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;
+          case '1y':    whereTime = "timestamp >= datetime('now', '-1 year')";  break;
+          case 'all':   whereTime = "1=1";                                       break;
+          case '24h':
+          default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
+        }
+
+        const [result, upstream] = await Promise.allSettled([
+          env.DB.prepare(`
+            SELECT timestamp, temperature, humidity, wind_speed, wind_direction, pressure, heat_index
+            FROM weather_station_readings
+            WHERE device_id = ? AND ${whereTime}
+            ORDER BY timestamp ASC
+          `).bind(stationId).all(),
+          fetchUpstreamGauges(env),
+        ]);
+        const rows = (result.status === 'fulfilled' ? result.value.results : []) || [];
+        const upstreamGauges = upstream.status === 'fulfilled' ? upstream.value.gauges : [];
+        const station = upstreamGauges.find(g => g.id === stationId);
+        const stationName = station?.name || '';
+        const mslpOffset = WS_PRESSURE_MSLP_OFFSET[stationId] || 0;
+
+        const headers = [
+            'timestamp_utc', 'timestamp_pkt', 'station_id', 'station_name',
+            'temperature_c', 'humidity_pct',
+            'wind_speed_kmh', 'wind_speed_ms', 'wind_direction_cardinal', 'wind_direction_deg',
+            'pressure_mslp_hpa', 'pressure_absolute_hpa', 'heat_index_c',
+        ];
+        const lines = [headers.join(',')];
+        const csvEscape = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+        for (const r of rows) {
+          const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
+          const pkt = new Date(utcDate.getTime() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+          const wsKmh = r.wind_speed != null ? (Number(r.wind_speed) * 3.6).toFixed(2) : '';
+          const wsMs  = r.wind_speed != null ? Number(r.wind_speed).toFixed(2) : '';
+          const wdDeg = r.wind_direction != null ? Number(r.wind_direction).toFixed(0) : '';
+          const wdCar = r.wind_direction != null ? degreesToCardinal(r.wind_direction) : '';
+          const pAbs  = r.pressure != null ? Number(r.pressure).toFixed(1) : '';
+          const pMSLP = r.pressure != null ? (Number(r.pressure) + mslpOffset).toFixed(1) : '';
+          lines.push([
+            r.timestamp, pkt, stationId, csvEscape(stationName),
+            r.temperature ?? '', r.humidity ?? '',
+            wsKmh, wsMs, wdCar, wdDeg,
+            pMSLP, pAbs, r.heat_index ?? '',
+          ].join(','));
+        }
+
+        const csv = lines.join('\r\n');
+        const filename = `weather-station-${stationId}-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+        return new Response(csv, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
+      // --- All-stations WS readings CSV export ---
+      if (path === '/api/weather-stations-export' && request.method === 'GET') {
+        const range = url.searchParams.get('range') || '24h';
+        let whereTime;
+        switch (range) {
+          case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
+          case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
+          case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;
+          case '1y':    whereTime = "timestamp >= datetime('now', '-1 year')";  break;
+          case 'all':   whereTime = "1=1";                                       break;
+          case '24h':
+          default:      whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
+        }
+
+        const [result, upstream] = await Promise.allSettled([
+          env.DB.prepare(`
+            SELECT timestamp, device_id, temperature, humidity, wind_speed, wind_direction, pressure, heat_index
+            FROM weather_station_readings
+            WHERE ${whereTime}
+            ORDER BY device_id ASC, timestamp ASC
+          `).all(),
+          fetchUpstreamGauges(env),
+        ]);
+        const rows = (result.status === 'fulfilled' ? result.value.results : []) || [];
+        const nameMap = {};
+        if (upstream.status === 'fulfilled') {
+          for (const g of upstream.value.gauges) nameMap[g.id] = g.name || '';
+        }
+
+        // Group rows by device_id, then sort groups alphabetically by name so
+        // each station's history is contiguous in the CSV.
+        const groupsById = new Map();
+        for (const r of rows) {
+          if (!groupsById.has(r.device_id)) groupsById.set(r.device_id, []);
+          groupsById.get(r.device_id).push(r);
+        }
+        const sortedGroups = [...groupsById.entries()].sort((a, b) => {
+          return (nameMap[a[0]] || '').toLowerCase().localeCompare((nameMap[b[0]] || '').toLowerCase());
+        });
+
+        const headers = [
+            'timestamp_utc', 'timestamp_pkt', 'station_id', 'station_name',
+            'temperature_c', 'humidity_pct',
+            'wind_speed_kmh', 'wind_speed_ms', 'wind_direction_cardinal', 'wind_direction_deg',
+            'pressure_mslp_hpa', 'pressure_absolute_hpa', 'heat_index_c',
+        ];
+        const lines = [headers.join(',')];
+        const csvEscape = (v) => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+        for (const [devId, devRows] of sortedGroups) {
+          const name = nameMap[devId] || '';
+          const mslpOffset = WS_PRESSURE_MSLP_OFFSET[devId] || 0;
+          for (const r of devRows) {
+            const utcDate = new Date(r.timestamp.replace(' ', 'T') + 'Z');
+            const pkt = new Date(utcDate.getTime() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+            const wsKmh = r.wind_speed != null ? (Number(r.wind_speed) * 3.6).toFixed(2) : '';
+            const wsMs  = r.wind_speed != null ? Number(r.wind_speed).toFixed(2) : '';
+            const wdDeg = r.wind_direction != null ? Number(r.wind_direction).toFixed(0) : '';
+            const wdCar = r.wind_direction != null ? degreesToCardinal(r.wind_direction) : '';
+            const pAbs  = r.pressure != null ? Number(r.pressure).toFixed(1) : '';
+            const pMSLP = r.pressure != null ? (Number(r.pressure) + mslpOffset).toFixed(1) : '';
+            lines.push([
+              r.timestamp, pkt, devId, csvEscape(name),
+              r.temperature ?? '', r.humidity ?? '',
+              wsKmh, wsMs, wdCar, wdDeg,
+              pMSLP, pAbs, r.heat_index ?? '',
+            ].join(','));
+          }
+        }
+
+        const csv = lines.join('\r\n');
+        const filename = `weather-stations-all-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
         return new Response(csv, {
           headers: {
             ...corsHeaders,

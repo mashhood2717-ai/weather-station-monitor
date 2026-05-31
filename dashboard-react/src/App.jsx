@@ -80,7 +80,7 @@ export default function App() {
                                     {[
                                         { key: 'monitoring', emoji: '📊', long: 'Station Monitoring', short: 'Stations' },
                                         { key: 'issues', emoji: '📋', long: 'Issue Tracker & Call Logs', short: 'Issues' },
-                                        { key: 'rain', emoji: '🌧️', long: 'Rain Gauges', short: 'Rain' },
+                                        { key: 'rain', emoji: '🌧️', long: 'RG & WS', short: 'RG & WS' },
                                     ].map(tab => (
                                         <button key={tab.key} onClick={() => setActiveTab(tab.key)} className="dashboard-tab-btn" style={{
                                             flex: 1, padding: '12px 20px', border: 'none',
