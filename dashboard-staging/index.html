@@ -1752,7 +1752,7 @@
         <div class="dashboard-tabs">
             <button class="dashboard-tab active" data-tab="monitoring" onclick="switchDashboardTab('monitoring')">📊 Station Monitoring</button>
             <button class="dashboard-tab" data-tab="issues" onclick="switchDashboardTab('issues')">📋 Issue Tracker & Call Logs</button>
-            <button class="dashboard-tab" data-tab="rain" onclick="switchDashboardTab('rain')">🌧️ Rain Gauges</button>
+            <button class="dashboard-tab" data-tab="rain" onclick="switchDashboardTab('rain')">🌧️ RG & WS</button>
         </div>
 
         <!-- Tab 1: Station Monitoring -->
@@ -2123,8 +2123,16 @@
 
         </div><!-- End Tab 2: Issue Tracker -->
 
-        <!-- Tab 3: Rain Gauges -->
+        <!-- Tab 3: RG & WS -->
         <div id="tab-rain" class="tab-content" style="display: none;">
+            <!-- Sub-toggle: Rain Gauges (87) vs Weather Stations (3) -->
+            <div style="display:flex; justify-content:center; gap:8px; margin:12px 0;">
+                <button id="rgSubViewBtn" class="filter-btn active" onclick="switchRgWsSubView('rg')" style="font-weight:600;">🌧️ Rain Gauges (87)</button>
+                <button id="wsSubViewBtn" class="filter-btn" onclick="switchRgWsSubView('ws')" style="font-weight:600;">🌤️ Weather Stations (3)</button>
+            </div>
+
+            <!-- ── RG sub-view ────────────────────────────────────────────── -->
+            <div id="rgSubView">
             <div class="stats-grid" style="grid-template-columns: repeat(9, 1fr);">
                 <div class="stat-card">
                     <div class="stat-label">Total Gauges</div>
@@ -2221,7 +2229,73 @@
                     </table>
                 </div>
             </div>
-        </div><!-- End Tab 3: Rain Gauges -->
+            </div><!-- End RG sub-view -->
+
+            <!-- ── WS sub-view ────────────────────────────────────────────── -->
+            <div id="wsSubView" style="display:none;">
+                <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-label">🌤️ Total Stations</div>
+                        <div class="stat-value" id="wsTotalCount">0</div>
+                        <div class="stat-station">DynaSys Network</div>
+                    </div>
+                    <div class="stat-card online">
+                        <div class="stat-label">🟢 Online</div>
+                        <div class="stat-value" id="wsOnlineCount">0</div>
+                        <div class="stat-station">Currently active</div>
+                    </div>
+                    <div class="stat-card offline">
+                        <div class="stat-label">🔴 Offline</div>
+                        <div class="stat-value" id="wsOfflineCount">0</div>
+                        <div class="stat-station">Currently inactive</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #10b981;">
+                        <div class="stat-label">📈 Avg Uptime (24h)</div>
+                        <div class="stat-value" id="wsAvgUptime" style="color:#10b981;">—</div>
+                        <div class="stat-station" id="wsAvgUptimeSub">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #ef4444;">
+                        <div class="stat-label">📉 Avg Downtime (24h)</div>
+                        <div class="stat-value" id="wsAvgDowntime" style="color:#ef4444;">—</div>
+                        <div class="stat-station" id="wsAvgDowntimeSub">—</div>
+                    </div>
+                </div>
+
+                <div class="station-list">
+                    <div class="list-header" style="justify-content: space-between; flex-direction: row; flex-wrap: wrap; gap: 8px;">
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            <h2 class="list-title" style="margin: 0;">🌤️ Weather Stations</h2>
+                            <span id="wsLastUpdated" style="font-size:11px; color:var(--text-secondary);"></span>
+                        </div>
+                        <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap; align-items:center;">
+                            <button class="filter-btn" onclick="exportAllWeatherStationsCsv()" title="Export all WS readings (1y window)">📥 Export CSV</button>
+                            <button class="filter-btn" onclick="loadWeatherStations()" title="Refresh">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="min-width:220px;">Station</th>
+                                    <th style="text-align:center;">Status</th>
+                                    <th style="text-align:right;">Uptime (24h)</th>
+                                    <th style="text-align:right;">Temp</th>
+                                    <th style="text-align:right;">Humidity</th>
+                                    <th style="text-align:right;">Wind Speed</th>
+                                    <th style="text-align:center;">Wind Dir</th>
+                                    <th style="text-align:right;">Pressure (MSLP)</th>
+                                    <th style="text-align:right;">Heat Index</th>
+                                    <th>Last Online</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wsTable">
+                                <tr><td colspan="10" style="text-align: center; padding: 20px;">Loading weather stations...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div><!-- End WS sub-view -->
+        </div><!-- End Tab 3: RG & WS -->
 
     </div>
     <!-- Create Issue Modal -->
@@ -2384,6 +2458,64 @@
                 <div id="rgDetailRainGrid" style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px;"></div>
 
                 <div id="rgDetailMeta" style="margin-top:14px; font-size:12px; color:var(--text-secondary);"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weather Station Detail Modal -->
+    <div id="wsDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:1000px;">
+            <button class="modal-close" onclick="closeWeatherStationDetail()">&times;</button>
+            <div class="modal-header">
+                <h2 id="wsDetailTitle">🌤️  Station Detail</h2>
+                <span id="wsDetailStatus" class="status-badge" style="margin-left:8px;"></span>
+            </div>
+            <div class="modal-body">
+                <!-- Current readings tiles -->
+                <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:12px;" id="wsDetailReadings"></div>
+
+                <!-- Chart type + range + CSV -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin:10px 0; flex-wrap:wrap; gap:8px;">
+                    <div style="font-weight:600; font-size:13px; color:var(--text-secondary);">Historical readings</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <div class="chart-toggle-group" style="display:flex; gap:0;">
+                            <button id="wsChartLineBtn" class="chart-toggle active" onclick="setWsChartType('line')">Line</button>
+                            <button id="wsChartBarBtn"  class="chart-toggle"        onclick="setWsChartType('bar')">Bar</button>
+                        </div>
+                        <button class="filter-btn ws-range" data-ws-range="24h" onclick="setWsChartRange('24h')">24h</button>
+                        <button class="filter-btn ws-range" data-ws-range="daily" onclick="setWsChartRange('daily')">Daily</button>
+                        <button class="filter-btn ws-range" data-ws-range="7d" onclick="setWsChartRange('7d')">7d</button>
+                        <button class="filter-btn ws-range" data-ws-range="30d" onclick="setWsChartRange('30d')">30d</button>
+                        <button class="filter-btn ws-range" data-ws-range="1y" onclick="setWsChartRange('1y')">1y</button>
+                        <button class="filter-btn" onclick="exportSelectedWsCsv()" title="Export this station's readings for the selected range">📥 CSV</button>
+                    </div>
+                </div>
+
+                <!-- Uptime chart -->
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Uptime</div>
+                    <div style="position:relative; height:170px;"><canvas id="wsUptimeChart"></canvas></div>
+                </div>
+
+                <!-- 4 reading charts -->
+                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:14px;">
+                    <div>
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Temperature (°C)</div>
+                        <div style="position:relative; height:170px;"><canvas id="wsTempChart"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Humidity (%)</div>
+                        <div style="position:relative; height:170px;"><canvas id="wsHumidityChart"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Wind Speed (km/h)</div>
+                        <div style="position:relative; height:170px;"><canvas id="wsWindChart"></canvas></div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Pressure (MSLP, hPa)</div>
+                        <div style="position:relative; height:170px;"><canvas id="wsPressureChart"></canvas></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -6606,6 +6738,352 @@
             rgChartData = null;
             rgCurrentGaugeId = null;
             rgLastDetail = null;
+        }
+
+        // ============================================================
+        // WEATHER STATIONS (WS) — sub-view inside RG & WS tab
+        // ============================================================
+        // Mirrors the React WeatherStationsView. All readings come from the
+        // dedicated rain-gauges Worker (Weatherwalayofficial account); uptime
+        // re-uses /api/rain-gauge-history because WS uptime is in the same
+        // rain_gauge_logs table.
+
+        let wsData = [];                        // [{id, name, status, lat, lng, temperature, humidity, wind_speed, wind_direction, pressure, heat_index, uptime_24h, checks_24h, last_online}, …]
+        let wsCurrentStationId = null;          // station currently open in the detail modal
+        let wsChartRange = '24h';               // 24h | daily | 7d | 30d | 1y
+        let wsChartType  = 'line';              // line | bar
+        let wsChartInstances = {                // Chart.js instances per canvas (so we can destroy & recreate)
+            uptime: null, temp: null, humidity: null, wind: null, pressure: null,
+        };
+
+        // ── Unit conversions / display helpers ────────────────────────────
+        function wsMsToKmh(v) {
+            if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
+            return Number(v) * 3.6;
+        }
+        const WS_CARDINAL_16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        function wsDegToCardinal(deg) {
+            if (deg === null || deg === undefined || !Number.isFinite(Number(deg))) return '—';
+            const n = Number(deg);
+            const idx = Math.round(((n % 360 + 360) % 360) / 22.5) % 16;
+            return WS_CARDINAL_16[idx];
+        }
+        // MSLP offset per station (Lahore at ~210 m → +28 hPa). New stations
+        // default to 0 until we get a proper elevation-based factor.
+        const WS_PRESSURE_MSLP_OFFSET = {
+            '69ce3e190d2c18ad513b7bc8': 28, // WS - Head Office WASA Lhr
+            '69cf9c07e70efc69444abd48': 28, // WS - New Head Office WASA Lhr
+            '69f9957a25977997e892cff7': 28, // WS - Farrukhabad Lhr
+        };
+        function wsToMSLP(id, pressure) {
+            if (pressure === null || pressure === undefined || !Number.isFinite(Number(pressure))) return null;
+            return Number(pressure) + (WS_PRESSURE_MSLP_OFFSET[id] || 0);
+        }
+        function wsFormatNum(v, digits, suffix) {
+            if (v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+            return Number(v).toFixed(digits) + (suffix || '');
+        }
+        function wsTimeAgo(iso) {
+            if (!iso) return '—';
+            // D1 stores naive UTC timestamps; treat as UTC.
+            const ms = Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime();
+            if (!Number.isFinite(ms) || ms < 0) return '—';
+            const m = Math.floor(ms / 60000);
+            if (m < 1) return 'just now';
+            if (m < 60) return m + 'm ago';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h ago';
+            const d = Math.floor(h / 24);
+            return d + 'd ago';
+        }
+
+        // ── Sub-toggle (RG ↔ WS) ──────────────────────────────────────────
+        function switchRgWsSubView(view) {
+            const rgBtn = document.getElementById('rgSubViewBtn');
+            const wsBtn = document.getElementById('wsSubViewBtn');
+            const rgPane = document.getElementById('rgSubView');
+            const wsPane = document.getElementById('wsSubView');
+            if (view === 'ws') {
+                rgBtn.classList.remove('active'); wsBtn.classList.add('active');
+                rgPane.style.display = 'none';    wsPane.style.display = '';
+                if (!wsData.length) loadWeatherStations();
+            } else {
+                wsBtn.classList.remove('active'); rgBtn.classList.add('active');
+                wsPane.style.display = 'none';    rgPane.style.display = '';
+            }
+        }
+
+        // ── Fetch + render ────────────────────────────────────────────────
+        async function loadWeatherStations() {
+            try {
+                const [stationsResp, uptimeResp] = await Promise.allSettled([
+                    fetch(`${RAIN_GAUGES_WORKER}/api/weather-stations`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauges-uptime?range=24h`).then(r => r.json()),
+                ]);
+                if (stationsResp.status !== 'fulfilled' || !stationsResp.value?.success) {
+                    throw new Error(stationsResp.value?.error || 'failed to load WS');
+                }
+                const live = stationsResp.value.stations || [];
+                const uptimeMap = {};
+                if (uptimeResp.status === 'fulfilled' && uptimeResp.value?.success) {
+                    (uptimeResp.value.gauges || []).forEach(u => { uptimeMap[u.gauge_id] = u; });
+                }
+                wsData = live.map(s => ({
+                    ...s,
+                    uptime_24h: uptimeMap[s.id]?.uptime_24h ?? null,
+                    checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
+                    last_online: uptimeMap[s.id]?.last_online ?? null,
+                }));
+                document.getElementById('wsLastUpdated').textContent =
+                    stationsResp.value.last_updated
+                        ? 'Last updated: ' + new Date(stationsResp.value.last_updated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
+                        : '';
+                renderWeatherStationsTiles();
+                renderWeatherStationsTable();
+            } catch (e) {
+                console.error('WS load failed:', e);
+                const tbody = document.getElementById('wsTable');
+                if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:20px; color:#ef4444;">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        function renderWeatherStationsTiles() {
+            const total = wsData.length;
+            const online = wsData.filter(s => s.status === 'online').length;
+            const withUptime = wsData.filter(s => s.checks_24h > 0 && s.uptime_24h != null);
+            const avg = withUptime.length
+                ? (withUptime.reduce((a, s) => a + Number(s.uptime_24h), 0) / withUptime.length)
+                : null;
+            document.getElementById('wsTotalCount').textContent   = total;
+            document.getElementById('wsOnlineCount').textContent  = online;
+            document.getElementById('wsOfflineCount').textContent = total - online;
+            document.getElementById('wsAvgUptime').textContent    = avg !== null ? avg.toFixed(1) + '%' : '—';
+            document.getElementById('wsAvgUptimeSub').textContent = withUptime.length ? `${withUptime.length} stations avg` : '—';
+            document.getElementById('wsAvgDowntime').textContent  = avg !== null ? (100 - avg).toFixed(1) + '%' : '—';
+            document.getElementById('wsAvgDowntimeSub').textContent = withUptime.length ? `${withUptime.length} stations avg` : '—';
+        }
+
+        function renderWeatherStationsTable() {
+            const tbody = document.getElementById('wsTable');
+            if (!tbody) return;
+            if (!wsData.length) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No weather stations.</td></tr>';
+                return;
+            }
+            const rows = wsData.map(s => {
+                const statusTag = s.status === 'online'
+                    ? '<span class="status-badge online">ONLINE</span>'
+                    : '<span class="status-badge offline">OFFLINE</span>';
+                const uptimeCell = (s.uptime_24h !== null && s.uptime_24h !== undefined && s.checks_24h > 0)
+                    ? `<span style="color:${Number(s.uptime_24h) >= 90 ? '#10b981' : Number(s.uptime_24h) >= 50 ? '#f59e0b' : '#ef4444'}; font-weight:600;">${Number(s.uptime_24h).toFixed(1)}%</span>`
+                    : '<span style="color:var(--text-secondary);">—</span>';
+                const cardinal = wsDegToCardinal(s.wind_direction);
+                const degText = (s.wind_direction !== null && s.wind_direction !== undefined && Number.isFinite(Number(s.wind_direction)))
+                    ? `<span style="font-size:11px; color:var(--text-secondary); margin-left:4px;">(${Number(s.wind_direction).toFixed(0)}°)</span>`
+                    : '';
+                return `<tr style="cursor:pointer;" onclick="openWeatherStationDetail('${s.id}')">
+                    <td><strong>${s.name || ''}</strong><br><small style="color:var(--text-secondary)">${s.id}</small></td>
+                    <td style="text-align:center;">${statusTag}</td>
+                    <td style="text-align:right;">${uptimeCell}</td>
+                    <td style="text-align:right;">${wsFormatNum(s.temperature, 1, ' °C')}</td>
+                    <td style="text-align:right;">${wsFormatNum(s.humidity, 1, ' %')}</td>
+                    <td style="text-align:right;">${wsFormatNum(wsMsToKmh(s.wind_speed), 1, ' km/h')}</td>
+                    <td style="text-align:center;"><strong>${cardinal}</strong>${degText}</td>
+                    <td style="text-align:right;">${wsFormatNum(wsToMSLP(s.id, s.pressure), 1, ' hPa')}</td>
+                    <td style="text-align:right;">${wsFormatNum(s.heat_index, 1, ' °C')}</td>
+                    <td style="font-size:12px; color:var(--text-secondary);">${wsTimeAgo(s.last_online)}</td>
+                </tr>`;
+            }).join('');
+            tbody.innerHTML = rows;
+        }
+
+        // ── Detail modal ──────────────────────────────────────────────────
+        function openWeatherStationDetail(stationId) {
+            const s = wsData.find(x => x.id === stationId);
+            if (!s) return;
+            wsCurrentStationId = stationId;
+            wsChartRange = '24h';
+            wsChartType = 'line';
+            document.querySelectorAll('.ws-range').forEach(b => b.classList.toggle('active', b.dataset.wsRange === '24h'));
+            document.getElementById('wsChartLineBtn').classList.add('active');
+            document.getElementById('wsChartBarBtn').classList.remove('active');
+            document.getElementById('wsDetailTitle').textContent = '🌤️  ' + s.name;
+            const statusEl = document.getElementById('wsDetailStatus');
+            statusEl.className = 'status-badge ' + (s.status === 'online' ? 'online' : 'offline');
+            statusEl.textContent = s.status === 'online' ? 'Online' : 'Offline';
+            renderWsDetailReadings(s);
+            document.getElementById('wsDetailModal').style.display = 'flex';
+            loadWsHistory();
+        }
+
+        function closeWeatherStationDetail() {
+            document.getElementById('wsDetailModal').style.display = 'none';
+            Object.keys(wsChartInstances).forEach(k => {
+                if (wsChartInstances[k]) { wsChartInstances[k].destroy(); wsChartInstances[k] = null; }
+            });
+            wsCurrentStationId = null;
+        }
+
+        function renderWsDetailReadings(s) {
+            const tile = (label, value, color) => `<div class="modal-stat" style="border-left:3px solid ${color};"><div class="modal-stat-label">${label}</div><div class="modal-stat-value" style="color:${color};">${value}</div></div>`;
+            const cardinal = wsDegToCardinal(s.wind_direction);
+            const deg = (s.wind_direction !== null && s.wind_direction !== undefined && Number.isFinite(Number(s.wind_direction))) ? `<span style="font-size:11px; color:var(--text-secondary); font-weight:400;"> (${Number(s.wind_direction).toFixed(0)}°)</span>` : '';
+            document.getElementById('wsDetailReadings').innerHTML =
+                  tile('Temperature',       wsFormatNum(s.temperature, 1, '°C'),                 '#ef4444')
+                + tile('Humidity',          wsFormatNum(s.humidity, 1, '%'),                     '#06b6d4')
+                + tile('Wind Speed',        wsFormatNum(wsMsToKmh(s.wind_speed), 1, ' km/h'),    '#8b5cf6')
+                + tile('Wind Dir',          cardinal + deg,                                       '#0ea5e9')
+                + tile('Pressure (MSLP)',   wsFormatNum(wsToMSLP(s.id, s.pressure), 1, ' hPa'),  '#10b981')
+                + tile('Heat Index',        wsFormatNum(s.heat_index, 1, '°C'),                  '#f59e0b');
+        }
+
+        function setWsChartRange(range) {
+            wsChartRange = range;
+            document.querySelectorAll('.ws-range').forEach(b => b.classList.toggle('active', b.dataset.wsRange === range));
+            loadWsHistory();
+        }
+        function setWsChartType(type) {
+            wsChartType = type;
+            document.getElementById('wsChartLineBtn').classList.toggle('active', type === 'line');
+            document.getElementById('wsChartBarBtn').classList.toggle('active',  type === 'bar');
+            // Redraw with cached data — both fetches already done.
+            if (wsLastHistory) drawWsReadingCharts(wsLastHistory, wsCurrentStationId);
+            if (wsLastUptime)  drawWsUptimeChart(wsLastUptime);
+        }
+
+        let wsLastHistory = null;
+        let wsLastUptime = null;
+        async function loadWsHistory() {
+            if (!wsCurrentStationId) return;
+            const stationId = wsCurrentStationId;
+            try {
+                const [hR, uR] = await Promise.allSettled([
+                    fetch(`${RAIN_GAUGES_WORKER}/api/weather-station-history/${encodeURIComponent(stationId)}?range=${wsChartRange}`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauge-history/${encodeURIComponent(stationId)}?range=${wsChartRange}`).then(r => r.json()),
+                ]);
+                wsLastHistory = (hR.status === 'fulfilled' && hR.value?.success) ? hR.value : null;
+                wsLastUptime  = (uR.status === 'fulfilled' && uR.value?.success) ? uR.value : null;
+                if (wsLastHistory) drawWsReadingCharts(wsLastHistory, stationId);
+                if (wsLastUptime)  drawWsUptimeChart(wsLastUptime);
+            } catch (e) {
+                console.error('WS history load failed:', e);
+            }
+        }
+
+        function wsFormatChartLabel(period, granularity) {
+            if (granularity === '15min') {
+                const m = period.match(/(\d{2}):(\d{2})/);
+                if (!m) return period;
+                const pktH = (parseInt(m[1], 10) + 5) % 24;
+                return String(pktH).padStart(2, '0') + ':' + m[2];
+            }
+            if (granularity === 'hourly') {
+                const m = period.match(/(\d{2}):00/);
+                if (!m) return period;
+                const pktH = (parseInt(m[1], 10) + 5) % 24;
+                return String(pktH).padStart(2, '0') + ':00';
+            }
+            if (granularity === '6hour') {
+                const parts = period.split(' ');
+                if (parts.length < 2) return period;
+                const m = parts[1].match(/(\d{2}):/);
+                const pktH = m ? (parseInt(m[1], 10) + 5) % 24 : 0;
+                const d = new Date(parts[0] + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' ' + String(pktH).padStart(2, '0') + ':00';
+            }
+            if (granularity === 'daily') {
+                const d = new Date(period + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+            if (granularity === 'monthly') {
+                const [Y, M] = period.split('-');
+                if (!Y || !M) return period;
+                const d = new Date(parseInt(Y, 10), parseInt(M, 10) - 1, 1);
+                return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+            return period;
+        }
+
+        function makeWsChart(canvasId, labels, values, color, unit, yPercent) {
+            const ctx = document.getElementById(canvasId)?.getContext('2d');
+            if (!ctx) return null;
+            const isLine = wsChartType === 'line';
+            return new Chart(ctx, {
+                type: isLine ? 'line' : 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '',
+                        data: values,
+                        backgroundColor: isLine ? color + '22' : color,
+                        borderColor: color,
+                        borderWidth: isLine ? 2 : 0,
+                        fill: isLine,
+                        tension: isLine ? 0.25 : 0,
+                        pointRadius: isLine ? 2.5 : 0,
+                        pointBackgroundColor: color,
+                        spanGaps: true,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => (Number(c.parsed.y).toFixed(1) + (unit || '')),
+                            },
+                        },
+                    },
+                    scales: {
+                        y: {
+                            ...(yPercent ? { min: 0, max: 100 } : {}),
+                            ticks: { color: '#94a3b8', callback: v => v + (unit || '') },
+                            grid: { color: 'rgba(148,163,184,0.1)' },
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, autoSkipPadding: 10 },
+                            grid: { display: false },
+                        },
+                    },
+                },
+            });
+        }
+
+        function drawWsReadingCharts(history, stationId) {
+            const trend = history?.trend || [];
+            const labels = trend.map(t => wsFormatChartLabel(t.period, history.granularity));
+            const temp = trend.map(t => (t.temperature == null ? null : Number(t.temperature)));
+            const humid = trend.map(t => (t.humidity == null ? null : Number(t.humidity)));
+            const wind = trend.map(t => (t.wind_speed == null ? null : Number(t.wind_speed) * 3.6));
+            const pres = trend.map(t => (t.pressure == null ? null : Number(t.pressure) + (WS_PRESSURE_MSLP_OFFSET[stationId] || 0)));
+
+            ['temp','humidity','wind','pressure'].forEach(k => {
+                if (wsChartInstances[k]) { wsChartInstances[k].destroy(); wsChartInstances[k] = null; }
+            });
+            wsChartInstances.temp     = makeWsChart('wsTempChart',     labels, temp,  '#ef4444', '°');
+            wsChartInstances.humidity = makeWsChart('wsHumidityChart', labels, humid, '#06b6d4', '%');
+            wsChartInstances.wind     = makeWsChart('wsWindChart',     labels, wind,  '#8b5cf6', '');
+            wsChartInstances.pressure = makeWsChart('wsPressureChart', labels, pres,  '#10b981', '');
+        }
+
+        function drawWsUptimeChart(history) {
+            const trend = history?.trend || [];
+            const labels = trend.map(t => wsFormatChartLabel(t.period, history.granularity));
+            const values = trend.map(t => Number(t.uptime_pct) || 0);
+            if (wsChartInstances.uptime) { wsChartInstances.uptime.destroy(); wsChartInstances.uptime = null; }
+            wsChartInstances.uptime = makeWsChart('wsUptimeChart', labels, values, '#10b981', '%', true);
+        }
+
+        // ── Exports ───────────────────────────────────────────────────────
+        function exportAllWeatherStationsCsv() {
+            // Use the broadest meaningful range for "all stations" — analyst-friendly.
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-stations-export?range=1y`;
+        }
+        function exportSelectedWsCsv() {
+            if (!wsCurrentStationId) return;
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-station-export/${encodeURIComponent(wsCurrentStationId)}?range=${wsChartRange}`;
         }
 
         // ============================================================
