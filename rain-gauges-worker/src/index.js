@@ -309,6 +309,94 @@ export default {
         });
       }
 
+      // --- Storm Watch: rapid pressure-drop alert ---
+      // For each WS, compares the most recent pressure reading to the reading
+      // closest to 1 hour ago. Any drop steeper than the threshold (default
+      // 1.5 hPa/hour) is returned. Frontend polls this on load + refresh and
+      // pops up a warning modal if anything's flagged.
+      //
+      // Tunables via query params:
+      //   ?threshold=1.5   (hPa drop required to flag; default 1.5)
+      //   ?window=60       (window in minutes; default 60)
+      if (path === '/api/storm-watch' && request.method === 'GET') {
+        const threshold = Math.max(0.1, Number(url.searchParams.get('threshold')) || 1.5);
+        const windowMin = Math.max(15, Math.min(180, Number(url.searchParams.get('window')) || 60));
+        // Fetch all WS pressure readings in the last (window + 30 min) window
+        // so we always have a row close to "windowMin ago" even if a cron tick
+        // is offset by a few minutes.
+        const lookbackMin = windowMin + 30;
+        // Cache for 2 minutes — short, since this is meant to be near-real-time.
+        return await cacheAndReturn(`storm-watch:${threshold}:${windowMin}`, 120_000, async () => {
+          const result = await env.DB.prepare(`
+            SELECT device_id, timestamp, pressure
+            FROM weather_station_readings
+            WHERE timestamp >= datetime('now', '-${lookbackMin} minutes')
+              AND pressure IS NOT NULL
+            ORDER BY device_id ASC, timestamp ASC
+          `).all();
+
+          // Group by device_id
+          const byDevice = new Map();
+          for (const r of (result.results || [])) {
+            if (!byDevice.has(r.device_id)) byDevice.set(r.device_id, []);
+            byDevice.get(r.device_id).push(r);
+          }
+
+          // Fetch upstream device list to attach names to each alert.
+          let nameMap = {};
+          try {
+            const { gauges } = await fetchUpstreamGauges(env);
+            for (const g of gauges) nameMap[g.id] = g.name || '';
+          } catch (e) {
+            // Non-fatal — alert just won't have a friendly name
+            console.warn('[storm-watch] upstream name fetch failed:', e.message);
+          }
+
+          // Compute pressure delta for each device. "1 hour ago" is the reading
+          // whose timestamp is closest to (now - windowMin).
+          const targetMs = Date.now() - windowMin * 60_000;
+          const alerts = [];
+          for (const [deviceId, rows] of byDevice) {
+            if (rows.length < 2) continue;
+            const latest = rows[rows.length - 1];
+
+            let bestRow = null;
+            let bestDiff = Infinity;
+            for (const r of rows) {
+              if (r === latest) continue;
+              const t = new Date(r.timestamp.replace(' ', 'T') + 'Z').getTime();
+              const diff = Math.abs(t - targetMs);
+              if (diff < bestDiff) { bestDiff = diff; bestRow = r; }
+            }
+            if (!bestRow) continue;
+            // Skip if the "1h ago" candidate is too far off (>20 min slop) —
+            // we shouldn't flag based on a 30-min-old reading.
+            if (bestDiff > 20 * 60_000) continue;
+
+            const delta = Number(latest.pressure) - Number(bestRow.pressure);
+            if (delta < -threshold) {
+              alerts.push({
+                device_id: deviceId,
+                name: nameMap[deviceId] || '',
+                current_pressure_hpa: Number(Number(latest.pressure).toFixed(1)),
+                previous_pressure_hpa: Number(Number(bestRow.pressure).toFixed(1)),
+                delta_hpa: Number(delta.toFixed(2)),
+                current_timestamp: latest.timestamp,
+                previous_timestamp: bestRow.timestamp,
+                threshold_hpa: threshold,
+                window_minutes: windowMin,
+              });
+            }
+          }
+
+          return jsonResponse(
+            { success: true, threshold_hpa: threshold, window_minutes: windowMin, count: alerts.length, alerts },
+            {},
+            corsHeaders
+          );
+        });
+      }
+
       // --- Per-gauge time-bucketed history (powers the in-modal chart) ---
       // Returns uptime % per bucket over the selected range. Bucket size adapts
       // to range so each chart has a sensible number of points (24-50ish).

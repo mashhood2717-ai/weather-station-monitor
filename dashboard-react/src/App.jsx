@@ -11,6 +11,7 @@ import RecentlyOfflinePanel from './components/RecentlyOfflinePanel';
 import StationDetailModal from './components/StationDetailModal';
 import IssueTracker from './components/IssueTracker';
 import RainGauges from './components/RainGauges';
+import StormWatchAlert from './components/StormWatchAlert';
 import { useStations } from './hooks/useStations';
 
 const { Content } = Layout;
@@ -50,6 +51,9 @@ export default function App() {
     return (
         <ConfigProvider theme={themeConfig}>
             <AntApp>
+                {/* Global storm-watch popup. Polls /api/storm-watch every 5 min;
+                    appears regardless of which tab the user is on. */}
+                <StormWatchAlert />
                 <Layout className="dashboard-layout" style={{ background: bgColor, minHeight: '100vh' }}>
                     <Content style={{ padding: '12px 16px', width: '100%' }}>
                         {/* Header */}
