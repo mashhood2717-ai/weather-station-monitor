@@ -59,17 +59,30 @@ async function fetchUpstreamGauges(env) {
   const devices = Array.isArray(data?.devices) ? data.devices : [];
   return {
     last_updated: data?.lastUpdated || null,
-    gauges: devices.map((d) => ({
-      id: d.id,
-      name: (d.name || '').trim(),
-      status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
-      rain_24h: numOrNull(d['24h']),
-      rain_daily: numOrNull(d.daily),
-      rain_7d: numOrNull(d['7d']),
-      rain_30d: numOrNull(d['30d']),
-      rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd),
-      rain_all_time: numOrNull(d['all_time'] ?? d.allTime ?? d.total),
-    })),
+    gauges: devices.map((d) => {
+      const name = (d.name || '').trim();
+      const isWS = /^WS/i.test(name);
+      return {
+        id: d.id,
+        name,
+        type: isWS ? 'weather_station' : 'rain_gauge',
+        status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
+        // Rain-gauge totals (null for WS — upstream omits them)
+        rain_24h:       numOrNull(d['24h']),
+        rain_daily:     numOrNull(d.daily),
+        rain_7d:        numOrNull(d['7d']),
+        rain_30d:       numOrNull(d['30d']),
+        rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd),
+        rain_all_time:  numOrNull(d['all_time'] ?? d.allTime ?? d.total),
+        // Weather-station readings (null for RG — upstream omits them)
+        temperature:    numOrNull(d.temperature),
+        humidity:       numOrNull(d.humidity),
+        wind_direction: numOrNull(d.wind_direction),
+        wind_speed:     numOrNull(d.wind_speed),
+        pressure:       numOrNull(d.pressure),
+        heat_index:     numOrNull(d.heat_index),
+      };
+    }),
   };
 }
 
@@ -77,6 +90,18 @@ function numOrNull(v) {
   if (v === null || v === undefined) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+// D1 caps `env.DB.batch()` at 100 statements per call. Chunk transparently so
+// we don't silently drop writes once we cross 100 devices. Empty input → no-op.
+async function batchInChunks(env, stmts, chunkSize = 100) {
+  const out = [];
+  for (let i = 0; i < stmts.length; i += chunkSize) {
+    const slice = stmts.slice(i, i + chunkSize);
+    const r = await env.DB.batch(slice);
+    out.push(...r);
+  }
+  return out;
 }
 
 // ---- Sync (called by cron, and exposed as a manual POST endpoint) ----
@@ -88,20 +113,57 @@ async function syncGaugesToD1(env) {
     return { inserted: 0, skipped: 0, error: 'upstream returned 0 gauges' };
   }
 
-  // D1 batch INSERT — one prepared statement per gauge. The UNIQUE(gauge_id,
-  // timestamp) constraint makes accidental double-sync idempotent.
   const nowSql = "datetime('now')";
-  const stmts = gauges.map((g) =>
+
+  // 1) Online/offline log for ALL devices (rain gauges + weather stations).
+  //    UNIQUE(gauge_id, timestamp) makes a double-fire idempotent.
+  const onlineStmts = gauges.map((g) =>
     env.DB.prepare(
       `INSERT OR IGNORE INTO rain_gauge_logs (gauge_id, timestamp, is_online) VALUES (?, ${nowSql}, ?)`
     ).bind(g.id, g.status === 'online' ? 1 : 0)
   );
-  const results = await env.DB.batch(stmts);
-  const inserted = results.reduce((sum, r) => sum + (r.meta?.changes || 0), 0);
+
+  // 2) Sensor readings for weather stations only. One row per WS per poll
+  //    with temp/humidity/wind/pressure/heat-index.
+  const wsStmts = gauges
+    .filter((g) => g.type === 'weather_station')
+    .map((g) =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO weather_station_readings
+           (device_id, timestamp, temperature, humidity, wind_direction, wind_speed, pressure, heat_index)
+         VALUES (?, ${nowSql}, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        g.id,
+        g.temperature,
+        g.humidity,
+        g.wind_direction,
+        g.wind_speed,
+        g.pressure,
+        g.heat_index,
+      )
+    );
+
+  const onlineResults = await batchInChunks(env, onlineStmts);
+  const wsResults = await batchInChunks(env, wsStmts);
+
+  // 3) Rolling 1-year window — evict WS readings older than 1 year. Cheap
+  //    while the table is young (no matching rows); steadily drips rows
+  //    out after year 1 to keep storage flat.
+  try {
+    await env.DB.prepare(
+      `DELETE FROM weather_station_readings WHERE timestamp < datetime('now', '-1 year')`
+    ).run();
+  } catch (e) {
+    console.warn('[sync] WS rolling-cleanup failed (non-fatal):', e.message);
+  }
+
+  const insertedOnline = onlineResults.reduce((sum, r) => sum + (r.meta?.changes || 0), 0);
+  const insertedWS = wsResults.reduce((sum, r) => sum + (r.meta?.changes || 0), 0);
   return {
-    inserted,
-    skipped: gauges.length - inserted,
+    inserted: insertedOnline,
+    skipped: gauges.length - insertedOnline,
     total: gauges.length,
+    ws_readings_inserted: insertedWS,
     duration_ms: Date.now() - start,
   };
 }
