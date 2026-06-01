@@ -2261,6 +2261,40 @@
                     </div>
                 </div>
 
+                <!-- Today's extremes across the WS network -->
+                <div class="stats-grid" style="grid-template-columns: repeat(6, 1fr);">
+                    <div class="stat-card" style="border-left: 3px solid #ef4444;">
+                        <div class="stat-label">🔥 Today's Max Temp</div>
+                        <div class="stat-value" id="wsMaxTempValue" style="color:#ef4444;">—</div>
+                        <div class="stat-station" id="wsMaxTempStation">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #06b6d4;">
+                        <div class="stat-label">❄️ Today's Min Temp</div>
+                        <div class="stat-value" id="wsMinTempValue" style="color:#06b6d4;">—</div>
+                        <div class="stat-station" id="wsMinTempStation">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #8b5cf6;">
+                        <div class="stat-label">💨 Today's Max Wind</div>
+                        <div class="stat-value" id="wsMaxWindValue" style="color:#8b5cf6;">—</div>
+                        <div class="stat-station" id="wsMaxWindStation">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #f59e0b;">
+                        <div class="stat-label">🌡️ Today's Max Heat Idx</div>
+                        <div class="stat-value" id="wsMaxHeatValue" style="color:#f59e0b;">—</div>
+                        <div class="stat-station" id="wsMaxHeatStation">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #10b981;">
+                        <div class="stat-label">📈 Highest Pressure</div>
+                        <div class="stat-value" id="wsMaxPressValue" style="color:#10b981;">—</div>
+                        <div class="stat-station" id="wsMaxPressStation">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #0ea5e9;">
+                        <div class="stat-label">📉 Lowest Pressure</div>
+                        <div class="stat-value" id="wsMinPressValue" style="color:#0ea5e9;">—</div>
+                        <div class="stat-station" id="wsMinPressStation">—</div>
+                    </div>
+                </div>
+
                 <div class="station-list">
                     <div class="list-header" style="justify-content: space-between; flex-direction: row; flex-wrap: wrap; gap: 8px;">
                         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -2268,7 +2302,8 @@
                             <span id="wsLastUpdated" style="font-size:11px; color:var(--text-secondary);"></span>
                         </div>
                         <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap; align-items:center;">
-                            <button class="filter-btn" onclick="exportAllWeatherStationsCsv()" title="Export all WS readings (1y window)">📥 Export CSV</button>
+                            <button class="filter-btn" onclick="exportAllWeatherStationsCsv()" title="Export all WS readings (full history)">📥 Export CSV</button>
+                            <button class="filter-btn" onclick="openHistoricalPicker()" title="Pick a custom date range and download CSV">📅 Historical Data</button>
                             <button class="filter-btn" onclick="loadWeatherStations()" title="Refresh">🔄 Refresh</button>
                         </div>
                     </div>
@@ -2491,6 +2526,12 @@
                     </div>
                 </div>
 
+                <!-- Range extremes for the selected period — populated on history load -->
+                <div id="wsRangeExtremes" style="display:none; background: rgba(148,163,184,0.06); border:1px solid rgba(148,163,184,0.2); border-radius:8px; padding:10px; margin-bottom:14px;">
+                    <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px;" id="wsRangeExtremesTitle"></div>
+                    <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px;" id="wsRangeExtremesGrid"></div>
+                </div>
+
                 <!-- Uptime chart -->
                 <div style="margin-bottom:14px;">
                     <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Uptime</div>
@@ -2515,6 +2556,39 @@
                         <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">Pressure (MSLP, hPa)</div>
                         <div style="position:relative; height:170px;"><canvas id="wsPressureChart"></canvas></div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historical CSV picker -->
+    <div id="historicalPickerModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:560px;">
+            <button class="modal-close" onclick="closeHistoricalPicker()">&times;</button>
+            <div class="modal-header"><h2>📅 Historical Data — Custom Range</h2></div>
+            <div class="modal-body">
+                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+                    Pick a date range and (optionally) a single station. The CSV will contain every 15-min reading captured in that window, with both raw and display-converted values.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                    <div>
+                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">Start date</label>
+                        <input id="histPickerStart" type="date" class="search-box" style="width:100%;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">End date</label>
+                        <input id="histPickerEnd" type="date" class="search-box" style="width:100%;">
+                    </div>
+                </div>
+                <div style="margin-bottom:14px;">
+                    <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">Station</label>
+                    <select id="histPickerStation" class="source-filter" style="width:100%;">
+                        <option value="">All stations</option>
+                    </select>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="apply-btn" onclick="closeHistoricalPicker()" style="background:#475569;">Cancel</button>
+                    <button class="apply-btn" onclick="downloadHistoricalCsv()" style="background:#0ea5e9;">📥 Download CSV</button>
                 </div>
             </div>
         </div>
@@ -6832,11 +6906,14 @@
         }
 
         // ── Fetch + render ────────────────────────────────────────────────
+        let wsDailyExtremes = null; // populated from /api/weather-stations-extremes?range=daily
+
         async function loadWeatherStations() {
             try {
-                const [stationsResp, uptimeResp] = await Promise.allSettled([
+                const [stationsResp, uptimeResp, extResp] = await Promise.allSettled([
                     fetch(`${RAIN_GAUGES_WORKER}/api/weather-stations`).then(r => r.json()),
                     fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauges-uptime?range=24h`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/weather-stations-extremes?range=daily`).then(r => r.json()),
                 ]);
                 if (stationsResp.status !== 'fulfilled' || !stationsResp.value?.success) {
                     throw new Error(stationsResp.value?.error || 'failed to load WS');
@@ -6852,11 +6929,13 @@
                     checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
                     last_online: uptimeMap[s.id]?.last_online ?? null,
                 }));
+                wsDailyExtremes = (extResp.status === 'fulfilled' && extResp.value?.success) ? extResp.value : null;
                 document.getElementById('wsLastUpdated').textContent =
                     stationsResp.value.last_updated
                         ? 'Last updated: ' + new Date(stationsResp.value.last_updated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
                         : '';
                 renderWeatherStationsTiles();
+                renderWeatherStationsDailyExtremes();
                 renderWeatherStationsTable();
             } catch (e) {
                 console.error('WS load failed:', e);
@@ -6879,6 +6958,49 @@
             document.getElementById('wsAvgUptimeSub').textContent = withUptime.length ? `${withUptime.length} stations avg` : '—';
             document.getElementById('wsAvgDowntime').textContent  = avg !== null ? (100 - avg).toFixed(1) + '%' : '—';
             document.getElementById('wsAvgDowntimeSub').textContent = withUptime.length ? `${withUptime.length} stations avg` : '—';
+        }
+
+        function renderWeatherStationsDailyExtremes() {
+            const setTile = (valEl, stEl, entry, fmt) => {
+                const v = document.getElementById(valEl);
+                const s = document.getElementById(stEl);
+                if (!v || !s) return;
+                v.textContent = entry ? fmt(entry) : '—';
+                s.textContent = entry ? (entry.station_name || entry.device_id || '—') : '—';
+            };
+            const dMax = wsDailyExtremes?.max || {};
+            const dMin = wsDailyExtremes?.min || {};
+            setTile('wsMaxTempValue',  'wsMaxTempStation',  dMax.temperature,  e => e.value.toFixed(1) + '°C');
+            setTile('wsMinTempValue',  'wsMinTempStation',  dMin.temperature,  e => e.value.toFixed(1) + '°C');
+            setTile('wsMaxWindValue',  'wsMaxWindStation',  dMax.wind_speed,   e => (e.value * 3.6).toFixed(1) + ' km/h');
+            setTile('wsMaxHeatValue',  'wsMaxHeatStation',  dMax.heat_index,   e => e.value.toFixed(1) + '°C');
+            setTile('wsMaxPressValue', 'wsMaxPressStation', dMax.pressure,     e => (e.value_mslp ?? e.value).toFixed(1) + ' hPa');
+            setTile('wsMinPressValue', 'wsMinPressStation', dMin.pressure,     e => (e.value_mslp ?? e.value).toFixed(1) + ' hPa');
+        }
+
+        function renderWsRangeExtremes(extremes, range) {
+            const wrapper = document.getElementById('wsRangeExtremes');
+            const grid = document.getElementById('wsRangeExtremesGrid');
+            const title = document.getElementById('wsRangeExtremesTitle');
+            if (!extremes || !extremes.max || !extremes.min) {
+                if (wrapper) wrapper.style.display = 'none';
+                return;
+            }
+            const max = extremes.max, min = extremes.min;
+            const tile = (label, color, entry, fmt) => `
+                <div>
+                    <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">${label}</div>
+                    <div style="font-size:15px; font-weight:700; color:${color};">${entry ? fmt(entry) : '—'}</div>
+                </div>`;
+            title.textContent = `${range.toUpperCase()} EXTREMES`;
+            grid.innerHTML =
+                  tile('Max Temp',  '#ef4444', max.temperature, e => e.value.toFixed(1) + '°C')
+                + tile('Min Temp',  '#06b6d4', min.temperature, e => e.value.toFixed(1) + '°C')
+                + tile('Max Wind',  '#8b5cf6', max.wind_speed,  e => (e.value * 3.6).toFixed(1) + ' km/h')
+                + tile('Max Heat',  '#f59e0b', max.heat_index,  e => e.value.toFixed(1) + '°C')
+                + tile('High P',    '#10b981', max.pressure,    e => (e.value_mslp ?? e.value).toFixed(1) + ' hPa')
+                + tile('Low P',     '#0ea5e9', min.pressure,    e => (e.value_mslp ?? e.value).toFixed(1) + ' hPa');
+            wrapper.style.display = '';
         }
 
         function renderWeatherStationsTable() {
@@ -6975,12 +7097,15 @@
             if (!wsCurrentStationId) return;
             const stationId = wsCurrentStationId;
             try {
-                const [hR, uR] = await Promise.allSettled([
+                const [hR, uR, eR] = await Promise.allSettled([
                     fetch(`${RAIN_GAUGES_WORKER}/api/weather-station-history/${encodeURIComponent(stationId)}?range=${wsChartRange}`).then(r => r.json()),
                     fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauge-history/${encodeURIComponent(stationId)}?range=${wsChartRange}`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/weather-stations-extremes?range=${wsChartRange}&device_id=${encodeURIComponent(stationId)}`).then(r => r.json()),
                 ]);
                 wsLastHistory = (hR.status === 'fulfilled' && hR.value?.success) ? hR.value : null;
                 wsLastUptime  = (uR.status === 'fulfilled' && uR.value?.success) ? uR.value : null;
+                const extremes = (eR.status === 'fulfilled' && eR.value?.success) ? eR.value : null;
+                renderWsRangeExtremes(extremes, wsChartRange);
                 if (wsLastHistory) drawWsReadingCharts(wsLastHistory, stationId);
                 if (wsLastUptime)  drawWsUptimeChart(wsLastUptime);
             } catch (e) {
@@ -7026,6 +7151,25 @@
             const ctx = document.getElementById(canvasId)?.getContext('2d');
             if (!ctx) return null;
             const isLine = wsChartType === 'line';
+
+            // For non-percent metrics, force a tight Y-range around the data.
+            // Chart.js's default for bar charts is `beginAtZero: true`, which
+            // turns a 1003→1006 hPa pressure trace into "0–1200 hPa" with
+            // 200-step ticks. Zooming to data ± 12% padding fixes that for
+            // both bar and line modes.
+            const real = values.filter(v => Number.isFinite(Number(v))).map(Number);
+            let yScale = { ticks: { color: '#94a3b8', callback: v => v + (unit || '') }, grid: { color: 'rgba(148,163,184,0.1)' } };
+            if (yPercent) {
+                yScale.min = 0; yScale.max = 100;
+            } else if (real.length) {
+                const minV = Math.min(...real);
+                const maxV = Math.max(...real);
+                const padV = Math.max((maxV - minV) * 0.12, 1);
+                yScale.min = Math.floor(minV - padV);
+                yScale.max = Math.ceil(maxV + padV);
+                yScale.beginAtZero = false;
+            }
+
             return new Chart(ctx, {
                 type: isLine ? 'line' : 'bar',
                 data: {
@@ -7055,11 +7199,7 @@
                         },
                     },
                     scales: {
-                        y: {
-                            ...(yPercent ? { min: 0, max: 100 } : {}),
-                            ticks: { color: '#94a3b8', callback: v => v + (unit || '') },
-                            grid: { color: 'rgba(148,163,184,0.1)' },
-                        },
+                        y: yScale,
                         x: {
                             ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, autoSkipPadding: 10 },
                             grid: { display: false },
@@ -7096,12 +7236,54 @@
 
         // ── Exports ───────────────────────────────────────────────────────
         function exportAllWeatherStationsCsv() {
-            // Use the broadest meaningful range for "all stations" — analyst-friendly.
-            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-stations-export?range=1y`;
+            // ALL historical data (not just last 1y), so analysts have the
+            // full record. The worker's `range=all` returns every row.
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-stations-export?range=all`;
         }
         function exportSelectedWsCsv() {
             if (!wsCurrentStationId) return;
-            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-station-export/${encodeURIComponent(wsCurrentStationId)}?range=${wsChartRange}`;
+            // Per-station export — ALL data regardless of the modal's
+            // currently-selected chart range. Users typically want the
+            // complete record when they hit "Download CSV".
+            window.location.href = `${RAIN_GAUGES_WORKER}/api/weather-station-export/${encodeURIComponent(wsCurrentStationId)}?range=all`;
+        }
+
+        // Custom date range CSV — opens the historical picker modal.
+        function openHistoricalPicker() {
+            // Sensible defaults: last 7 days.
+            const today = new Date();
+            const week  = new Date(today.getTime() - 7 * 86400000);
+            const fmt = (d) => d.toISOString().slice(0, 10);
+            const startEl = document.getElementById('histPickerStart');
+            const endEl = document.getElementById('histPickerEnd');
+            if (startEl && !startEl.value) startEl.value = fmt(week);
+            if (endEl && !endEl.value)     endEl.value   = fmt(today);
+            // Populate the station <select> with the loaded WS list.
+            const stationSel = document.getElementById('histPickerStation');
+            if (stationSel) {
+                stationSel.innerHTML = '<option value="">All stations</option>'
+                    + wsData.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            }
+            document.getElementById('historicalPickerModal').style.display = 'flex';
+        }
+        function closeHistoricalPicker() {
+            document.getElementById('historicalPickerModal').style.display = 'none';
+        }
+        function downloadHistoricalCsv() {
+            const start = document.getElementById('histPickerStart')?.value;
+            const end   = document.getElementById('histPickerEnd')?.value;
+            const stationId = document.getElementById('histPickerStation')?.value || '';
+            if (!start || !end) {
+                alert('Please pick both a start and end date.');
+                return;
+            }
+            const startTs = `${start} 00:00:00`;
+            const endTs   = `${end} 23:59:59`;
+            const base = stationId
+                ? `${RAIN_GAUGES_WORKER}/api/weather-station-export/${encodeURIComponent(stationId)}`
+                : `${RAIN_GAUGES_WORKER}/api/weather-stations-export`;
+            window.location.href = `${base}?start=${encodeURIComponent(startTs)}&end=${encodeURIComponent(endTs)}`;
+            closeHistoricalPicker();
         }
 
         // ── Storm Watch ───────────────────────────────────────────────────
@@ -7174,6 +7356,27 @@
             setInterval(checkStormWatch, STORM_WATCH_POLL_MS);
         }
         document.addEventListener('DOMContentLoaded', () => setTimeout(startStormWatch, 1500));
+
+        // Click-outside-to-close for the RG / WS modals. When the user clicks
+        // the dark overlay (NOT a child of .modal-content), close that modal.
+        // Storm Watch and Caller Detail intentionally remain X-only.
+        document.addEventListener('click', (e) => {
+            const overlays = [
+                'rainGaugeDetailModal',
+                'wsDetailModal',
+                'historicalPickerModal',
+            ];
+            for (const id of overlays) {
+                const el = document.getElementById(id);
+                if (el && e.target === el) {
+                    el.style.display = 'none';
+                    // Special-case cleanup for WS modal (tear down charts)
+                    if (id === 'wsDetailModal' && typeof closeWeatherStationDetail === 'function') {
+                        closeWeatherStationDetail();
+                    }
+                }
+            }
+        });
 
         // ============================================================
         // ISSUE TRACKER & CALL LOG FUNCTIONS

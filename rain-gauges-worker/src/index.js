@@ -582,6 +582,78 @@ export default {
         });
       }
 
+      // --- Daily / range extremes across all weather stations ---
+      // Returns network-wide min/max for the 6 surfaced metrics (temp,
+      // humidity, wind_speed, wind_direction, pressure, heat_index) along
+      // with which station and which timestamp produced the extreme.
+      // Powers the "Today's Max / Min" tiles on the WS main view + the
+      // per-station-modal "range extremes" panel.
+      //
+      // ?range= the usual presets (24h, daily, 7d, 30d, 1y) — default daily
+      // ?device_id= optional, restrict to one station
+      if (path === '/api/weather-stations-extremes' && request.method === 'GET') {
+        const range = url.searchParams.get('range') || 'daily';
+        const deviceId = url.searchParams.get('device_id') || null;
+        let whereTime;
+        switch (range) {
+          case '24h':  whereTime = "timestamp >= datetime('now', '-24 hours')"; break;
+          case '7d':   whereTime = "timestamp >= datetime('now', '-7 days')";   break;
+          case '30d':  whereTime = "timestamp >= datetime('now', '-30 days')";  break;
+          case '1y':   whereTime = "timestamp >= datetime('now', '-1 year')";   break;
+          case 'all':  whereTime = "1=1";                                        break;
+          case 'daily':
+          default:     whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
+        }
+        const cacheKey = `ws-extremes:${range}:${deviceId || ''}`;
+        return await cacheAndReturn(cacheKey, CACHE_TTL_MS, async () => {
+          const deviceFilter = deviceId ? `AND device_id = '${String(deviceId).replace(/'/g, '')}'` : '';
+          const result = await env.DB.prepare(`
+            SELECT device_id, timestamp, temperature, humidity, wind_speed, wind_direction, pressure, heat_index
+            FROM weather_station_readings
+            WHERE ${whereTime} ${deviceFilter}
+          `).all();
+          const rows = result.results || [];
+
+          // Upstream names — best-effort.
+          let nameMap = {};
+          try {
+            const { gauges } = await fetchUpstreamGauges(env);
+            for (const g of gauges) nameMap[g.id] = g.name || '';
+          } catch (e) { /* non-fatal */ }
+
+          // Walk once, track min/max per metric. Each entry holds the value,
+          // the station that produced it, and when. `pressure_mslp` applies
+          // the per-station offset so the returned value is MSLP not absolute.
+          const metrics = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 'pressure', 'heat_index'];
+          const min = {}, max = {};
+          for (const r of rows) {
+            for (const k of metrics) {
+              const raw = r[k];
+              if (raw === null || raw === undefined) continue;
+              const v = Number(raw);
+              if (!Number.isFinite(v)) continue;
+              const entry = {
+                value: v,
+                device_id: r.device_id,
+                station_name: nameMap[r.device_id] || '',
+                timestamp: r.timestamp,
+              };
+              if (k === 'pressure') entry.value_mslp = v + (WS_PRESSURE_MSLP_OFFSET[r.device_id] || 0);
+              if (!min[k] || v < min[k].value) min[k] = entry;
+              if (!max[k] || v > max[k].value) max[k] = entry;
+            }
+          }
+
+          return jsonResponse({
+            success: true,
+            range,
+            samples: rows.length,
+            min,
+            max,
+          }, {}, corsHeaders);
+        });
+      }
+
       // --- Per-gauge CSV export ---
       // Always at native 15-min poll granularity (one CSV row per poll), no
       // bucketing — gives users the raw timeline of online/offline state for
@@ -737,8 +809,18 @@ export default {
         const stationId = decodeURIComponent(path.split('/').pop());
         if (!stationId) return jsonResponse({ error: 'missing station id' }, { status: 400 }, corsHeaders);
         const range = url.searchParams.get('range') || '24h';
+        const startParam = url.searchParams.get('start');
+        const endParam   = url.searchParams.get('end');
         let whereTime;
-        switch (range) {
+        // Custom range overrides the preset range. Accepts ISO-ish date or
+        // datetime strings; we just trust SQLite's permissive parsing.
+        if (startParam || endParam) {
+          const sanitize = (s) => String(s || '').replace(/[';]/g, '');
+          const conds = [];
+          if (startParam) conds.push(`timestamp >= '${sanitize(startParam)}'`);
+          if (endParam)   conds.push(`timestamp <= '${sanitize(endParam)}'`);
+          whereTime = conds.join(' AND ');
+        } else switch (range) {
           case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
           case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
           case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;
@@ -802,8 +884,16 @@ export default {
       // --- All-stations WS readings CSV export ---
       if (path === '/api/weather-stations-export' && request.method === 'GET') {
         const range = url.searchParams.get('range') || '24h';
+        const startParam = url.searchParams.get('start');
+        const endParam   = url.searchParams.get('end');
         let whereTime;
-        switch (range) {
+        if (startParam || endParam) {
+          const sanitize = (s) => String(s || '').replace(/[';]/g, '');
+          const conds = [];
+          if (startParam) conds.push(`timestamp >= '${sanitize(startParam)}'`);
+          if (endParam)   conds.push(`timestamp <= '${sanitize(endParam)}'`);
+          whereTime = conds.join(' AND ');
+        } else switch (range) {
           case 'daily': whereTime = "timestamp >= datetime('now', 'start of day', '-5 hours')"; break;
           case '7d':    whereTime = "timestamp >= datetime('now', '-7 days')";  break;
           case '30d':   whereTime = "timestamp >= datetime('now', '-30 days')"; break;

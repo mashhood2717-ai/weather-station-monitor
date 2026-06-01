@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
-    Card, Table, Tag, Space, Spin, Statistic, Row, Col, Modal, Radio, Typography, Button, message,
+    Card, Table, Tag, Space, Spin, Statistic, Row, Col, Modal, Radio, Typography, Button, message, DatePicker,
 } from 'antd';
-import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
+
+const { RangePicker } = DatePicker;
 
 const { Text } = Typography;
 
@@ -354,14 +357,28 @@ export default function WeatherStationsView({ isDark }) {
     const [uptimeHistory, setUptimeHistory] = useState(null);
     const [uptimeHistoryLoading, setUptimeHistoryLoading] = useState(false);
 
+    // Today's network-wide extremes (for the main view tiles)
+    const [dailyExtremes, setDailyExtremes] = useState(null);
+    // Per-station extremes for the open modal's current range (for the
+    // "Range extremes" panel between current readings and history charts)
+    const [rangeExtremes, setRangeExtremes] = useState(null);
+
+    // Historical date-range picker for custom CSV export
+    const [historicalPickerOpen, setHistoricalPickerOpen] = useState(false);
+    const [historicalRange, setHistoricalRange] = useState(null); // [dayjs, dayjs] or null
+    const [historicalStation, setHistoricalStation] = useState(null); // id or null = "all stations"
+
     const subColor = isDark ? '#94a3b8' : '#64748b';
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [stationsResp, uptimeResp] = await Promise.allSettled([
+            // Three things in parallel: live readings, uptime, today's
+            // network-wide extremes (powers the "Today's Max/Min" tiles).
+            const [stationsResp, uptimeResp, extremesResp] = await Promise.allSettled([
                 axios.get(`${RAIN_GAUGES_API_BASE}/api/weather-stations`),
                 axios.get(`${RAIN_GAUGES_API_BASE}/api/rain-gauges-uptime?range=24h`),
+                axios.get(`${RAIN_GAUGES_API_BASE}/api/weather-stations-extremes?range=daily`),
             ]);
             if (stationsResp.status !== 'fulfilled' || !stationsResp.value.data?.success) {
                 throw new Error('failed to load weather stations');
@@ -378,6 +395,9 @@ export default function WeatherStationsView({ isDark }) {
                 last_online: uptimeMap[s.id]?.last_online ?? null,
             })));
             setLastUpdated(stationsResp.value.data.last_updated || null);
+            if (extremesResp.status === 'fulfilled' && extremesResp.value.data?.success) {
+                setDailyExtremes(extremesResp.value.data);
+            }
         } catch (e) {
             console.error('Weather stations fetch error:', e);
             message.error(`Failed to load weather stations: ${e.message}`);
@@ -388,19 +408,25 @@ export default function WeatherStationsView({ isDark }) {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    // History fetches (readings + uptime) — re-fired when the range changes.
+    // History fetches (readings + uptime + range extremes) — re-fired when
+    // the range changes. The extremes call gives us min/max for every metric
+    // over the selected range, which we display as a row of tiles above
+    // the charts in the modal.
     useEffect(() => {
         if (!selected) return;
         let cancelled = false;
         setHistoryLoading(true);
         setUptimeHistoryLoading(true);
+        setRangeExtremes(null);
         Promise.allSettled([
             axios.get(`${RAIN_GAUGES_API_BASE}/api/weather-station-history/${encodeURIComponent(selected.id)}?range=${chartRange}`),
             axios.get(`${RAIN_GAUGES_API_BASE}/api/rain-gauge-history/${encodeURIComponent(selected.id)}?range=${chartRange}`),
-        ]).then(([readingsR, uptimeR]) => {
+            axios.get(`${RAIN_GAUGES_API_BASE}/api/weather-stations-extremes?range=${chartRange}&device_id=${encodeURIComponent(selected.id)}`),
+        ]).then(([readingsR, uptimeR, extR]) => {
             if (cancelled) return;
             if (readingsR.status === 'fulfilled' && readingsR.value.data?.success) setHistory(readingsR.value.data);
             if (uptimeR.status === 'fulfilled' && uptimeR.value.data?.success) setUptimeHistory(uptimeR.value.data);
+            if (extR.status === 'fulfilled' && extR.value.data?.success) setRangeExtremes(extR.value.data);
         }).finally(() => {
             if (cancelled) return;
             setHistoryLoading(false);
@@ -425,15 +451,35 @@ export default function WeatherStationsView({ isDark }) {
         };
     }, [stations]);
 
+    // Top-of-view export: ALL stations, ALL historical data we've collected.
     const exportAllCsv = () => {
-        // Use the current chartRange? No — for the top-of-page export the user
-        // hasn't picked a range, so default to the broadest meaningful one (1y).
-        // They'll get all data accumulated since launch up to 1y.
-        window.location.href = `${RAIN_GAUGES_API_BASE}/api/weather-stations-export?range=1y`;
+        window.location.href = `${RAIN_GAUGES_API_BASE}/api/weather-stations-export?range=all`;
     };
+    // In-modal export: ONE station, ALL historical data — independent of the
+    // currently-selected chart range, since the user probably wants the
+    // complete record when they hit "Download CSV".
     const exportSelectedCsv = () => {
         if (!selected) return;
-        window.location.href = `${RAIN_GAUGES_API_BASE}/api/weather-station-export/${encodeURIComponent(selected.id)}?range=${chartRange}`;
+        window.location.href = `${RAIN_GAUGES_API_BASE}/api/weather-station-export/${encodeURIComponent(selected.id)}?range=all`;
+    };
+    // Historical-data picker: lets the user pick an arbitrary date range and
+    // download CSV for either one station or all of them.
+    const exportHistoricalCsv = () => {
+        if (!historicalRange || historicalRange.length !== 2) {
+            message.warning('Please pick a start and end date first.');
+            return;
+        }
+        const [s, e] = historicalRange;
+        // YYYY-MM-DD HH:MM:SS strings — SQLite parses these without timezone
+        // info. Picked dates are interpreted in UTC (which closely matches
+        // how D1 stores timestamps).
+        const start = s.format('YYYY-MM-DD') + ' 00:00:00';
+        const end   = e.format('YYYY-MM-DD') + ' 23:59:59';
+        const base = historicalStation
+            ? `${RAIN_GAUGES_API_BASE}/api/weather-station-export/${encodeURIComponent(historicalStation)}`
+            : `${RAIN_GAUGES_API_BASE}/api/weather-stations-export`;
+        window.location.href = `${base}?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+        setHistoricalPickerOpen(false);
     };
 
     const columns = [
@@ -506,15 +552,41 @@ export default function WeatherStationsView({ isDark }) {
         ? `Last updated: ${new Date(lastUpdated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`
         : '';
 
+    // Small reusable tile for an extreme value (max / min).
+    const ExtremeTile = ({ title, color, entry, format }) => (
+        <Card size="small" styles={{ body: { padding: 10 } }}>
+            <div style={{ fontSize: 11, color: subColor, fontWeight: 600 }}>{title}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color, marginTop: 2 }}>
+                {entry ? format(entry) : '—'}
+            </div>
+            <div style={{ fontSize: 10, color: subColor, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {entry ? (entry.station_name || entry.device_id) : '—'}
+            </div>
+        </Card>
+    );
+
+    const dMax = dailyExtremes?.max || {};
+    const dMin = dailyExtremes?.min || {};
+
     return (
         <div>
-            {/* Aggregate tiles — Total, Online, Offline, Avg Uptime, Avg Downtime */}
+            {/* Row 1 — Total / Online / Offline / Avg Uptime / Avg Downtime */}
             <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
                 <Col xs={12} md={5}><Card size="small"><Statistic title="🌤️ Total Stations" value={aggregate.total} valueStyle={{ color: '#0ea5e9' }} /></Card></Col>
                 <Col xs={12} md={5}><Card size="small"><Statistic title="🟢 Online"  value={aggregate.online}  valueStyle={{ color: '#10b981' }} /></Card></Col>
                 <Col xs={12} md={5}><Card size="small"><Statistic title="🔴 Offline" value={aggregate.offline} valueStyle={{ color: '#ef4444' }} /></Card></Col>
                 <Col xs={12} md={5}><Card size="small"><Statistic title="📈 Avg Uptime (24h)"   value={aggregate.avgUptime   !== null ? `${aggregate.avgUptime}%`   : '—'} valueStyle={{ color: '#10b981' }} /></Card></Col>
                 <Col xs={24} md={4}><Card size="small"><Statistic title="📉 Avg Downtime (24h)" value={aggregate.avgDowntime !== null ? `${aggregate.avgDowntime}%` : '—'} valueStyle={{ color: '#ef4444' }} /></Card></Col>
+            </Row>
+
+            {/* Row 2 — Today's extremes across the WS network */}
+            <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+                <Col xs={12} md={4}><ExtremeTile title="🔥 Today's Max Temp"  color="#ef4444" entry={dMax.temperature}  format={e => `${e.value.toFixed(1)}°C`} /></Col>
+                <Col xs={12} md={4}><ExtremeTile title="❄️ Today's Min Temp"  color="#06b6d4" entry={dMin.temperature}  format={e => `${e.value.toFixed(1)}°C`} /></Col>
+                <Col xs={12} md={4}><ExtremeTile title="💨 Today's Max Wind"  color="#8b5cf6" entry={dMax.wind_speed}   format={e => `${(e.value * 3.6).toFixed(1)} km/h`} /></Col>
+                <Col xs={12} md={4}><ExtremeTile title="🌡️ Today's Max Heat Idx" color="#f59e0b" entry={dMax.heat_index} format={e => `${e.value.toFixed(1)}°C`} /></Col>
+                <Col xs={12} md={4}><ExtremeTile title="📈 Today's Highest Pressure" color="#10b981" entry={dMax.pressure} format={e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`} /></Col>
+                <Col xs={12} md={4}><ExtremeTile title="📉 Today's Lowest Pressure"  color="#0ea5e9" entry={dMin.pressure} format={e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`} /></Col>
             </Row>
 
             {/* Stations table */}
@@ -525,7 +597,8 @@ export default function WeatherStationsView({ isDark }) {
                         <span style={{ fontSize: 11, color: subColor }}>{lastUpdatedText}</span>
                     </Space>
                     <Space size={8} wrap>
-                        <Button icon={<DownloadOutlined />} onClick={exportAllCsv} title="Export all stations' readings (last 1 year) as CSV">📥 Export CSV</Button>
+                        <Button icon={<DownloadOutlined />} onClick={exportAllCsv} title="Export all stations' readings (all stored history) as CSV">📥 Export CSV</Button>
+                        <Button icon={<HistoryOutlined />} onClick={() => { setHistoricalStation(null); setHistoricalPickerOpen(true); }} title="Pick a custom date range and download CSV">📅 Historical Data</Button>
                         <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>Refresh</Button>
                     </Space>
                 </div>
@@ -584,6 +657,34 @@ export default function WeatherStationsView({ isDark }) {
                                 <Button size="small" icon={<DownloadOutlined />} onClick={exportSelectedCsv} title="Export this station's readings for the selected range">CSV</Button>
                             </Space>
                         </div>
+
+                        {/* Range extremes — min/max for the current range. */}
+                        {rangeExtremes && (rangeExtremes.max?.temperature || rangeExtremes.min?.temperature) && (
+                            <div style={{
+                                background: isDark ? 'rgba(148,163,184,0.06)' : 'rgba(148,163,184,0.08)',
+                                border: '1px solid ' + (isDark ? 'rgba(148,163,184,0.15)' : 'rgba(148,163,184,0.25)'),
+                                borderRadius: 8, padding: 10, marginBottom: 14,
+                            }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: subColor, marginBottom: 6 }}>
+                                    {chartRange.toUpperCase()} Extremes for {selected.name}
+                                </div>
+                                <Row gutter={[8, 8]}>
+                                    {[
+                                        ['Max Temp',  '#ef4444', rangeExtremes.max?.temperature,  e => `${e.value.toFixed(1)}°C`],
+                                        ['Min Temp',  '#06b6d4', rangeExtremes.min?.temperature,  e => `${e.value.toFixed(1)}°C`],
+                                        ['Max Wind',  '#8b5cf6', rangeExtremes.max?.wind_speed,   e => `${(e.value * 3.6).toFixed(1)} km/h`],
+                                        ['Max Heat',  '#f59e0b', rangeExtremes.max?.heat_index,   e => `${e.value.toFixed(1)}°C`],
+                                        ['High P',    '#10b981', rangeExtremes.max?.pressure,     e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`],
+                                        ['Low P',     '#0ea5e9', rangeExtremes.min?.pressure,     e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`],
+                                    ].map(([label, color, entry, fmt]) => (
+                                        <Col xs={12} md={4} key={label}>
+                                            <div style={{ fontSize: 10, color: subColor, textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+                                            <div style={{ fontSize: 15, fontWeight: 700, color }}>{entry ? fmt(entry) : '—'}</div>
+                                        </Col>
+                                    ))}
+                                </Row>
+                            </div>
+                        )}
 
                         {/* Uptime chart (uses /api/rain-gauge-history because WS uptime
                             is in the same rain_gauge_logs table) */}
@@ -646,6 +747,46 @@ export default function WeatherStationsView({ isDark }) {
                         </Spin>
                     </div>
                 )}
+            </Modal>
+
+            {/* Historical data picker — custom date range CSV export */}
+            <Modal
+                title={<span><HistoryOutlined style={{ marginRight: 8 }} />Historical Data — Custom Range</span>}
+                open={historicalPickerOpen}
+                onCancel={() => setHistoricalPickerOpen(false)}
+                onOk={exportHistoricalCsv}
+                okText="Download CSV"
+                width={560}
+            >
+                <div style={{ marginBottom: 12, fontSize: 13, color: subColor }}>
+                    Pick a date range and (optionally) a station. The CSV will contain every
+                    15-min reading captured in that window with both raw and display-converted
+                    values (m/s + km/h, ° + cardinal, absolute + MSLP).
+                </div>
+
+                <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: subColor, marginBottom: 4 }}>Date range</div>
+                    <RangePicker
+                        value={historicalRange}
+                        onChange={setHistoricalRange}
+                        style={{ width: '100%' }}
+                    />
+                </div>
+
+                <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: subColor, marginBottom: 4 }}>Station</div>
+                    <Radio.Group
+                        value={historicalStation || 'all'}
+                        onChange={(e) => setHistoricalStation(e.target.value === 'all' ? null : e.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                    >
+                        <Radio.Button value="all">All Stations</Radio.Button>
+                        {stations.map(s => (
+                            <Radio.Button key={s.id} value={s.id}>{s.name}</Radio.Button>
+                        ))}
+                    </Radio.Group>
+                </div>
             </Modal>
         </div>
     );
