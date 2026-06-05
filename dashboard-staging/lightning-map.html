@@ -6,7 +6,7 @@
   <title>Lightning &amp; Satellite</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body { margin: 0; height: 100%; background: #0b1120; }
+    html, body { margin: 0; height: 100%; background: #f8fafc; }
     #map { position: absolute; inset: 0; }
   </style>
 </head>
@@ -20,10 +20,13 @@
     var lightningMap = L.map('map', { zoomControl: true, attributionControl: true })
       .setView([30.3753, 69.3451], 5);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB',
-      maxZoom: 18,
-    }).addTo(lightningMap);
+    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
+    }).addTo(lightningMap); // light/white default
+    var darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
+    });
+    L.control.layers({ 'Light': lightBase, 'Dark': darkBase }, null, { position: 'topleft' }).addTo(lightningMap);
 
     if (window.attachWWLightning) {
       window.attachWWLightning(lightningMap, {
