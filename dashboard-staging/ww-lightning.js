@@ -169,34 +169,63 @@
     var soundOn = opts.sound === true; // play a soft tick on new strikes (default OFF)
     var audioCtx = null;
     var lastTick = 0;
-    var TICK_GAP_MS = 900; // throttle: at most ~1 tick/sec during storms
+    var TICK_GAP_MS = 60 * 1000; // one tick at most per minute (not per strike, not realtime)
+    var TICK_URL = '/windy-tick.m4a';
+    var TICK_LEN = 0.32; // seconds of the clip to play (auto-trimmed from its onset)
+    var tickBuffer = null, tickOnset = 0, tickLoading = false;
 
     function unlockAudio() {
       try {
         if (!audioCtx) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
       } catch (e) {}
+      ensureTick();
     }
-    function playTick() {
-      if (!soundOn || !audioCtx) return;
+    // Find the first strong transient in the clip (the tick), skip leading silence.
+    function detectOnset(buf) {
       try {
-        // Soft high "ting": pure sine fundamental + a quieter octave, gentle
-        // attack and smooth decay — clean and pleasant, not harsh.
+        var ch = buf.getChannelData(0), sr = buf.sampleRate, peak = 0, i, a;
+        for (i = 0; i < ch.length; i++) { a = ch[i] < 0 ? -ch[i] : ch[i]; if (a > peak) peak = a; }
+        var thr = peak * 0.2;
+        for (i = 0; i < ch.length; i++) { a = ch[i] < 0 ? -ch[i] : ch[i]; if (a >= thr) return Math.max(0, i / sr - 0.004); }
+      } catch (e) {}
+      return 0;
+    }
+    function ensureTick() {
+      if (!audioCtx || tickBuffer || tickLoading) return;
+      tickLoading = true;
+      fetch(TICK_URL).then(function (r) { return r.arrayBuffer(); })
+        .then(function (ab) { return audioCtx.decodeAudioData(ab); })
+        .then(function (buf) { tickBuffer = buf; tickOnset = detectOnset(buf); tickLoading = false; })
+        .catch(function () { tickLoading = false; }); // keep the synth fallback
+    }
+    function synthTing() {
+      try {
         var t = audioCtx.currentTime;
         var g = audioCtx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.13, t + 0.004); // soft attack
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16); // smooth decay
+        g.gain.exponentialRampToValueAtTime(0.13, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
         g.connect(audioCtx.destination);
-        var o1 = audioCtx.createOscillator();
-        o1.type = 'sine'; o1.frequency.setValueAtTime(1568, t); // ~G6
-        var o2 = audioCtx.createOscillator();
-        o2.type = 'sine'; o2.frequency.setValueAtTime(3136, t); // octave (sparkle)
-        var g2 = audioCtx.createGain();
-        g2.gain.setValueAtTime(0.3, t); // octave quieter
+        var o1 = audioCtx.createOscillator(); o1.type = 'sine'; o1.frequency.setValueAtTime(1568, t);
+        var o2 = audioCtx.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(3136, t);
+        var g2 = audioCtx.createGain(); g2.gain.setValueAtTime(0.3, t);
         o1.connect(g); o2.connect(g2); g2.connect(g);
         o1.start(t); o2.start(t); o1.stop(t + 0.18); o2.stop(t + 0.18);
       } catch (e) {}
+    }
+    function playTick() {
+      if (!soundOn || !audioCtx) return;
+      if (tickBuffer) {
+        try {
+          var s = audioCtx.createBufferSource();
+          s.buffer = tickBuffer;
+          s.connect(audioCtx.destination);
+          s.start(0, tickOnset, TICK_LEN);
+          return;
+        } catch (e) {}
+      }
+      synthTing(); // fallback if the clip hasn't loaded/decoded
     }
     var lastAlertAt = 0;
 
