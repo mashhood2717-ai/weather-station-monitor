@@ -32,6 +32,9 @@
   var MAX_MARKERS = 4000;
   var RADAR_JSON = 'https://api.rainviewer.com/public/weather-maps.json'; // RainViewer rain radar (free, no key)
   var RADAR_REFRESH_MS = 5 * 60 * 1000; // refresh the radar frame every 5 min
+  var EUMET_WMS = 'https://view.eumetsat.int/geoserver/ows?'; // EUMETView WMS (free, no key)
+  var EUMET_LAYER = 'msg_iodc:ir108'; // Meteosat IODC infrared clouds — covers Pakistan, day + night
+  var EUMET_REFRESH_MS = 15 * 60 * 1000; // MSG IODC updates ~every 15 min
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
@@ -431,6 +434,29 @@
       }
     }
 
+    // ---- EUMETSAT Meteosat IODC satellite clouds (free WMS, covers Pakistan) ----
+    var satOn;
+    try { satOn = localStorage.getItem('wwLightningSat') === '1'; } catch (e) { satOn = false; }
+    var satLayer = null;
+    var satTimer = null;
+    function setSat(v) {
+      satOn = v;
+      try { localStorage.setItem('wwLightningSat', v ? '1' : '0'); } catch (e) {}
+      if (v) {
+        if (!satLayer) {
+          satLayer = L.tileLayer.wms(EUMET_WMS, {
+            layers: EUMET_LAYER, format: 'image/png', transparent: true, version: '1.3.0',
+            pane: 'ww-ltg-radar', opacity: 0.7, maxZoom: 18, attribution: '© EUMETSAT',
+          });
+        }
+        if (!map.hasLayer(satLayer)) satLayer.addTo(map);
+        if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.redraw(); }, EUMET_REFRESH_MS);
+      } else {
+        if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
+        if (satTimer) { clearInterval(satTimer); satTimer = null; }
+      }
+    }
+
     function setVisible(v) {
       visible = v;
       if (dotsPane) dotsPane.style.pointerEvents = v ? 'auto' : 'none';
@@ -464,16 +490,20 @@
           var sndBtn = L.DomUtil.create('div', '', wrap);
           sndBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var rdrBtn = L.DomUtil.create('div', '', wrap);
-          rdrBtn.style.cssText = btnStyle;
+          rdrBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
+          var satBtn = L.DomUtil.create('div', '', wrap);
+          satBtn.style.cssText = btnStyle;
           function renderLtg() { ltgBtn.innerHTML = '<span style="font-size:14px;">⚡</span> Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
           function renderSta() { staBtn.innerHTML = '<span style="font-size:14px;">📍</span> Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
           function renderSnd() { sndBtn.innerHTML = '<span style="font-size:14px;">' + (soundOn ? '🔊' : '🔇') + '</span> Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
           function renderRdr() { rdrBtn.innerHTML = '<span style="font-size:14px;">🌧️</span> Radar: ' + (radarOn ? 'On' : 'Off'); rdrBtn.style.opacity = radarOn ? '1' : '0.55'; }
-          renderLtg(); renderSta(); renderSnd(); renderRdr();
+          function renderSat() { satBtn.innerHTML = '<span style="font-size:14px;">🛰️</span> Satellite: ' + (satOn ? 'On' : 'Off'); satBtn.style.opacity = satOn ? '1' : '0.55'; }
+          renderLtg(); renderSta(); renderSnd(); renderRdr(); renderSat();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
           L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
           L.DomEvent.on(rdrBtn, 'click', function (ev) { L.DomEvent.stop(ev); setRadar(!radarOn); renderRdr(); });
+          L.DomEvent.on(satBtn, 'click', function (ev) { L.DomEvent.stop(ev); setSat(!satOn); renderSat(); });
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           return wrap;
         },
@@ -509,6 +539,7 @@
     }
 
     if (radarOn) setRadar(true); // restore radar if it was on last time
+    if (satOn) setSat(true); // restore satellite if it was on last time
 
     connect();
 
@@ -526,6 +557,8 @@
       if (control) map.removeControl(control);
       if (radarTimer) clearInterval(radarTimer);
       if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
+      if (satTimer) clearInterval(satTimer);
+      if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
       if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
       active.clear();
       counts.clear();
