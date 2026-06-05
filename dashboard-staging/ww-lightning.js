@@ -285,13 +285,16 @@
         batch.set(c, (batch.get(c) || 0) + 1);
       });
       var closest = Infinity;
+      var bounds = map.getBounds();
+      var visibleFresh = false;
       fresh.forEach(function (f) {
         var km = addStrike(f.lat, f.lon, f.key, sevOf(batch.get(cellOf(f.lat, f.lon)) || 1), f.t);
         if (km !== null && km < closest) closest = km;
+        if (!visibleFresh && bounds.contains(L.latLng(f.lat, f.lon))) visibleFresh = true;
       });
       if (closest <= alertKm) showAlert(closest);
-      // Only play when sound is on AND the tab is actually visible/active.
-      if (soundOn && fresh.length > 0 && !(hasDoc && document.hidden)) {
+      // Sound only for NEW strikes currently visible on the map, tab active, throttled.
+      if (soundOn && visibleFresh && !(hasDoc && document.hidden)) {
         var tnow = Date.now();
         if (tnow - lastTick > TICK_GAP_MS) { playTick(); lastTick = tnow; }
       }
