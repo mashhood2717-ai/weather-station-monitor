@@ -30,6 +30,8 @@
   var GREY_COLOR = '#9ca3af'; // grey bolts for 5-15 min (old strikes)
   var NEW_MS = 30 * 1000; // pulsing "just struck" highlight
   var MAX_MARKERS = 4000;
+  var RADAR_JSON = 'https://api.rainviewer.com/public/weather-maps.json'; // RainViewer rain radar (free, no key)
+  var RADAR_REFRESH_MS = 5 * 60 * 1000; // refresh the radar frame every 5 min
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
@@ -98,6 +100,7 @@
       p.style.pointerEvents = interactive ? 'auto' : 'none';
       return p;
     }
+    pane('ww-ltg-radar', 250, false); // rain radar above base tiles, below strikes/markers
     pane('ww-ltg-glow', 410, false);
     pane('ww-ltg-rings', 415, false);
     var dotsPane = pane('ww-ltg-dots', 425, true);
@@ -396,6 +399,38 @@
       else if (map.hasLayer(layer)) map.removeLayer(layer);
     }
 
+    // ---- rain radar overlay (RainViewer, free, no key) ----
+    var radarOn;
+    try { radarOn = localStorage.getItem('wwLightningRadar') === '1'; } catch (e) { radarOn = false; }
+    var radarLayer = null;
+    var radarTimer = null;
+    function buildRadar() {
+      fetch(RADAR_JSON).then(function (r) { return r.json(); }).then(function (d) {
+        var frames = (d.radar && d.radar.past) ? d.radar.past.slice() : [];
+        if (d.radar && d.radar.nowcast && d.radar.nowcast.length) frames = frames.concat(d.radar.nowcast);
+        if (!frames.length || !d.host) return;
+        var url = d.host + frames[frames.length - 1].path + '/256/{z}/{x}/{y}/2/1_1.png';
+        if (radarLayer) {
+          radarLayer.setUrl(url);
+        } else {
+          radarLayer = L.tileLayer(url, { pane: 'ww-ltg-radar', opacity: 0.6, zIndex: 250, updateWhenIdle: true });
+          if (radarOn) radarLayer.addTo(map);
+        }
+      }).catch(function () {});
+    }
+    function setRadar(v) {
+      radarOn = v;
+      try { localStorage.setItem('wwLightningRadar', v ? '1' : '0'); } catch (e) {}
+      if (v) {
+        if (!radarLayer) buildRadar();
+        else if (!map.hasLayer(radarLayer)) radarLayer.addTo(map);
+        if (!radarTimer) radarTimer = setInterval(buildRadar, RADAR_REFRESH_MS);
+      } else {
+        if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
+        if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+      }
+    }
+
     function setVisible(v) {
       visible = v;
       if (dotsPane) dotsPane.style.pointerEvents = v ? 'auto' : 'none';
@@ -427,14 +462,18 @@
           var staBtn = L.DomUtil.create('div', '', wrap);
           staBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var sndBtn = L.DomUtil.create('div', '', wrap);
-          sndBtn.style.cssText = btnStyle;
+          sndBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
+          var rdrBtn = L.DomUtil.create('div', '', wrap);
+          rdrBtn.style.cssText = btnStyle;
           function renderLtg() { ltgBtn.innerHTML = '<span style="font-size:14px;">⚡</span> Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
           function renderSta() { staBtn.innerHTML = '<span style="font-size:14px;">📍</span> Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
           function renderSnd() { sndBtn.innerHTML = '<span style="font-size:14px;">' + (soundOn ? '🔊' : '🔇') + '</span> Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
-          renderLtg(); renderSta(); renderSnd();
+          function renderRdr() { rdrBtn.innerHTML = '<span style="font-size:14px;">🌧️</span> Radar: ' + (radarOn ? 'On' : 'Off'); rdrBtn.style.opacity = radarOn ? '1' : '0.55'; }
+          renderLtg(); renderSta(); renderSnd(); renderRdr();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
           L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
+          L.DomEvent.on(rdrBtn, 'click', function (ev) { L.DomEvent.stop(ev); setRadar(!radarOn); renderRdr(); });
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           return wrap;
         },
@@ -469,6 +508,8 @@
       document.addEventListener('touchstart', audioUnlock);
     }
 
+    if (radarOn) setRadar(true); // restore radar if it was on last time
+
     connect();
 
     var detach = function () {
@@ -483,6 +524,8 @@
       });
       ringLayers.forEach(function (l) { if (map.hasLayer(l)) map.removeLayer(l); });
       if (control) map.removeControl(control);
+      if (radarTimer) clearInterval(radarTimer);
+      if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
       if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
       active.clear();
       counts.clear();
