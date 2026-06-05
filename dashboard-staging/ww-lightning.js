@@ -32,6 +32,18 @@
   var MODERATE_AT = 4;
   var ISLAMABAD = [33.6844, 73.0479];
   var RING_KM = [100, 200, 300, 400];
+  var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+
+  // Initial bearing from Islamabad to (lat,lon) -> { deg, dir } (16-point compass).
+  function bearingFromIslamabad(lat, lon) {
+    var rad = Math.PI / 180;
+    var p1 = ISLAMABAD[0] * rad, p2 = lat * rad;
+    var dl = (lon - ISLAMABAD[1]) * rad;
+    var y = Math.sin(dl) * Math.cos(p2);
+    var x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+    var deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    return { deg: Math.round(deg), dir: COMPASS[Math.round(deg / 22.5) % 16] };
+  }
   var DEFAULT_ALERT_KM = 50;
   var ALERT_COOLDOWN_MS = 30 * 1000;
   var ALERT_SHOW_MS = 9000;
@@ -187,10 +199,12 @@
         pane: 'ww-ltg-dots', icon: boltIcon(sev, true), interactive: true,
         keyboard: false, opacity: visible ? 1 : 0,
       }).addTo(map);
+      var brg = bearingFromIslamabad(lat, lon);
       dot.bindPopup(
         '<div style="font:12px system-ui,sans-serif;">' +
           '<b>⚡ Lightning strike</b><br>' +
-          (km !== null ? '<b>' + km + ' km</b> from Islamabad<br>' : '') +
+          (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of Islamabad<br>' : '') +
+          'Direction: ' + brg.dir + ' (' + brg.deg + '°)<br>' +
           'Severity: ' + sev +
         '</div>'
       );
