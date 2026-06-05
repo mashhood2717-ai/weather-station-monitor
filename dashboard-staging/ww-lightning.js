@@ -181,11 +181,18 @@
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
     // Sound preference persists across refreshes (default OFF on first ever visit).
+    // persist=false (e.g. embedded/Flutter map) ignores & never writes localStorage,
+    // so a fixed-layer embed can't be changed by, or change, the dashboards' settings.
+    var persist = opts.persist !== false;
     var soundOn;
-    try {
-      var savedSound = localStorage.getItem('wwLightningSound');
-      soundOn = savedSound === null ? (opts.sound !== false) : (savedSound === '1');
-    } catch (e) { soundOn = opts.sound !== false; }
+    if (!persist) {
+      soundOn = opts.sound !== false;
+    } else {
+      try {
+        var savedSound = localStorage.getItem('wwLightningSound');
+        soundOn = savedSound === null ? (opts.sound !== false) : (savedSound === '1');
+      } catch (e) { soundOn = opts.sound !== false; }
+    }
     var audioCtx = null;
     var lastTick = 0;
     var TICK_GAP_MS = 60 * 1000; // one click at most per minute (not per strike, not realtime)
@@ -412,7 +419,8 @@
 
     // ---- rain radar overlay (RainViewer, free, no key) ----
     var radarOn;
-    try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; }
+    if (!persist) { radarOn = opts.radar !== false; }
+    else { try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; } }
     var radarLayer = null;
     var radarTimer = null;
     function buildRadar() {
@@ -431,7 +439,7 @@
     }
     function setRadar(v) {
       radarOn = v;
-      try { localStorage.setItem('wwLightningRadar', v ? '1' : '0'); } catch (e) {}
+      if (persist) try { localStorage.setItem('wwLightningRadar', v ? '1' : '0'); } catch (e) {}
       if (v) {
         if (!radarLayer) buildRadar();
         else if (!map.hasLayer(radarLayer)) radarLayer.addTo(map);
@@ -444,12 +452,13 @@
 
     // ---- EUMETSAT Meteosat IODC satellite clouds (free WMS, covers Pakistan) ----
     var satOn;
-    try { var savedSat = localStorage.getItem('wwLightningSat'); satOn = savedSat === null ? true : (savedSat === '1'); } catch (e) { satOn = true; }
+    if (!persist) { satOn = opts.satellite !== false; }
+    else { try { var savedSat = localStorage.getItem('wwLightningSat'); satOn = savedSat === null ? true : (savedSat === '1'); } catch (e) { satOn = true; } }
     var satLayer = null;
     var satTimer = null;
     function setSat(v) {
       satOn = v;
-      try { localStorage.setItem('wwLightningSat', v ? '1' : '0'); } catch (e) {}
+      if (persist) try { localStorage.setItem('wwLightningSat', v ? '1' : '0'); } catch (e) {}
       if (v) {
         if (!satLayer) {
           satLayer = L.tileLayer.wms(EUMET_WMS, {
@@ -509,10 +518,13 @@
           renderLtg(); renderSta(); renderSnd(); renderRdr(); renderSat();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
-          L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
+          L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; if (persist) try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
           L.DomEvent.on(rdrBtn, 'click', function (ev) { L.DomEvent.stop(ev); setRadar(!radarOn); renderRdr(); });
           L.DomEvent.on(satBtn, 'click', function (ev) { L.DomEvent.stop(ev); setSat(!satOn); renderSat(); });
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
+          if (opts.sound === false) sndBtn.style.display = 'none';
+          if (opts.radar === false) rdrBtn.style.display = 'none';
+          if (opts.satellite === false) satBtn.style.display = 'none';
           return wrap;
         },
       });
