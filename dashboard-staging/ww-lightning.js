@@ -166,66 +166,35 @@
     var waitingForVisible = false;
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
-    var soundOn = opts.sound === true; // play a soft tick on new strikes (default OFF)
+    var soundOn = opts.sound === true; // soft click on new strikes (default OFF)
     var audioCtx = null;
     var lastTick = 0;
-    var TICK_GAP_MS = 60 * 1000; // one tick at most per minute (not per strike, not realtime)
-    var TICK_URL = '/windy-tick.m4a';
-    var TICK_LEN = 0.32; // seconds of the clip to play (auto-trimmed from its onset)
-    var tickBuffer = null, tickOnset = 0, tickLoading = false;
+    var TICK_GAP_MS = 60 * 1000; // one click at most per minute (not per strike, not realtime)
 
     function unlockAudio() {
       try {
         if (!audioCtx) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
       } catch (e) {}
-      ensureTick();
-    }
-    // Find the first strong transient in the clip (the tick), skip leading silence.
-    function detectOnset(buf) {
-      try {
-        var ch = buf.getChannelData(0), sr = buf.sampleRate, peak = 0, i, a;
-        for (i = 0; i < ch.length; i++) { a = ch[i] < 0 ? -ch[i] : ch[i]; if (a > peak) peak = a; }
-        var thr = peak * 0.2;
-        for (i = 0; i < ch.length; i++) { a = ch[i] < 0 ? -ch[i] : ch[i]; if (a >= thr) return Math.max(0, i / sr - 0.004); }
-      } catch (e) {}
-      return 0;
-    }
-    function ensureTick() {
-      if (!audioCtx || tickBuffer || tickLoading) return;
-      tickLoading = true;
-      fetch(TICK_URL).then(function (r) { return r.arrayBuffer(); })
-        .then(function (ab) { return audioCtx.decodeAudioData(ab); })
-        .then(function (buf) { tickBuffer = buf; tickOnset = detectOnset(buf); tickLoading = false; })
-        .catch(function () { tickLoading = false; }); // keep the synth fallback
-    }
-    function synthTing() {
-      try {
-        var t = audioCtx.currentTime;
-        var g = audioCtx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.13, t + 0.004);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-        g.connect(audioCtx.destination);
-        var o1 = audioCtx.createOscillator(); o1.type = 'sine'; o1.frequency.setValueAtTime(1568, t);
-        var o2 = audioCtx.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(3136, t);
-        var g2 = audioCtx.createGain(); g2.gain.setValueAtTime(0.3, t);
-        o1.connect(g); o2.connect(g2); g2.connect(g);
-        o1.start(t); o2.start(t); o1.stop(t + 0.18); o2.stop(t + 0.18);
-      } catch (e) {}
     }
     function playTick() {
       if (!soundOn || !audioCtx) return;
-      if (tickBuffer) {
-        try {
-          var s = audioCtx.createBufferSource();
-          s.buffer = tickBuffer;
-          s.connect(audioCtx.destination);
-          s.start(0, tickOnset, TICK_LEN);
-          return;
-        } catch (e) {}
-      }
-      synthTing(); // fallback if the clip hasn't loaded/decoded
+      try {
+        // Dry "click": a very short high-passed noise burst with a fast decay.
+        var sr = audioCtx.sampleRate;
+        var len = Math.max(1, Math.floor(sr * 0.025)); // ~25 ms
+        var buf = audioCtx.createBuffer(1, len, sr);
+        var d = buf.getChannelData(0);
+        for (var i = 0; i < len; i++) {
+          var env = Math.pow(1 - i / len, 3); // fast decay
+          d[i] = (Math.random() * 2 - 1) * env;
+        }
+        var src = audioCtx.createBufferSource(); src.buffer = buf;
+        var hp = audioCtx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500;
+        var g = audioCtx.createGain(); g.gain.value = 0.55;
+        src.connect(hp); hp.connect(g); g.connect(audioCtx.destination);
+        src.start();
+      } catch (e) {}
     }
     var lastAlertAt = 0;
 
@@ -321,7 +290,8 @@
         if (km !== null && km < closest) closest = km;
       });
       if (closest <= alertKm) showAlert(closest);
-      if (soundOn && fresh.length > 0) {
+      // Only play when sound is on AND the tab is actually visible/active.
+      if (soundOn && fresh.length > 0 && !(hasDoc && document.hidden)) {
         var tnow = Date.now();
         if (tnow - lastTick > TICK_GAP_MS) { playTick(); lastTick = tnow; }
       }
