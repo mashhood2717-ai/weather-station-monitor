@@ -166,6 +166,32 @@
     var waitingForVisible = false;
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
+    var soundOn = opts.sound !== false; // play a short tick on new strikes
+    var audioCtx = null;
+    var lastTick = 0;
+    var TICK_GAP_MS = 900; // throttle: at most ~1 tick/sec during storms
+
+    function unlockAudio() {
+      try {
+        if (!audioCtx) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (e) {}
+    }
+    function playTick() {
+      if (!soundOn || !audioCtx) return;
+      try {
+        var t = audioCtx.currentTime;
+        var o = audioCtx.createOscillator();
+        var g = audioCtx.createGain();
+        o.type = 'square';
+        o.frequency.setValueAtTime(1750, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.2, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(t); o.stop(t + 0.07);
+      } catch (e) {}
+    }
     var lastAlertAt = 0;
 
     // ---- alert banner ----
@@ -260,6 +286,10 @@
         if (km !== null && km < closest) closest = km;
       });
       if (closest <= alertKm) showAlert(closest);
+      if (soundOn && fresh.length > 0) {
+        var tnow = Date.now();
+        if (tnow - lastTick > TICK_GAP_MS) { playTick(); lastTick = tnow; }
+      }
     }
 
     // Primary: live SSE stream. Falls back to polling if streaming is
@@ -382,12 +412,16 @@
           var ltgBtn = L.DomUtil.create('div', '', wrap);
           ltgBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var staBtn = L.DomUtil.create('div', '', wrap);
-          staBtn.style.cssText = btnStyle;
+          staBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
+          var sndBtn = L.DomUtil.create('div', '', wrap);
+          sndBtn.style.cssText = btnStyle;
           function renderLtg() { ltgBtn.innerHTML = '<span style="font-size:14px;">⚡</span> Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
           function renderSta() { staBtn.innerHTML = '<span style="font-size:14px;">📍</span> Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
-          renderLtg(); renderSta();
+          function renderSnd() { sndBtn.innerHTML = '<span style="font-size:14px;">' + (soundOn ? '🔊' : '🔇') + '</span> Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
+          renderLtg(); renderSta(); renderSnd();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
+          L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           return wrap;
         },
@@ -408,6 +442,19 @@
       if (!es && !pollTimer) connect();
     }
     if (hasDoc) document.addEventListener('visibilitychange', onVisibility);
+
+    // Unlock audio on the first user interaction (browsers block autoplay).
+    if (hasDoc) {
+      var audioUnlock = function () {
+        unlockAudio();
+        document.removeEventListener('pointerdown', audioUnlock);
+        document.removeEventListener('keydown', audioUnlock);
+        document.removeEventListener('touchstart', audioUnlock);
+      };
+      document.addEventListener('pointerdown', audioUnlock);
+      document.addEventListener('keydown', audioUnlock);
+      document.addEventListener('touchstart', audioUnlock);
+    }
 
     connect();
 
