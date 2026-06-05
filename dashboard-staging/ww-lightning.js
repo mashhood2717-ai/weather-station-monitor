@@ -180,20 +180,22 @@
     function playTick() {
       if (!soundOn || !audioCtx) return;
       try {
-        // Soft "water-drop" tick: sine gliding down through a lowpass, gentle envelope.
+        // Soft high "ting": pure sine fundamental + a quieter octave, gentle
+        // attack and smooth decay — clean and pleasant, not harsh.
         var t = audioCtx.currentTime;
-        var o = audioCtx.createOscillator();
         var g = audioCtx.createGain();
-        var f = audioCtx.createBiquadFilter();
-        f.type = 'lowpass'; f.frequency.setValueAtTime(2200, t);
-        o.type = 'sine';
-        o.frequency.setValueAtTime(950, t);
-        o.frequency.exponentialRampToValueAtTime(380, t + 0.08);
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.12, t + 0.012); // soft attack
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18); // smooth decay
-        o.connect(f); f.connect(g); g.connect(audioCtx.destination);
-        o.start(t); o.stop(t + 0.2);
+        g.gain.exponentialRampToValueAtTime(0.13, t + 0.004); // soft attack
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16); // smooth decay
+        g.connect(audioCtx.destination);
+        var o1 = audioCtx.createOscillator();
+        o1.type = 'sine'; o1.frequency.setValueAtTime(1568, t); // ~G6
+        var o2 = audioCtx.createOscillator();
+        o2.type = 'sine'; o2.frequency.setValueAtTime(3136, t); // octave (sparkle)
+        var g2 = audioCtx.createGain();
+        g2.gain.setValueAtTime(0.3, t); // octave quieter
+        o1.connect(g); o2.connect(g2); g2.connect(g);
+        o1.start(t); o2.start(t); o1.stop(t + 0.18); o2.stop(t + 0.18);
       } catch (e) {}
     }
     var lastAlertAt = 0;
