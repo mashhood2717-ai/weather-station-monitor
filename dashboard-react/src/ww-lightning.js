@@ -24,8 +24,9 @@
   var API_BASE = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning';
   var WINDOW_MS = 12000; // worker read window for the polling fallback
   var POLL_GAP_MS = 8000; // idle gap for the polling fallback
-  var STRIKE_TTL_MS = 2 * 60 * 1000;
-  var NEW_MS = 30 * 1000; // how long a strike stays "new" (pulses + bright)
+  var STRIKE_TTL_MS = 5 * 60 * 1000; // total time a strike stays on the map
+  var SOLID_MS = 2 * 60 * 1000; // full brightness for the first 2 min, then fades to 0 by 5 min
+  var NEW_MS = 30 * 1000; // pulsing "just struck" highlight
   var MAX_MARKERS = 3000;
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
@@ -299,18 +300,16 @@
         }
         if (!visible) return;
         var s = STYLE[e.sev];
-        if (now - e.born < NEW_MS) {
-          e.dot.setOpacity(1);
-          e.glow.setStyle({ fillOpacity: s.go });
-        } else {
-          if (e.isNew) {
-            if (e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new'); // stop pulsing
-            e.isNew = false;
-          }
-          var frac = remaining / STRIKE_TTL_MS;
-          e.dot.setOpacity(Math.max(frac, 0.12));
-          e.glow.setStyle({ fillOpacity: frac * s.go });
+        var age = now - e.born;
+        // Stop the "just struck" pulse after NEW_MS.
+        if (age >= NEW_MS && e.isNew) {
+          if (e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new');
+          e.isNew = false;
         }
+        // Solid for the first 2 min, then fade linearly to 0 by 5 min.
+        var op = age < SOLID_MS ? 1 : Math.max((STRIKE_TTL_MS - age) / (STRIKE_TTL_MS - SOLID_MS), 0);
+        e.dot.setOpacity(op);
+        e.glow.setStyle({ fillOpacity: op * s.go });
       });
     }, 1000);
 
