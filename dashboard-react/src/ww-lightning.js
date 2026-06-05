@@ -1,19 +1,19 @@
 /*
  * WeatherWalay Lightning Layer  (additive, dependency-free)
  * -------------------------------------------------------------
- * Adds a live lightning overlay to an existing Leaflet map. Self-contained:
- * creates its own map panes ABOVE the tiles, draws into its own canvas
- * renderers, and never modifies page code. Remove this file + its <script>
- * tag and the dashboard is exactly as before.
+ * Live lightning overlay for an existing Leaflet map. Self-contained: own panes
+ * above the tiles, own renderers; never modifies page code. Remove this file +
+ * its <script> tag and the dashboard is exactly as before.
  *
- * Features:
  *  - Strikes filtered server-side to IN/PK/AF/IR/NP/BD; each shows 2 min, fading.
- *  - Severity by local strike density: severe(red)/moderate(amber)/low(cyan).
- *  - NEW strikes pulse (animated ring) + white outline for their first ~30s,
- *    then settle to static/faded — so new vs old is obvious at a glance.
- *  - Click a strike -> popup with distance from Islamabad.
+ *  - Strikes drawn as lightning-bolt icons, coloured/sized by local density:
+ *    severe(red) / moderate(amber) / low(cyan).
+ *  - NEW strikes pulse (CSS-animated bolt) for their first ~30s, then settle to
+ *    static/faded — so new vs old is obvious.
+ *  - Soft glow underneath each bolt builds into "heat" zones.
+ *  - Click a bolt -> popup with distance from Islamabad.
  *  - 4 distance rings (100/200/300/400 km) around Islamabad.
- *  - Non-blocking alert banner when a strike lands within 50 km of Islamabad.
+ *  - Non-blocking banner when a strike lands within 50 km of Islamabad.
  *
  * Usage (vanilla): load this file; it auto-attaches to the global `map`.
  * Usage (modules): window.attachWWLightning(mapInstance, { auto:false, L });
@@ -24,12 +24,10 @@
   var API = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning/recent';
   var WINDOW_MS = 12000;
   var POLL_GAP_MS = 8000;
-  var STRIKE_TTL_MS = 2 * 60 * 1000; // strike lifetime on map
-  var NEW_MS = 30 * 1000; // how long a strike counts as "new" (pulses + bright)
-  var MAX_MARKERS = 5000;
-  var MAX_PULSES = 150; // cap on simultaneously-animating rings
-  var PULSE_MS = 1100; // pulse loop period
-  var CELL_DEG = 0.25; // ~25 km density grid
+  var STRIKE_TTL_MS = 2 * 60 * 1000;
+  var NEW_MS = 30 * 1000; // how long a strike stays "new" (pulses + bright)
+  var MAX_MARKERS = 3000;
+  var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
   var ISLAMABAD = [33.6844, 73.0479];
@@ -37,11 +35,12 @@
   var DEFAULT_ALERT_KM = 50;
   var ALERT_COOLDOWN_MS = 30 * 1000;
   var ALERT_SHOW_MS = 9000;
+  var BOLT_PATH = 'M13 2L3 14h9l-1 8 10-12h-9l1-8z'; // lightning bolt
 
   var STYLE = {
-    low: { c: '#22d3ee', d: 3, g: 9, go: 0.1 },
-    moderate: { c: '#f59e0b', d: 5, g: 15, go: 0.14 },
-    severe: { c: '#ef4444', d: 7, g: 22, go: 0.18 },
+    low: { c: '#22d3ee', size: 16, g: 9, go: 0.1 },
+    moderate: { c: '#f59e0b', size: 22, g: 15, go: 0.14 },
+    severe: { c: '#ef4444', size: 28, g: 22, go: 0.18 },
   };
 
   function sevOf(n) {
@@ -49,6 +48,18 @@
   }
   function cellOf(lat, lon) {
     return Math.floor(lat / CELL_DEG) + '_' + Math.floor(lon / CELL_DEG);
+  }
+
+  // Inject the bolt styles + pulse keyframes once.
+  function ensureStyle() {
+    if (typeof document === 'undefined' || document.getElementById('ww-ltg-style')) return;
+    var st = document.createElement('style');
+    st.id = 'ww-ltg-style';
+    st.textContent =
+      '.ww-bolt svg{display:block;filter:drop-shadow(0 0 2px rgba(0,0,0,.5));}' +
+      '.ww-bolt-new svg{animation:wwBoltPulse 1.1s ease-in-out infinite;transform-origin:50% 50%;}' +
+      '@keyframes wwBoltPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.45);opacity:.7;}}';
+    (document.head || document.documentElement).appendChild(st);
   }
 
   function attach(map, opts) {
@@ -61,6 +72,7 @@
     if (!map || !map.addLayer || !L || !L.canvas) return function () {};
     if (map.__wwLightningAttached) return map.__wwLightningDetach || function () {};
     map.__wwLightningAttached = true;
+    ensureStyle();
 
     var alertKm = typeof opts.alertKm === 'number' ? opts.alertKm : DEFAULT_ALERT_KM;
 
@@ -73,19 +85,25 @@
     }
     pane('ww-ltg-glow', 410, false);
     pane('ww-ltg-rings', 415, false);
-    pane('ww-ltg-pulse', 420, false);
-    var dotsPane = pane('ww-ltg-dots', 425, true); // clickable
+    var dotsPane = pane('ww-ltg-dots', 425, true);
 
     var glowR = L.canvas({ pane: 'ww-ltg-glow', padding: 0.5 });
-    var pulseR = L.canvas({ pane: 'ww-ltg-pulse', padding: 0.5 });
-    var dotR = L.canvas({ pane: 'ww-ltg-dots', padding: 0.5 });
+
+    function boltIcon(sev, isNew) {
+      var s = STYLE[sev];
+      var px = s.size;
+      return L.divIcon({
+        className: 'ww-bolt' + (isNew ? ' ww-bolt-new' : ''),
+        html:
+          '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="' + BOLT_PATH + '" fill="' + s.c + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+        iconSize: [px, px],
+        iconAnchor: [px / 2, px / 2],
+      });
+    }
 
     function distanceKm(lat, lon) {
-      try {
-        return Math.round(map.distance([lat, lon], ISLAMABAD) / 1000);
-      } catch (e) {
-        return null;
-      }
+      try { return Math.round(map.distance([lat, lon], ISLAMABAD) / 1000); } catch (e) { return null; }
     }
 
     // ---- Islamabad distance rings ----
@@ -117,10 +135,8 @@
       });
     }
 
-    var active = new Map(); // key -> entry
-    var counts = new Map(); // cell -> count
-    var pulsing = []; // entries with an active pulse ring
-    var animTimer = null;
+    var active = new Map();
+    var counts = new Map();
     var fadeTimer = null;
     var pollTimer = null;
     var backoff = 5000;
@@ -140,8 +156,7 @@
       banner.style.cssText =
         'position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;' +
         'background:#dc2626;color:#fff;font:600 13px system-ui,sans-serif;padding:8px 14px;' +
-        'border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.35);display:none;cursor:pointer;' +
-        'max-width:90%;text-align:center;';
+        'border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.35);display:none;cursor:pointer;max-width:90%;text-align:center;';
       banner.title = 'Click to dismiss';
       banner.onclick = function () { banner.style.display = 'none'; };
       container.appendChild(banner);
@@ -157,27 +172,6 @@
       bannerTimer = setTimeout(function () { if (banner) banner.style.display = 'none'; }, ALERT_SHOW_MS);
     }
 
-    // ---- pulse animation loop (cheap: only the ≤MAX_PULSES newest rings) ----
-    function tickAnim() {
-      if (pulsing.length === 0) { if (animTimer) { clearInterval(animTimer); animTimer = null; } return; }
-      var now = Date.now();
-      for (var i = pulsing.length - 1; i >= 0; i--) {
-        var e = pulsing[i];
-        var age = now - e.born;
-        if (!e.ring || !map.hasLayer(e.dot) || age >= NEW_MS) {
-          if (e.ring && map.hasLayer(e.ring)) map.removeLayer(e.ring);
-          e.ring = null;
-          pulsing.splice(i, 1);
-          continue;
-        }
-        if (!visible) continue;
-        var t = ((now - e.pulseStart) % PULSE_MS) / PULSE_MS; // 0..1 looping
-        e.ring.setRadius(e.base + t * e.base * 2.4);
-        e.ring.setStyle({ opacity: 0.75 * (1 - t) });
-      }
-      if (pulsing.length === 0 && animTimer) { clearInterval(animTimer); animTimer = null; }
-    }
-
     function addStrike(lat, lon, key, sev) {
       if (active.has(key) || active.size >= MAX_MARKERS) return null;
       var s = STYLE[sev];
@@ -189,10 +183,9 @@
         fillColor: s.c, fillOpacity: visible ? s.go : 0, interactive: false,
       }).addTo(map);
 
-      var dot = L.circleMarker([lat, lon], {
-        renderer: dotR, radius: s.d + 1, color: '#ffffff', weight: 2,
-        fillColor: s.c, fillOpacity: visible ? 1 : 0, opacity: visible ? 1 : 0,
-        interactive: true,
+      var dot = L.marker([lat, lon], {
+        pane: 'ww-ltg-dots', icon: boltIcon(sev, true), interactive: true,
+        keyboard: false, opacity: visible ? 1 : 0,
       }).addTo(map);
       dot.bindPopup(
         '<div style="font:12px system-ui,sans-serif;">' +
@@ -202,22 +195,9 @@
         '</div>'
       );
 
-      var entry = { dot: dot, glow: glow, sev: sev, born: now, expireAt: now + STRIKE_TTL_MS, isNew: true };
-      active.set(key, entry);
+      active.set(key, { dot: dot, glow: glow, sev: sev, born: now, expireAt: now + STRIKE_TTL_MS, isNew: true });
       var c = cellOf(lat, lon);
       counts.set(c, (counts.get(c) || 0) + 1);
-
-      if (visible && pulsing.length < MAX_PULSES) {
-        var ring = L.circleMarker([lat, lon], {
-          renderer: pulseR, radius: s.d, color: s.c, weight: 2,
-          opacity: 0.75, fill: false, interactive: false,
-        }).addTo(map);
-        entry.ring = ring;
-        entry.base = s.d;
-        entry.pulseStart = now;
-        pulsing.push(entry);
-        if (!animTimer) animTimer = setInterval(tickAnim, 70);
-      }
       return km;
     }
 
@@ -268,7 +248,6 @@
         if (remaining <= 0) {
           if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
           if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
-          if (e.ring && map.hasLayer(e.ring)) map.removeLayer(e.ring);
           active.delete(key);
           var ll = e.dot.getLatLng();
           var cc = cellOf(ll.lat, ll.lng);
@@ -278,20 +257,22 @@
         }
         if (!visible) return;
         var s = STYLE[e.sev];
-        var isNew = now - e.born < NEW_MS;
-        if (isNew) {
-          e.dot.setStyle({ color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
+        if (now - e.born < NEW_MS) {
+          e.dot.setOpacity(1);
           e.glow.setStyle({ fillOpacity: s.go });
         } else {
-          var frac = remaining / STRIKE_TTL_MS; // 1 -> 0
-          e.dot.setStyle({ color: s.c, weight: 1, radius: s.d, opacity: frac * 0.85, fillOpacity: frac * 0.9 });
+          if (e.isNew) {
+            if (e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new'); // stop pulsing
+            e.isNew = false;
+          }
+          var frac = remaining / STRIKE_TTL_MS;
+          e.dot.setOpacity(Math.max(frac, 0.12));
           e.glow.setStyle({ fillOpacity: frac * s.go });
-          e.isNew = false;
         }
       });
     }, 1000);
 
-    // ---- stations toggle (uses the page's existing cluster group) ----
+    // ---- stations toggle ----
     function getStationsLayer() {
       if (opts.stationsLayer) return opts.stationsLayer;
       try { if (typeof markerClusterGroup !== 'undefined' && markerClusterGroup) return markerClusterGroup; } catch (e) {}
@@ -310,9 +291,8 @@
       if (dotsPane) dotsPane.style.pointerEvents = v ? 'auto' : 'none';
       active.forEach(function (e) {
         var s = STYLE[e.sev];
-        e.dot.setStyle({ opacity: v ? 0.9 : 0, fillOpacity: v ? 0.9 : 0 });
+        e.dot.setOpacity(v ? 1 : 0);
         e.glow.setStyle({ fillOpacity: v ? s.go : 0 });
-        if (e.ring) e.ring.setStyle({ opacity: v ? 0.5 : 0 });
       });
       ringLayers.forEach(function (l) {
         if (l.setStyle) l.setStyle({ opacity: v ? 0.55 : 0 });
@@ -361,19 +341,16 @@
       if (hasDoc) document.removeEventListener('visibilitychange', onVisibility);
       if (pollTimer) clearTimeout(pollTimer);
       if (fadeTimer) clearInterval(fadeTimer);
-      if (animTimer) clearInterval(animTimer);
       if (bannerTimer) clearTimeout(bannerTimer);
       active.forEach(function (e) {
         if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
         if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
-        if (e.ring && map.hasLayer(e.ring)) map.removeLayer(e.ring);
       });
       ringLayers.forEach(function (l) { if (map.hasLayer(l)) map.removeLayer(l); });
       if (control) map.removeControl(control);
       if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
       active.clear();
       counts.clear();
-      pulsing.length = 0;
       map.__wwLightningAttached = false;
     };
     map.__wwLightningDetach = detach;
