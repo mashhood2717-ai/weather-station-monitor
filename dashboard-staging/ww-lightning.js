@@ -21,9 +21,9 @@
 (function () {
   'use strict';
 
-  var API = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning/recent';
-  var WINDOW_MS = 12000;
-  var POLL_GAP_MS = 8000;
+  var API_BASE = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning';
+  var WINDOW_MS = 12000; // worker read window for the polling fallback
+  var POLL_GAP_MS = 8000; // idle gap for the polling fallback
   var STRIKE_TTL_MS = 2 * 60 * 1000;
   var NEW_MS = 30 * 1000; // how long a strike stays "new" (pulses + bright)
   var MAX_MARKERS = 3000;
@@ -150,7 +150,12 @@
     var active = new Map();
     var counts = new Map();
     var fadeTimer = null;
-    var pollTimer = null;
+    var es = null;            // EventSource (live stream, primary)
+    var pollTimer = null;     // polling-fallback timer
+    var reconnectTimer = null;
+    var streamFails = 0;
+    var gotStreamMsg = false;
+    var usingPoll = false;
     var backoff = 5000;
     var cancelled = false;
     var visible = opts.visible !== false;
@@ -235,10 +240,35 @@
       if (closest <= alertKm) showAlert(closest);
     }
 
+    // Primary: live SSE stream. Falls back to polling if streaming is
+    // unavailable (e.g. worker not yet updated) or unsupported.
+    function connect() {
+      if (cancelled) return;
+      if (hasDoc && document.hidden) { waitingForVisible = true; return; }
+      if (usingPoll) { poll(); return; }
+      startStream();
+    }
+
+    function startStream() {
+      if (cancelled || typeof EventSource === 'undefined') { usingPoll = true; return poll(); }
+      try { es = new EventSource(API_BASE + '/stream'); } catch (e) { usingPoll = true; return poll(); }
+      es.onmessage = function (ev) {
+        gotStreamMsg = true; streamFails = 0;
+        try { var d = JSON.parse(ev.data); if (d && Array.isArray(d.strikes)) ingest(d); } catch (e) {}
+      };
+      es.onerror = function () {
+        if (!es || es.readyState !== 2 /* CLOSED */) return; // CONNECTING => auto-retrying
+        try { es.close(); } catch (e) {} es = null;
+        streamFails++;
+        if (!gotStreamMsg && streamFails >= 2) { usingPoll = true; poll(); } // stream unavailable -> poll
+        else { reconnectTimer = setTimeout(startStream, 2000); }
+      };
+    }
+
     function poll() {
       if (cancelled) return;
       if (hasDoc && document.hidden) { waitingForVisible = true; return; }
-      fetch(API + '?windowMs=' + WINDOW_MS, { headers: { Accept: 'application/json' } })
+      fetch(API_BASE + '/recent?windowMs=' + WINDOW_MS, { headers: { Accept: 'application/json' } })
         .then(function (r) { if (!r.ok) throw new Error('Lightning API ' + r.status); return r.json(); })
         .then(function (data) {
           if (cancelled) return;
@@ -343,17 +373,24 @@
       control.addTo(map);
     }
 
+    function stopConnections() {
+      if (es) { try { es.close(); } catch (e) {} es = null; }
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    }
     function onVisibility() {
-      if (!cancelled && !document.hidden && waitingForVisible) { waitingForVisible = false; poll(); }
+      if (cancelled) return;
+      if (document.hidden) { waitingForVisible = true; stopConnections(); } // pause when tab hidden
+      else if (waitingForVisible) { waitingForVisible = false; connect(); }
     }
     if (hasDoc) document.addEventListener('visibilitychange', onVisibility);
 
-    poll();
+    connect();
 
     var detach = function () {
       cancelled = true;
       if (hasDoc) document.removeEventListener('visibilitychange', onVisibility);
-      if (pollTimer) clearTimeout(pollTimer);
+      stopConnections();
       if (fadeTimer) clearInterval(fadeTimer);
       if (bannerTimer) clearTimeout(bannerTimer);
       active.forEach(function (e) {
