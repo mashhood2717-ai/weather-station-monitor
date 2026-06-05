@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import { Card } from 'antd';
 import L from 'leaflet';
 import 'leaflet.markercluster';
+import '../ww-lightning.js'; // defines window.attachWWLightning (additive overlay)
 
 function createMarkerIcon(status) {
     const color = status === 'Active' ? '#52c41a' : status === 'Disabled' ? '#8c8c8c' : '#ff4d4f';
@@ -64,6 +65,11 @@ export default function StationMap({ stations, isDark, onStationClick }) {
         });
         mapInstance.current.addLayer(clusterRef.current);
 
+        // Live lightning overlay (additive; attaches its own panes/controls).
+        const detachLightning = window.attachWWLightning
+            ? window.attachWWLightning(mapInstance.current, { auto: false, stationsLayer: clusterRef.current })
+            : null;
+
         // Map container now stretches to match the left column's natural
         // height — when that height changes (data refresh, window resize),
         // Leaflet would otherwise show gray tiles in the new area until
@@ -78,6 +84,7 @@ export default function StationMap({ stations, isDark, onStationClick }) {
 
         return () => {
             if (ro) ro.disconnect();
+            if (detachLightning) detachLightning();
             if (mapInstance.current) {
                 mapInstance.current.remove();
                 mapInstance.current = null;
