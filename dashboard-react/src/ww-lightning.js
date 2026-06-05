@@ -176,8 +176,8 @@
     var soundOn;
     try {
       var savedSound = localStorage.getItem('wwLightningSound');
-      soundOn = savedSound === null ? (opts.sound === true) : (savedSound === '1');
-    } catch (e) { soundOn = opts.sound === true; }
+      soundOn = savedSound === null ? (opts.sound !== false) : (savedSound === '1');
+    } catch (e) { soundOn = opts.sound !== false; }
     var audioCtx = null;
     var lastTick = 0;
     var TICK_GAP_MS = 60 * 1000; // one click at most per minute (not per strike, not realtime)
@@ -404,7 +404,7 @@
 
     // ---- rain radar overlay (RainViewer, free, no key) ----
     var radarOn;
-    try { radarOn = localStorage.getItem('wwLightningRadar') === '1'; } catch (e) { radarOn = false; }
+    try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; }
     var radarLayer = null;
     var radarTimer = null;
     function buildRadar() {
@@ -436,7 +436,7 @@
 
     // ---- EUMETSAT Meteosat IODC satellite clouds (free WMS, covers Pakistan) ----
     var satOn;
-    try { satOn = localStorage.getItem('wwLightningSat') === '1'; } catch (e) { satOn = false; }
+    try { var savedSat = localStorage.getItem('wwLightningSat'); satOn = savedSat === null ? true : (savedSat === '1'); } catch (e) { satOn = true; }
     var satLayer = null;
     var satTimer = null;
     function setSat(v) {
