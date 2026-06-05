@@ -166,7 +166,12 @@
     var waitingForVisible = false;
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
-    var soundOn = opts.sound === true; // soft click on new strikes (default OFF)
+    // Sound preference persists across refreshes (default OFF on first ever visit).
+    var soundOn;
+    try {
+      var savedSound = localStorage.getItem('wwLightningSound');
+      soundOn = savedSound === null ? (opts.sound === true) : (savedSound === '1');
+    } catch (e) { soundOn = opts.sound === true; }
     var audioCtx = null;
     var lastTick = 0;
     var TICK_GAP_MS = 60 * 1000; // one click at most per minute (not per strike, not realtime)
@@ -429,7 +434,7 @@
           renderLtg(); renderSta(); renderSnd();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
-          L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
+          L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           return wrap;
         },
