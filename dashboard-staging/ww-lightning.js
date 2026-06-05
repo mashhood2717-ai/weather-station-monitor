@@ -413,7 +413,7 @@
         if (radarLayer) {
           radarLayer.setUrl(url);
         } else {
-          radarLayer = L.tileLayer(url, { pane: 'ww-ltg-radar', opacity: 0.6, zIndex: 250, updateWhenIdle: true });
+          radarLayer = L.tileLayer(url, { pane: 'ww-ltg-radar', opacity: 0.6, zIndex: 250, updateWhenIdle: true, maxNativeZoom: 10, maxZoom: 18 });
           if (radarOn) radarLayer.addTo(map);
         }
       }).catch(function () {});
