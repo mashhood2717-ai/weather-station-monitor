@@ -24,10 +24,12 @@
   var API_BASE = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning';
   var WINDOW_MS = 12000; // worker read window for the polling fallback
   var POLL_GAP_MS = 8000; // idle gap for the polling fallback
-  var STRIKE_TTL_MS = 5 * 60 * 1000; // total time a strike stays on the map
-  var SOLID_MS = 2 * 60 * 1000; // full brightness for the first 2 min, then fades to 0 by 5 min
+  var STRIKE_TTL_MS = 15 * 60 * 1000; // total time a strike stays on the map
+  var SOLID_MS = 2 * 60 * 1000; // full colour for the first 2 min
+  var COLOR_END_MS = 5 * 60 * 1000; // colour fades out by 5 min, then turns grey
+  var GREY_COLOR = '#9ca3af'; // grey bolts for 5-15 min (old strikes)
   var NEW_MS = 30 * 1000; // pulsing "just struck" highlight
-  var MAX_MARKERS = 3000;
+  var MAX_MARKERS = 4000;
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
@@ -102,14 +104,15 @@
 
     var glowR = L.canvas({ pane: 'ww-ltg-glow', padding: 0.5 });
 
-    function boltIcon(sev, isNew) {
+    function boltIcon(sev, isNew, grey) {
       var s = STYLE[sev];
       var px = s.size;
+      var fill = grey ? GREY_COLOR : s.c;
       return L.divIcon({
-        className: 'ww-bolt' + (isNew ? ' ww-bolt-new' : ''),
+        className: 'ww-bolt' + (isNew && !grey ? ' ww-bolt-new' : ''),
         html:
           '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="' + BOLT_PATH + '" fill="' + s.c + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+          '<path d="' + BOLT_PATH + '" fill="' + fill + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/></svg>',
         iconSize: [px, px],
         iconAnchor: [px / 2, px / 2],
       });
@@ -190,8 +193,23 @@
       bannerTimer = setTimeout(function () { if (banner) banner.style.display = 'none'; }, ALERT_SHOW_MS);
     }
 
+    function removeEntry(key, e) {
+      if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
+      if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
+      active.delete(key);
+      var ll = e.dot.getLatLng();
+      var cc = cellOf(ll.lat, ll.lng);
+      var left = (counts.get(cc) || 1) - 1;
+      if (left <= 0) counts.delete(cc); else counts.set(cc, left);
+    }
+
     function addStrike(lat, lon, key, sev, t) {
-      if (active.has(key) || active.size >= MAX_MARKERS) return null;
+      if (active.has(key)) return null;
+      // Evict the oldest strike when full so new strikes are never blocked.
+      if (active.size >= MAX_MARKERS) {
+        var oldestKey = active.keys().next().value; // Map keeps chronological order
+        if (oldestKey) removeEntry(oldestKey, active.get(oldestKey));
+      }
       var s = STYLE[sev];
       var now = Date.now();
       var km = distanceKm(lat, lon);
@@ -218,7 +236,7 @@
         '</div>'
       );
 
-      active.set(key, { dot: dot, glow: glow, sev: sev, born: now, expireAt: now + STRIKE_TTL_MS, isNew: true });
+      active.set(key, { dot: dot, glow: glow, sev: sev, born: now, expireAt: now + STRIKE_TTL_MS, isNew: true, greyed: false });
       var c = cellOf(lat, lon);
       counts.set(c, (counts.get(c) || 0) + 1);
       return km;
@@ -291,16 +309,7 @@
       var now = Date.now();
       active.forEach(function (e, key) {
         var remaining = e.expireAt - now;
-        if (remaining <= 0) {
-          if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
-          if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
-          active.delete(key);
-          var ll = e.dot.getLatLng();
-          var cc = cellOf(ll.lat, ll.lng);
-          var left = (counts.get(cc) || 1) - 1;
-          if (left <= 0) counts.delete(cc); else counts.set(cc, left);
-          return;
-        }
+        if (remaining <= 0) { removeEntry(key, e); return; }
         if (!visible) return;
         var s = STYLE[e.sev];
         var age = now - e.born;
@@ -309,8 +318,22 @@
           if (e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new');
           e.isNew = false;
         }
-        // Solid for the first 2 min, then fade linearly to 0 by 5 min.
-        var op = age < SOLID_MS ? 1 : Math.max((STRIKE_TTL_MS - age) / (STRIKE_TTL_MS - SOLID_MS), 0);
+        // Phase 1 (0-2m): solid colour. Phase 2 (2-5m): colour fades to dim.
+        // Phase 3 (5-15m): grey bolt, fading further, then removed at 15m.
+        var op;
+        if (age < SOLID_MS) {
+          op = 1;
+        } else if (age < COLOR_END_MS) {
+          op = 1 - 0.55 * ((age - SOLID_MS) / (COLOR_END_MS - SOLID_MS)); // 1 -> 0.45
+        } else {
+          if (!e.greyed) {
+            e.dot.setIcon(boltIcon(e.sev, false, true)); // swap to grey bolt
+            e.glow.setStyle({ fillColor: GREY_COLOR });
+            e.greyed = true;
+          }
+          op = 0.45 - 0.33 * ((age - COLOR_END_MS) / (STRIKE_TTL_MS - COLOR_END_MS)); // 0.45 -> 0.12
+          if (op < 0.05) op = 0.05;
+        }
         e.dot.setOpacity(op);
         e.glow.setStyle({ fillOpacity: op * s.go });
       });
