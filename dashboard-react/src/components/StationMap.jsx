@@ -67,7 +67,7 @@ export default function StationMap({ stations, isDark, onStationClick }) {
 
         // Live lightning overlay (additive; attaches its own panes/controls).
         const detachLightning = window.attachWWLightning
-            ? window.attachWWLightning(mapInstance.current, { auto: false, stationsLayer: clusterRef.current })
+            ? window.attachWWLightning(mapInstance.current, { auto: false, stationsLayer: clusterRef.current, L })
             : null;
 
         // Map container now stretches to match the left column's natural

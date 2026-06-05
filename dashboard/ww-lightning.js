@@ -49,7 +49,14 @@
 
   function attach(map, opts) {
     opts = opts || {};
-    if (!map || !map.addLayer || typeof L === 'undefined' || !L.canvas) return function () {};
+    // Resolve Leaflet: global `L` for the vanilla dashboards (loaded via
+    // <script>), or opts.L for module bundlers (React) where L is not global.
+    var L =
+      (opts && opts.L) ||
+      (typeof window !== 'undefined' && window.L) ||
+      (typeof globalThis !== 'undefined' && globalThis.L) ||
+      null;
+    if (!map || !map.addLayer || !L || !L.canvas) return function () {};
     if (map.__wwLightningAttached) return map.__wwLightningDetach || function () {};
     map.__wwLightningAttached = true;
 
