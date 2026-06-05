@@ -78,7 +78,15 @@
     st.textContent =
       '.ww-bolt svg{display:block;filter:drop-shadow(0 0 2px rgba(0,0,0,.5));}' +
       '.ww-bolt-new svg{animation:wwBoltPulse 1.1s ease-in-out infinite;transform-origin:50% 50%;}' +
-      '@keyframes wwBoltPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.45);opacity:.7;}}';
+      '@keyframes wwBoltPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.45);opacity:.7;}}' +
+      '.ww-ic{font-size:14px;line-height:1;}' +
+      // On phones: compact the layer panel to icons only (labels hidden), bigger tap target.
+      '@media (max-width:640px){' +
+      '.ww-ltg-ctl{font-size:11px !important;}' +
+      '.ww-ltg-ctl>div{padding:7px 9px !important;justify-content:center;}' +
+      '.ww-ltg-ctl .ww-lbl{display:none !important;}' +
+      '.ww-ic{font-size:18px !important;}' +
+      '}';
     (document.head || document.documentElement).appendChild(st);
   }
 
@@ -478,7 +486,7 @@
       var Ctl = L.Control.extend({
         options: { position: 'topright' },
         onAdd: function () {
-          var wrap = L.DomUtil.create('div', 'leaflet-bar');
+          var wrap = L.DomUtil.create('div', 'leaflet-bar ww-ltg-ctl');
           wrap.style.cssText = 'background:#fff;font:600 12px system-ui,sans-serif;color:#333;overflow:hidden;';
           L.DomEvent.disableClickPropagation(wrap);
           L.DomEvent.disableScrollPropagation(wrap);
@@ -493,11 +501,11 @@
           rdrBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var satBtn = L.DomUtil.create('div', '', wrap);
           satBtn.style.cssText = btnStyle;
-          function renderLtg() { ltgBtn.innerHTML = '<span style="font-size:14px;">⚡</span> Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
-          function renderSta() { staBtn.innerHTML = '<span style="font-size:14px;">📍</span> Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
-          function renderSnd() { sndBtn.innerHTML = '<span style="font-size:14px;">' + (soundOn ? '🔊' : '🔇') + '</span> Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
-          function renderRdr() { rdrBtn.innerHTML = '<span style="font-size:14px;">🌧️</span> Radar: ' + (radarOn ? 'On' : 'Off'); rdrBtn.style.opacity = radarOn ? '1' : '0.55'; }
-          function renderSat() { satBtn.innerHTML = '<span style="font-size:14px;">🛰️</span> Satellite: ' + (satOn ? 'On' : 'Off'); satBtn.style.opacity = satOn ? '1' : '0.55'; }
+          function renderLtg() { ltgBtn.innerHTML = '<span class="ww-ic">⚡</span><span class="ww-lbl"> Lightning: ' + (visible ? 'On' : 'Off') + '</span>'; ltgBtn.title = 'Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
+          function renderSta() { staBtn.innerHTML = '<span class="ww-ic">📍</span><span class="ww-lbl"> Stations: ' + (stationsVisible ? 'On' : 'Off') + '</span>'; staBtn.title = 'Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
+          function renderSnd() { sndBtn.innerHTML = '<span class="ww-ic">' + (soundOn ? '🔊' : '🔇') + '</span><span class="ww-lbl"> Sound: ' + (soundOn ? 'On' : 'Off') + '</span>'; sndBtn.title = 'Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
+          function renderRdr() { rdrBtn.innerHTML = '<span class="ww-ic">🌧️</span><span class="ww-lbl"> Radar: ' + (radarOn ? 'On' : 'Off') + '</span>'; rdrBtn.title = 'Radar: ' + (radarOn ? 'On' : 'Off'); rdrBtn.style.opacity = radarOn ? '1' : '0.55'; }
+          function renderSat() { satBtn.innerHTML = '<span class="ww-ic">🛰️</span><span class="ww-lbl"> Satellite: ' + (satOn ? 'On' : 'Off') + '</span>'; satBtn.title = 'Satellite: ' + (satOn ? 'On' : 'Off'); satBtn.style.opacity = satOn ? '1' : '0.55'; }
           renderLtg(); renderSta(); renderSnd(); renderRdr(); renderSat();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });

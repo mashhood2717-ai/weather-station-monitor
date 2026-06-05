@@ -166,6 +166,13 @@ body, body * {
   border-color: #334155;
 }
 
+/* Compact the map legend on small/mobile screens */
+@media (max-width: 640px) {
+  .map-legend { padding: 5px 8px; font-size: 10px; line-height: 15px; border-radius: 6px; }
+  .map-legend-title { font-size: 10px; margin-bottom: 2px; }
+  .map-legend i { width: 8px; height: 8px; margin-right: 4px; }
+}
+
 .map-dark .leaflet-popup-content-wrapper,
 .map-dark .leaflet-popup-tip {
   background: #1e293b;
