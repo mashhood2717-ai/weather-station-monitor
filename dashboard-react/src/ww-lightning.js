@@ -166,7 +166,7 @@
     var waitingForVisible = false;
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
-    var soundOn = opts.sound !== false; // play a short tick on new strikes
+    var soundOn = opts.sound === true; // play a soft tick on new strikes (default OFF)
     var audioCtx = null;
     var lastTick = 0;
     var TICK_GAP_MS = 900; // throttle: at most ~1 tick/sec during storms
@@ -180,16 +180,20 @@
     function playTick() {
       if (!soundOn || !audioCtx) return;
       try {
+        // Soft "water-drop" tick: sine gliding down through a lowpass, gentle envelope.
         var t = audioCtx.currentTime;
         var o = audioCtx.createOscillator();
         var g = audioCtx.createGain();
-        o.type = 'square';
-        o.frequency.setValueAtTime(1750, t);
+        var f = audioCtx.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.setValueAtTime(2200, t);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(950, t);
+        o.frequency.exponentialRampToValueAtTime(380, t + 0.08);
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.2, t + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start(t); o.stop(t + 0.07);
+        g.gain.exponentialRampToValueAtTime(0.12, t + 0.012); // soft attack
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18); // smooth decay
+        o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+        o.start(t); o.stop(t + 0.2);
       } catch (e) {}
     }
     var lastAlertAt = 0;
