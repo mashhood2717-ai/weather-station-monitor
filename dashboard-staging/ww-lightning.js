@@ -244,7 +244,6 @@
     // unavailable (e.g. worker not yet updated) or unsupported.
     function connect() {
       if (cancelled) return;
-      if (hasDoc && document.hidden) { waitingForVisible = true; return; }
       if (usingPoll) { poll(); return; }
       startStream();
     }
@@ -267,7 +266,6 @@
 
     function poll() {
       if (cancelled) return;
-      if (hasDoc && document.hidden) { waitingForVisible = true; return; }
       fetch(API_BASE + '/recent?windowMs=' + WINDOW_MS, { headers: { Accept: 'application/json' } })
         .then(function (r) { if (!r.ok) throw new Error('Lightning API ' + r.status); return r.json(); })
         .then(function (data) {
@@ -378,10 +376,11 @@
       if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     }
+    // Stream 24/7 even when the tab is hidden (monitoring display). On returning
+    // to the foreground, re-establish the connection only if it was dropped.
     function onVisibility() {
-      if (cancelled) return;
-      if (document.hidden) { waitingForVisible = true; stopConnections(); } // pause when tab hidden
-      else if (waitingForVisible) { waitingForVisible = false; connect(); }
+      if (cancelled || document.hidden) return;
+      if (!es && !pollTimer) connect();
     }
     if (hasDoc) document.addEventListener('visibilitychange', onVisibility);
 
