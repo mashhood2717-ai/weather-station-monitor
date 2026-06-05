@@ -190,11 +190,13 @@
       bannerTimer = setTimeout(function () { if (banner) banner.style.display = 'none'; }, ALERT_SHOW_MS);
     }
 
-    function addStrike(lat, lon, key, sev) {
+    function addStrike(lat, lon, key, sev, t) {
       if (active.has(key) || active.size >= MAX_MARKERS) return null;
       var s = STYLE[sev];
       var now = Date.now();
       var km = distanceKm(lat, lon);
+      var timeStr = '';
+      try { if (t) timeStr = new Date(Number(t)).toLocaleTimeString(); } catch (e) {}
 
       var glow = L.circleMarker([lat, lon], {
         renderer: glowR, radius: s.g, stroke: false,
@@ -211,6 +213,7 @@
           '<b>⚡ Lightning strike</b><br>' +
           (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of Islamabad<br>' : '') +
           'Direction: ' + brg.dir + ' (' + brg.deg + '°)<br>' +
+          (timeStr ? 'Time: ' + timeStr + '<br>' : '') +
           'Severity: ' + sev +
         '</div>'
       );
@@ -226,7 +229,7 @@
       for (var i = 0; i < data.strikes.length; i++) {
         var st = data.strikes[i];
         var key = st[0] + ',' + st[1] + ',' + st[2];
-        if (!active.has(key)) fresh.push({ lat: st[0], lon: st[1], key: key });
+        if (!active.has(key)) fresh.push({ lat: st[0], lon: st[1], key: key, t: st[2] });
       }
       var batch = new Map(counts);
       fresh.forEach(function (f) {
@@ -235,7 +238,7 @@
       });
       var closest = Infinity;
       fresh.forEach(function (f) {
-        var km = addStrike(f.lat, f.lon, f.key, sevOf(batch.get(cellOf(f.lat, f.lon)) || 1));
+        var km = addStrike(f.lat, f.lon, f.key, sevOf(batch.get(cellOf(f.lat, f.lon)) || 1), f.t);
         if (km !== null && km < closest) closest = km;
       });
       if (closest <= alertKm) showAlert(closest);
