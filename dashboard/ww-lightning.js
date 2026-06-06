@@ -11,9 +11,9 @@
  *  - NEW strikes pulse (CSS-animated bolt) for their first ~30s, then settle to
  *    static/faded — so new vs old is obvious.
  *  - Soft glow underneath each bolt builds into "heat" zones.
- *  - Click a bolt -> popup with distance from Islamabad.
- *  - 4 distance rings (100/200/300/400 km) around Islamabad.
- *  - Non-blocking banner when a strike lands within 50 km of Islamabad.
+ *  - Click a bolt -> popup with distance/direction from the center.
+ *  - A single alert ring (default 50 km) around the center (device GPS, else Islamabad).
+ *  - Non-blocking banner when a strike lands within the alert radius.
  *
  * Usage (vanilla): load this file; it auto-attaches to the global `map`.
  * Usage (modules): window.attachWWLightning(mapInstance, { auto:false, L });
@@ -37,15 +37,14 @@
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
-  var ISLAMABAD = [33.6844, 73.0479];
-  var RING_KM = [100, 200, 300, 400];
+  var ISLAMABAD = [33.6844, 73.0479]; // default center when geolocation is unavailable
   var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
-  // Initial bearing from Islamabad to (lat,lon) -> { deg, dir } (16-point compass).
-  function bearingFromIslamabad(lat, lon) {
+  // Initial bearing from center c ([lat,lon]) to (lat,lon) -> { deg, dir } (16-point compass).
+  function bearingFrom(lat, lon, c) {
     var rad = Math.PI / 180;
-    var p1 = ISLAMABAD[0] * rad, p2 = lat * rad;
-    var dl = (lon - ISLAMABAD[1]) * rad;
+    var p1 = c[0] * rad, p2 = lat * rad;
+    var dl = (lon - c[1]) * rad;
     var y = Math.sin(dl) * Math.cos(p2);
     var x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
     var deg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
@@ -132,37 +131,54 @@
       });
     }
 
+    // Center for the ring/alert/bearings: device GPS when available, else Islamabad.
+    var center = ISLAMABAD.slice();
+    var centerLabel = 'Islamabad';
     function distanceKm(lat, lon) {
-      try { return Math.round(map.distance([lat, lon], ISLAMABAD) / 1000); } catch (e) { return null; }
+      try { return Math.round(map.distance([lat, lon], center) / 1000); } catch (e) { return null; }
     }
 
-    // ---- Islamabad distance rings ----
+    // ---- single alert ring (alertKm, default 50 km) around the center ----
     var ringLayers = [];
-    if (opts.rings !== false) {
-      ringLayers.push(
-        L.circleMarker(ISLAMABAD, {
-          pane: 'ww-ltg-rings', radius: 4, color: '#0ea5e9',
-          fillColor: '#0ea5e9', fillOpacity: 1, weight: 1, interactive: false,
-        }).addTo(map)
-      );
-      RING_KM.forEach(function (km) {
-        ringLayers.push(
-          L.circle(ISLAMABAD, {
-            pane: 'ww-ltg-rings', radius: km * 1000, color: '#0ea5e9',
-            weight: 1, opacity: 0.55, fill: false, dashArray: '4 6', interactive: false,
-          }).addTo(map)
-        );
-        ringLayers.push(
-          L.marker([ISLAMABAD[0] + km / 111, ISLAMABAD[1]], {
-            pane: 'ww-ltg-rings', interactive: false,
-            icon: L.divIcon({
-              className: '',
-              html: '<span style="background:rgba(14,165,233,.85);color:#fff;font-size:10px;font-weight:600;padding:1px 5px;border-radius:6px;white-space:nowrap;">' + km + ' km</span>',
-              iconSize: [44, 16], iconAnchor: [22, 8],
-            }),
-          }).addTo(map)
-        );
-      });
+    var centerDot = null, ringCircle = null, ringLabel = null;
+    function drawRing() {
+      if (opts.rings === false) return;
+      var labelPos = [center[0] + alertKm / 111, center[1]];
+      if (!centerDot) {
+        centerDot = L.circleMarker(center, {
+          pane: 'ww-ltg-rings', radius: 4, color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 1, weight: 1, interactive: false,
+        }).addTo(map);
+        ringCircle = L.circle(center, {
+          pane: 'ww-ltg-rings', radius: alertKm * 1000, color: '#0ea5e9', weight: 1, opacity: 0.6, fill: false, dashArray: '4 6', interactive: false,
+        }).addTo(map);
+        ringLabel = L.marker(labelPos, {
+          pane: 'ww-ltg-rings', interactive: false,
+          icon: L.divIcon({
+            className: '',
+            html: '<span style="background:rgba(14,165,233,.85);color:#fff;font-size:10px;font-weight:600;padding:1px 5px;border-radius:6px;white-space:nowrap;">' + alertKm + ' km</span>',
+            iconSize: [44, 16], iconAnchor: [22, 8],
+          }),
+        }).addTo(map);
+        ringLayers = [centerDot, ringCircle, ringLabel];
+      } else {
+        centerDot.setLatLng(center);
+        ringCircle.setLatLng(center);
+        ringLabel.setLatLng(labelPos);
+      }
+    }
+    drawRing();
+
+    // Re-base the ring + alert + bearings on the device's real location (fallback: Islamabad).
+    if (navigator.geolocation) {
+      try {
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          if (pos && pos.coords) {
+            center = [pos.coords.latitude, pos.coords.longitude];
+            centerLabel = 'your location';
+            drawRing();
+          }
+        }, function () {}, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+      } catch (e) {}
     }
 
     var active = new Map();
@@ -243,7 +259,7 @@
       var now = Date.now();
       if (now - lastAlertAt < ALERT_COOLDOWN_MS) return;
       lastAlertAt = now;
-      banner.innerHTML = '⚠️ Lightning strike ' + km + ' km from Islamabad';
+      banner.innerHTML = '⚠️ Lightning strike ' + km + ' km from ' + centerLabel;
       banner.style.display = 'block';
       if (bannerTimer) clearTimeout(bannerTimer);
       bannerTimer = setTimeout(function () { if (banner) banner.style.display = 'none'; }, ALERT_SHOW_MS);
@@ -281,11 +297,11 @@
         pane: 'ww-ltg-dots', icon: boltIcon(sev, true), interactive: true,
         keyboard: false, opacity: visible ? 1 : 0,
       }).addTo(map);
-      var brg = bearingFromIslamabad(lat, lon);
+      var brg = bearingFrom(lat, lon, center);
       dot.bindPopup(
         '<div style="font:12px system-ui,sans-serif;">' +
           '<b>⚡ Lightning strike</b><br>' +
-          (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of Islamabad<br>' : '') +
+          (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of ' + centerLabel + '<br>' : '') +
           'Direction: ' + brg.dir + ' (' + brg.deg + '°)<br>' +
           (timeStr ? 'Time: ' + timeStr + '<br>' : '') +
           'Severity: ' + sev +
