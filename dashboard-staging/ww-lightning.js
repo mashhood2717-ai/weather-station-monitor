@@ -112,6 +112,7 @@
     }
     pane('ww-ltg-radar', 250, false); // satellite clouds above base tiles, below strikes/markers
     pane('ww-ltg-precip', 255, false); // precipitation above clouds, below strikes/markers
+    pane('ww-ltg-labels', 260, false); // place names re-drawn above the weather overlays
     pane('ww-ltg-glow', 410, false);
     pane('ww-ltg-rings', 415, false);
     var dotsPane = pane('ww-ltg-dots', 425, true);
@@ -492,6 +493,22 @@
     else { try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; } }
     var radarLayer = null;
     var radarTimer = null;
+
+    // Re-draw place names ABOVE the weather overlays so they stay readable.
+    var labelsLayer = null;
+    function ensureLabelsTop() {
+      if (opts.labels === false) return;
+      if (!labelsLayer) {
+        labelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+          pane: 'ww-ltg-labels', maxZoom: 18, opacity: 0.95,
+        });
+      }
+      if (!map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
+    }
+    function maybeRemoveLabelsTop() {
+      if (!radarOn && !satOn && labelsLayer && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+    }
+
     function setRadar(v) {
       radarOn = v;
       if (persist) try { localStorage.setItem('wwLightningRadar', v ? '1' : '0'); } catch (e) {}
@@ -505,9 +522,11 @@
         }
         if (!map.hasLayer(radarLayer)) radarLayer.addTo(map);
         if (!radarTimer) radarTimer = setInterval(function () { if (radarLayer) radarLayer.setParams({ _ts: Math.floor(Date.now() / EUMET_REFRESH_MS) }); }, EUMET_REFRESH_MS);
+        ensureLabelsTop();
       } else {
         if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
         if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+        maybeRemoveLabelsTop();
       }
     }
 
@@ -532,9 +551,11 @@
         // Bust the tile cache each refresh so the WMS serves the newest frame
         // (plain redraw() re-requests identical URLs and the browser caches them).
         if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.setParams({ _ts: Math.floor(Date.now() / EUMET_REFRESH_MS) }); }, EUMET_REFRESH_MS);
+        ensureLabelsTop();
       } else {
         if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
         if (satTimer) { clearInterval(satTimer); satTimer = null; }
+        maybeRemoveLabelsTop();
       }
     }
 
@@ -643,6 +664,7 @@
       if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
       if (satTimer) clearInterval(satTimer);
       if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
+      if (labelsLayer && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
       if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
       active.clear();
       counts.clear();
