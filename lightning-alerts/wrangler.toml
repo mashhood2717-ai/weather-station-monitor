@@ -17,6 +17,11 @@ new_sqlite_classes = ["AlertHub"]
 [triggers]
 crons = ["* * * * *"]
 
+# Serve the app's map page (lightning-map.html + ww-lightning.js) from THIS account.
+# Static files are served for matching paths; /buffer and /alerts/* fall through to the worker.
+[assets]
+directory = "./public"
+
 [vars]
 STREAM_URL = "https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning/stream"
 # FCM_SA (the Firebase service-account JSON) is set as a SECRET, not here:

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=6, user-scalable=yes" />
+  <title>Lightning &amp; Satellite</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #f8fafc; }
+    #map { position: absolute; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="ww-lightning.js"></script>
+  <script>
+    // Named "lightningMap" (not "map") so ww-lightning.js does NOT auto-attach;
+    // we attach manually below with a fixed lightning + satellite config.
+    var lightningMap = L.map('map', { zoomControl: true, attributionControl: true })
+      .setView([30.3753, 69.3451], 5);
+
+    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
+    }).addTo(lightningMap); // light/white default
+    var darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
+    });
+    L.control.layers({ 'Light': lightBase, 'Dark': darkBase }, null, { position: 'topleft' }).addTo(lightningMap);
+
+    if (window.attachWWLightning) {
+      window.attachWWLightning(lightningMap, {
+        persist: false,    // ignore/never write localStorage (isolated from dashboards)
+        stations: false,   // no station markers/toggle
+        sound: true,       // tick on new in-view strikes (needs one user tap to unlock audio)
+        radar: true,       // EUMETSAT precipitation (covers Pakistan)
+        satellite: true,   // EUMETSAT clouds ON
+        // lightning is on by default (visible)
+      });
+    }
+  </script>
+</body>
+</html>
