@@ -33,6 +33,7 @@
   var EUMET_WMS = 'https://view.eumetsat.int/geoserver/ows?'; // EUMETView WMS (free, no key)
   var EUMET_LAYER = 'msg_iodc:ir108'; // Meteosat IODC infrared clouds — covers Pakistan, day + night
   var EUMET_PRECIP_LAYER = 'msg_iodc:h63'; // IODC precipitation rate — covers Pakistan (replaces RainViewer)
+  var BUFFER_URL = 'https://lightning-alerts.mashhoodiqbal493.workers.dev/buffer'; // last-10-min backfill so nothing is missed
   var EUMET_REFRESH_MS = 10 * 60 * 1000; // re-fetch newest IODC frame (publishes ~every 15 min)
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
@@ -329,15 +330,18 @@
       if (left <= 0) counts.delete(cc); else counts.set(cc, left);
     }
 
-    function addStrike(lat, lon, key, sev, t) {
+    function addStrike(lat, lon, key, sev, t, bornAt) {
       if (active.has(key)) return null;
+      var now = Date.now();
+      var born = bornAt || now;
+      if (now - born >= STRIKE_TTL_MS) return null; // too old (backfill) — skip
       // Evict the oldest strike when full so new strikes are never blocked.
       if (active.size >= MAX_MARKERS) {
         var oldestKey = active.keys().next().value; // Map keeps chronological order
         if (oldestKey) removeEntry(oldestKey, active.get(oldestKey));
       }
       var s = STYLE[sev];
-      var now = Date.now();
+      var isNewStrike = (now - born) < NEW_MS;
       var km = distanceKm(lat, lon);
       var timeStr = '';
       try { if (t) timeStr = new Date(Number(t)).toLocaleTimeString(); } catch (e) {}
@@ -348,7 +352,7 @@
       }).addTo(map);
 
       var dot = L.marker([lat, lon], {
-        pane: 'ww-ltg-dots', icon: boltIcon(sev, true), interactive: true,
+        pane: 'ww-ltg-dots', icon: boltIcon(sev, isNewStrike), interactive: true,
         keyboard: false, opacity: visible ? 1 : 0,
       }).addTo(map);
       var brg = bearingFrom(lat, lon, center);
@@ -362,13 +366,13 @@
         '</div>'
       );
 
-      active.set(key, { dot: dot, glow: glow, sev: sev, born: now, expireAt: now + STRIKE_TTL_MS, isNew: true, greyed: false });
+      active.set(key, { dot: dot, glow: glow, sev: sev, born: born, expireAt: born + STRIKE_TTL_MS, isNew: isNewStrike, greyed: false });
       var c = cellOf(lat, lon);
       counts.set(c, (counts.get(c) || 0) + 1);
       return km;
     }
 
-    function ingest(data) {
+    function ingest(data, isBackfill) {
       var fresh = [];
       for (var i = 0; i < data.strikes.length; i++) {
         var st = data.strikes[i];
@@ -384,10 +388,12 @@
       var bounds = map.getBounds();
       var visibleFresh = false;
       fresh.forEach(function (f) {
-        var km = addStrike(f.lat, f.lon, f.key, sevOf(batch.get(cellOf(f.lat, f.lon)) || 1), f.t);
+        // Backfilled (historical) strikes are aged by their own timestamp.
+        var km = addStrike(f.lat, f.lon, f.key, sevOf(batch.get(cellOf(f.lat, f.lon)) || 1), f.t, isBackfill ? f.t : undefined);
         if (km !== null && km < closest) closest = km;
         if (!visibleFresh && bounds.contains(L.latLng(f.lat, f.lon))) visibleFresh = true;
       });
+      if (isBackfill) return; // historical fill: no banner, no sound
       if (closest <= alertKm) showAlert(closest);
       // Sound only for NEW strikes currently visible on the map, tab active, throttled.
       if (soundOn && visibleFresh && !(hasDoc && document.hidden)) {
@@ -396,10 +402,20 @@
       }
     }
 
+    // Pull the last ~10 min of strikes so reconnects / app-opens miss nothing.
+    function backfill() {
+      if (cancelled) return;
+      fetch((opts.bufferUrl || BUFFER_URL), { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (!cancelled && d && Array.isArray(d.strikes)) ingest(d, true); })
+        .catch(function () {});
+    }
+
     // Primary: live SSE stream. Falls back to polling if streaming is
     // unavailable (e.g. worker not yet updated) or unsupported.
     function connect() {
       if (cancelled) return;
+      backfill(); // pull last ~10 min so reconnects / app-opens miss nothing
       if (usingPoll) { poll(); return; }
       startStream();
     }

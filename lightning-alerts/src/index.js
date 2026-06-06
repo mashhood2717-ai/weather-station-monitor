@@ -7,6 +7,8 @@
 const DEFAULT_RADIUS_KM = 50;
 const MAX_RADIUS_KM = 200;
 const COOLDOWN_MS = 10 * 60 * 1000; // one alert per user per 10 min
+const BUFFER_MS = 10 * 60 * 1000;   // keep last 10 min of strikes for app backfill
+const BUFFER_MAX = 4000;            // cap the /buffer response size
 const CELL_DEG = 0.5;               // grid bucket (~55 km)
 const CELL_SPAN = 4;                // search +/-4 cells (~220 km) to cover MAX_RADIUS_KM
 const SEND_CONCURRENCY = 20;
@@ -39,9 +41,23 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders() });
     const url = new URL(request.url);
+    // 10-min strike buffer for app backfill, edge-cached so 10k clients don't hammer the DO.
+    if (url.pathname === '/buffer') {
+      const cache = caches.default;
+      const cacheKey = new Request(url.toString());
+      let resp = await cache.match(cacheKey);
+      if (resp) return resp;
+      const stub = env.ALERTS.get(env.ALERTS.idFromName('global'));
+      const r = await stub.fetch('https://do/_buffer');
+      resp = new Response(r.body, r);
+      resp.headers.set('cache-control', 'public, max-age=15');
+      resp.headers.set('access-control-allow-origin', '*');
+      ctx.waitUntil(cache.put(cacheKey, resp.clone()));
+      return resp;
+    }
     if (url.pathname.startsWith('/alerts/')) {
       const stub = env.ALERTS.get(env.ALERTS.idFromName('global'));
       return stub.fetch(request);
@@ -62,6 +78,7 @@ export class AlertHub {
     this.sql = state.storage.sql;
     this.subs = new Map();   // token -> { token, lat, lon, radius, last }
     this.grid = new Map();   // "i_j" -> Set(token)
+    this.buffer = [];        // rolling last-10-min strikes: [lat, lon, t]
     this.running = false;
     this.loaded = false;
     this.tokenCache = null;  // { token, exp }
@@ -94,13 +111,21 @@ export class AlertHub {
 
   async fetch(request) {
     await this.ensureLoaded();
+    this.startConsumer(); // any hit keeps the stream consumer alive
     const url = new URL(request.url);
     const p = url.pathname;
+
+    if (p === '/_buffer') {
+      const arr = this.buffer.length > BUFFER_MAX ? this.buffer.slice(this.buffer.length - BUFFER_MAX) : this.buffer;
+      return new Response(JSON.stringify({ serverTime: Date.now(), count: arr.length, strikes: arr }), {
+        headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+      });
+    }
 
     if (p === '/alerts/_ensure') { this.startConsumer(); return json({ ok: true, running: this.running }); }
 
     if (p === '/alerts/status') {
-      return json({ subscribers: this.subs.size, cells: this.grid.size, running: this.running, hasKey: !!this.env.FCM_SA });
+      return json({ subscribers: this.subs.size, cells: this.grid.size, running: this.running, hasKey: !!this.env.FCM_SA, buffer: this.buffer.length });
     }
 
     if (p === '/alerts/subscribe' || p === '/alerts/update') {
@@ -175,8 +200,18 @@ export class AlertHub {
   }
 
   async onStrikes(strikes) {
-    if (!this.subs.size) return;
     const now = Date.now();
+    // Rolling 10-min buffer for app backfill — kept even with zero subscribers.
+    for (const st of strikes) {
+      const blat = +st[0], blon = +st[1];
+      if (!isFinite(blat) || !isFinite(blon)) continue;
+      this.buffer.push([blat, blon, st.length > 2 ? +st[2] : now]);
+    }
+    const cutoff = now - BUFFER_MS;
+    while (this.buffer.length && this.buffer[0][2] < cutoff) this.buffer.shift();
+    if (this.buffer.length > 60000) this.buffer.splice(0, this.buffer.length - 60000);
+
+    if (!this.subs.size) return;
     const toSend = new Map(); // token -> { lat, lon, dkm }
     for (const st of strikes) {
       const lat = +st[0], lon = +st[1];
