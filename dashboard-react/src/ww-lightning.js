@@ -30,10 +30,9 @@
   var GREY_COLOR = '#9ca3af'; // grey bolts for 5-15 min (old strikes)
   var NEW_MS = 30 * 1000; // pulsing "just struck" highlight
   var MAX_MARKERS = 4000;
-  var RADAR_JSON = 'https://api.rainviewer.com/public/weather-maps.json'; // RainViewer rain radar (free, no key)
-  var RADAR_REFRESH_MS = 5 * 60 * 1000; // refresh the radar frame every 5 min
   var EUMET_WMS = 'https://view.eumetsat.int/geoserver/ows?'; // EUMETView WMS (free, no key)
   var EUMET_LAYER = 'msg_iodc:ir108'; // Meteosat IODC infrared clouds — covers Pakistan, day + night
+  var EUMET_PRECIP_LAYER = 'msg_iodc:h63'; // IODC precipitation rate — covers Pakistan (replaces RainViewer)
   var EUMET_REFRESH_MS = 10 * 60 * 1000; // re-fetch newest IODC frame (publishes ~every 15 min)
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
@@ -111,7 +110,8 @@
       p.style.pointerEvents = interactive ? 'auto' : 'none';
       return p;
     }
-    pane('ww-ltg-radar', 250, false); // rain radar above base tiles, below strikes/markers
+    pane('ww-ltg-radar', 250, false); // satellite clouds above base tiles, below strikes/markers
+    pane('ww-ltg-precip', 255, false); // precipitation above clouds, below strikes/markers
     pane('ww-ltg-glow', 410, false);
     pane('ww-ltg-rings', 415, false);
     var dotsPane = pane('ww-ltg-dots', 425, true);
@@ -417,33 +417,25 @@
       else if (map.hasLayer(layer)) map.removeLayer(layer);
     }
 
-    // ---- rain radar overlay (RainViewer, free, no key) ----
+    // ---- rain layer: EUMETSAT IODC precipitation rate (free WMS, COVERS PAKISTAN) ----
     var radarOn;
     if (!persist) { radarOn = opts.radar !== false; }
     else { try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; } }
     var radarLayer = null;
     var radarTimer = null;
-    function buildRadar() {
-      fetch(RADAR_JSON).then(function (r) { return r.json(); }).then(function (d) {
-        var frames = (d.radar && d.radar.past) ? d.radar.past.slice() : [];
-        if (d.radar && d.radar.nowcast && d.radar.nowcast.length) frames = frames.concat(d.radar.nowcast);
-        if (!frames.length || !d.host) return;
-        var url = d.host + frames[frames.length - 1].path + '/256/{z}/{x}/{y}/2/1_1.png';
-        if (radarLayer) {
-          radarLayer.setUrl(url);
-        } else {
-          radarLayer = L.tileLayer(url, { pane: 'ww-ltg-radar', opacity: 0.6, zIndex: 250, updateWhenIdle: true, maxNativeZoom: 10, maxZoom: 18 });
-          if (radarOn) radarLayer.addTo(map);
-        }
-      }).catch(function () {});
-    }
     function setRadar(v) {
       radarOn = v;
       if (persist) try { localStorage.setItem('wwLightningRadar', v ? '1' : '0'); } catch (e) {}
       if (v) {
-        if (!radarLayer) buildRadar();
-        else if (!map.hasLayer(radarLayer)) radarLayer.addTo(map);
-        if (!radarTimer) radarTimer = setInterval(buildRadar, RADAR_REFRESH_MS);
+        if (!radarLayer) {
+          radarLayer = L.tileLayer.wms(EUMET_WMS, {
+            layers: EUMET_PRECIP_LAYER, format: 'image/png', transparent: true, version: '1.3.0',
+            pane: 'ww-ltg-precip', opacity: 0.8, maxZoom: 18, attribution: '© EUMETSAT',
+            _ts: Math.floor(Date.now() / EUMET_REFRESH_MS),
+          });
+        }
+        if (!map.hasLayer(radarLayer)) radarLayer.addTo(map);
+        if (!radarTimer) radarTimer = setInterval(function () { if (radarLayer) radarLayer.setParams({ _ts: Math.floor(Date.now() / EUMET_REFRESH_MS) }); }, EUMET_REFRESH_MS);
       } else {
         if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
         if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
