@@ -15,10 +15,17 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="ww-lightning.js"></script>
   <script>
+    // Optional ?lat=&lon=&label= from the host app → center the ring/map there.
+    var qs = new URLSearchParams(location.search);
+    var qLat = parseFloat(qs.get('lat'));
+    var qLon = parseFloat(qs.get('lon'));
+    var qLabel = qs.get('label') || '';
+    var hasLoc = isFinite(qLat) && isFinite(qLon);
+
     // Named "lightningMap" (not "map") so ww-lightning.js does NOT auto-attach;
     // we attach manually below with a fixed lightning + satellite config.
     var lightningMap = L.map('map', { zoomControl: true, attributionControl: true })
-      .setView([30.3753, 69.3451], 5);
+      .setView(hasLoc ? [qLat, qLon] : [30.3753, 69.3451], hasLoc ? 9 : 5);
 
     var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
@@ -35,6 +42,9 @@
         sound: true,       // tick on new in-view strikes (needs one user tap to unlock audio)
         radar: true,       // EUMETSAT precipitation (covers Pakistan)
         satellite: true,   // EUMETSAT clouds ON
+        lat: hasLoc ? qLat : undefined,   // ring/alert center from the app
+        lon: hasLoc ? qLon : undefined,
+        label: qLabel || undefined,
         // lightning is on by default (visible)
       });
     }

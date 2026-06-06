@@ -134,9 +134,15 @@
       });
     }
 
-    // Center for the ring/alert/bearings: device GPS when available, else Islamabad.
+    // Center for the ring/alert/bearings: explicit opts.lat/lon (e.g. app's current/
+    // favourite location) > device GPS > Islamabad.
     var center = ISLAMABAD.slice();
     var centerLabel = 'Islamabad';
+    var hasExplicitCenter = opts && isFinite(opts.lat) && isFinite(opts.lon);
+    if (hasExplicitCenter) {
+      center = [opts.lat, opts.lon];
+      centerLabel = opts.label || 'your location';
+    }
     function distanceKm(lat, lon) {
       try { return Math.round(map.distance([lat, lon], center) / 1000); } catch (e) { return null; }
     }
@@ -178,9 +184,14 @@
       drawRing();
       if (zoom) map.setView(center, zoom);
     }
+    // Let the host app move the ring/alert at runtime (e.g. location changed).
+    if (typeof window !== 'undefined') {
+      window.__wwLightning = window.__wwLightning || {};
+      window.__wwLightning.setCenter = setCenter;
+    }
 
-    // Re-base the ring + alert + bearings on the device's real location (fallback: Islamabad).
-    if (navigator.geolocation) {
+    // Only fall back to device GPS when the app didn't pass an explicit location.
+    if (!hasExplicitCenter && navigator.geolocation) {
       try {
         navigator.geolocation.getCurrentPosition(function (pos) {
           if (pos && pos.coords) setCenter(pos.coords.latitude, pos.coords.longitude, 'your location');

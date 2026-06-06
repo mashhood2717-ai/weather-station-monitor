@@ -264,9 +264,9 @@ export class AlertHub {
           title: isTest ? '⚡ Test alert' : '⚡ Lightning nearby',
           body: isTest ? 'Lightning alerts are working.' : ('Lightning detected ~' + km + ' km away.'),
         },
-        data: { lat: String(info.lat), lon: String(info.lon), dkm: String(km), ts: String(Date.now()) },
-        android: { priority: 'high', notification: { sound: 'default' } },
-        apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } },
+        data: { type: 'lightning', lat: String(info.lat), lon: String(info.lon), dkm: String(km), ts: String(Date.now()) },
+        android: { priority: 'high', notification: { sound: 'storm_alert', channel_id: 'lightning_alerts_v1', notification_priority: 'PRIORITY_MAX' } },
+        apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'storm_alert.caf' } } },
       },
     };
     const r = await fetch('https://fcm.googleapis.com/v1/projects/' + projectId + '/messages:send', {
