@@ -464,12 +464,13 @@
           satLayer = L.tileLayer.wms(EUMET_WMS, {
             layers: EUMET_LAYER, format: 'image/png', transparent: true, version: '1.3.0',
             pane: 'ww-ltg-radar', opacity: 0.7, maxZoom: 18, attribution: '© EUMETSAT',
+            _ts: Math.floor(Date.now() / EUMET_REFRESH_MS), // cache-bucket so reloads fetch a fresh frame
           });
         }
         if (!map.hasLayer(satLayer)) satLayer.addTo(map);
         // Bust the tile cache each refresh so the WMS serves the newest frame
         // (plain redraw() re-requests identical URLs and the browser caches them).
-        if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.setParams({ _ts: Date.now() }); }, EUMET_REFRESH_MS);
+        if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.setParams({ _ts: Math.floor(Date.now() / EUMET_REFRESH_MS) }); }, EUMET_REFRESH_MS);
       } else {
         if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
         if (satTimer) { clearInterval(satTimer); satTimer = null; }
