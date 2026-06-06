@@ -216,6 +216,18 @@
           }
           L.DomEvent.on(btn, 'click', function (e) { L.DomEvent.stop(e); go(); });
           L.DomEvent.on(input, 'keydown', function (e) { if (e.keyCode === 13) { L.DomEvent.stop(e); go(); } });
+          var loc = L.DomUtil.create('div', '', box);
+          loc.innerHTML = '📍'; loc.title = 'Use my current location';
+          loc.style.cssText = 'cursor:pointer;padding:4px 7px;user-select:none;border-left:1px solid #eee;';
+          L.DomEvent.on(loc, 'click', function (e) {
+            L.DomEvent.stop(e);
+            if (!navigator.geolocation) return;
+            loc.innerHTML = '⏳';
+            navigator.geolocation.getCurrentPosition(function (pos) {
+              loc.innerHTML = '📍';
+              if (pos && pos.coords) setCenter(pos.coords.latitude, pos.coords.longitude, 'your location', 9);
+            }, function () { loc.innerHTML = '📍'; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+          });
           return box;
         },
       });
