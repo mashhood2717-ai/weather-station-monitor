@@ -34,7 +34,7 @@
   var RADAR_REFRESH_MS = 5 * 60 * 1000; // refresh the radar frame every 5 min
   var EUMET_WMS = 'https://view.eumetsat.int/geoserver/ows?'; // EUMETView WMS (free, no key)
   var EUMET_LAYER = 'msg_iodc:ir108'; // Meteosat IODC infrared clouds — covers Pakistan, day + night
-  var EUMET_REFRESH_MS = 15 * 60 * 1000; // MSG IODC updates ~every 15 min
+  var EUMET_REFRESH_MS = 10 * 60 * 1000; // re-fetch newest IODC frame (publishes ~every 15 min)
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
   var MODERATE_AT = 4;
@@ -467,7 +467,9 @@
           });
         }
         if (!map.hasLayer(satLayer)) satLayer.addTo(map);
-        if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.redraw(); }, EUMET_REFRESH_MS);
+        // Bust the tile cache each refresh so the WMS serves the newest frame
+        // (plain redraw() re-requests identical URLs and the browser caches them).
+        if (!satTimer) satTimer = setInterval(function () { if (satLayer) satLayer.setParams({ _ts: Date.now() }); }, EUMET_REFRESH_MS);
       } else {
         if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
         if (satTimer) { clearInterval(satTimer); satTimer = null; }
