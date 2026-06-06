@@ -32,7 +32,7 @@
       window.attachWWLightning(lightningMap, {
         persist: false,    // ignore/never write localStorage (isolated from dashboards)
         stations: false,   // no station markers/toggle
-        sound: false,      // no sound
+        sound: true,       // tick on new in-view strikes (needs one user tap to unlock audio)
         radar: true,       // EUMETSAT precipitation (covers Pakistan)
         satellite: true,   // EUMETSAT clouds ON
         // lightning is on by default (visible)
