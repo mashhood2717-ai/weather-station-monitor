@@ -1,0 +1,23 @@
+name = "lightning-alerts"
+main = "src/index.js"
+account_id = "5923ea082459fc8ec79d6fdaa82b81ff"
+compatibility_date = "2025-06-01"
+
+# Single global Durable Object that consumes the lightning stream, holds all
+# subscriptions in memory + SQLite, matches strikes, and sends FCM pushes.
+[[durable_objects.bindings]]
+name = "ALERTS"
+class_name = "AlertHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AlertHub"]
+
+# Heartbeat: every minute, make sure the stream consumer is alive.
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+STREAM_URL = "https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning/stream"
+# FCM_SA (the Firebase service-account JSON) is set as a SECRET, not here:
+#   npx wrangler secret put FCM_SA
