@@ -84,6 +84,7 @@
       '.ww-ltg-ctl>div{padding:7px 9px !important;justify-content:center;}' +
       '.ww-ltg-ctl .ww-lbl{display:none !important;}' +
       '.ww-ic{font-size:18px !important;}' +
+      '.ww-ltg-search input{width:108px !important;}' +
       '}';
     (document.head || document.documentElement).appendChild(st);
   }
@@ -168,17 +169,57 @@
     }
     drawRing();
 
+    function setCenter(lat, lon, label, zoom) {
+      if (!isFinite(lat) || !isFinite(lon)) return;
+      center = [lat, lon];
+      if (label) centerLabel = label;
+      drawRing();
+      if (zoom) map.setView(center, zoom);
+    }
+
     // Re-base the ring + alert + bearings on the device's real location (fallback: Islamabad).
     if (navigator.geolocation) {
       try {
         navigator.geolocation.getCurrentPosition(function (pos) {
-          if (pos && pos.coords) {
-            center = [pos.coords.latitude, pos.coords.longitude];
-            centerLabel = 'your location';
-            drawRing();
-          }
+          if (pos && pos.coords) setCenter(pos.coords.latitude, pos.coords.longitude, 'your location');
         }, function () {}, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
       } catch (e) {}
+    }
+
+    // ---- place search (free OSM/Nominatim) to move the ring + alert anywhere ----
+    if (opts.search !== false && L.Control) {
+      var SearchCtl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function () {
+          var box = L.DomUtil.create('div', 'leaflet-bar ww-ltg-search');
+          box.style.cssText = 'background:#fff;padding:2px;display:flex;gap:2px;align-items:center;';
+          L.DomEvent.disableClickPropagation(box);
+          L.DomEvent.disableScrollPropagation(box);
+          var input = L.DomUtil.create('input', '', box);
+          input.type = 'text'; input.placeholder = 'Search place…';
+          input.style.cssText = 'border:none;outline:none;font:13px system-ui,sans-serif;padding:4px 6px;width:150px;';
+          var btn = L.DomUtil.create('div', '', box);
+          btn.innerHTML = '🔍'; btn.title = 'Search & move ring';
+          btn.style.cssText = 'cursor:pointer;padding:4px 7px;user-select:none;';
+          function go() {
+            var q = input.value.trim(); if (!q) return;
+            btn.innerHTML = '⏳';
+            fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+              .then(function (r) { return r.json(); })
+              .then(function (a) {
+                btn.innerHTML = '🔍';
+                if (a && a.length) {
+                  setCenter(parseFloat(a[0].lat), parseFloat(a[0].lon), (a[0].display_name || q).split(',')[0], 9);
+                } else { input.value = ''; input.placeholder = 'Not found — try again'; }
+              })
+              .catch(function () { btn.innerHTML = '🔍'; });
+          }
+          L.DomEvent.on(btn, 'click', function (e) { L.DomEvent.stop(e); go(); });
+          L.DomEvent.on(input, 'keydown', function (e) { if (e.keyCode === 13) { L.DomEvent.stop(e); go(); } });
+          return box;
+        },
+      });
+      map.addControl(new SearchCtl());
     }
 
     var active = new Map();
