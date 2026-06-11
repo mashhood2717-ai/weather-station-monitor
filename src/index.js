@@ -921,12 +921,21 @@ export default {
           },
         });
 
-      } else if (env.ASSETS) {
-        // Serve static assets (dashboard SPA)
-        return env.ASSETS.fetch(request);
       }
 
-      return new Response('Not Found', { status: 404, headers: corsHeaders });
+      // API-only worker. The dashboards are served by Cloudflare Pages
+      // (weatherwalay-dashboard / -staging / -react.pages.dev) — visit
+      // those URLs for the UI. Any non-matching path here returns a 404
+      // with a JSON body so misrouted requests show a clear error
+      // instead of silently serving a stale HTML snapshot.
+      return new Response(
+        JSON.stringify({
+          error: 'Not Found',
+          hint: 'This is the API worker. The dashboard is served from Cloudflare Pages — see https://weatherwalay-dashboard.pages.dev',
+          path,
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     } catch (error) {
       console.error('Error:', error);
       return new Response(JSON.stringify({ error: error.message }), {

@@ -24,11 +24,11 @@ binding = "DB"
 database_name = "weatherlink-monitor-staging"
 database_id = "c86a9395-05a8-4dee-9d6e-acf000bd11ea"
 
-# Static Assets — staging serves dashboard-staging/ (auto-refresh disabled).
-# Production env below serves the regular dashboard/ folder.
-[assets]
-directory = "dashboard-staging"
-binding = "ASSETS"
+# Static assets removed — the Worker is API-only now. The dashboards live on
+# Cloudflare Pages (weatherwalay-dashboard / -staging / -react.pages.dev),
+# which is the canonical hosting. Bundling the dashboard inside the Worker
+# was causing version drift — Pages would have the latest code while the
+# Worker served a stale snapshot from its last deploy.
 
 # Cron Triggers - DISABLED for staging (manual testing only)
 [triggers]
@@ -73,10 +73,8 @@ ENVIRONMENT = "production"
 # pattern = "monitor.yourdomain.com/*"
 # zone_name = "yourdomain.com"
 
-# Static Assets (Serve dashboard from Worker)
-[env.production.assets]
-directory = "dashboard"
-binding = "ASSETS"
+# Static assets removed in production too — same reason as staging.
+# Dashboards are served by Cloudflare Pages, not the Worker.
 
 # Build Configuration
 # [build]
