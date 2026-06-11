@@ -222,9 +222,12 @@ async function fetchAllStationsFromHubService(env) {
 
     const allStations = [];
 
-    // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={})
+    // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={}).
+    // HubService's actual API uses `lng`, but we request BOTH `lng` AND `long` so we don't
+    // lose coordinates if HubService ever flips between the two field names. All downstream
+    // reads use `s.lng ?? s.long` to accept whichever one comes back.
     const neededFields = JSON.stringify({
-      stationID: 1, stationName: 1, poi: 1, lat: 1, long: 1,
+      stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
       status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
     });
     for (let page = 1; page <= 6; page++) {
@@ -356,7 +359,7 @@ async function syncNewStations(env) {
         stationName: s.stationName,
         status: s.status,
         lat: s.lat,
-        lng: s.long,
+        lng: s.lng ?? s.long,
         temperature: s.temperature,
         rainfall: s.rainfall,
         apiSource: s.apiSource
@@ -1201,7 +1204,7 @@ async function generateDailyReportData(env) {
       temperature: s.temperature,
       rainfall: s.rainfall,
       latitude: s.lat,
-      longitude: s.long,
+      longitude: s.lng ?? s.long,
       uptime_24h: upData.uptime.toFixed(1),
       checks_24h: upData.checks,
       last_seen: s.lastUpdated || null
@@ -1741,7 +1744,7 @@ async function syncAllStationsBatched(env, apiStations) {
         latitude = excluded.latitude,
         longitude = excluded.longitude,
         api_source = excluded.api_source
-    `).bind(d.stationId, d.displayName, d.stationName, parseFloat(station.lat) || 0, parseFloat(station.long) || 0, d.apiSource);
+    `).bind(d.stationId, d.displayName, d.stationName, parseFloat(station.lat) || 0, parseFloat(station.lng ?? station.long) || 0, d.apiSource);
   });
 
   // Phase 2: Batch insert status_logs (skip Disabled stations)
@@ -1891,7 +1894,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         station_name: s.stationName,
         location: s.poi || s.stationName,
         latitude: s.lat,
-        longitude: s.long,
+        longitude: s.lng ?? s.long,
         temperature: s.temperature,
         rainfall: s.rainfall,
         api_source: s.apiSource,
@@ -2419,7 +2422,7 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
         status: s.status,
         socketLastUpdate: s.socketLastUpdate || null,
         latitude: s.lat,
-        longitude: s.long
+        longitude: s.lng ?? s.long
       }));
 
       console.log(`📦 Using ${allStations.length} stations for uptime-percentages`);
@@ -2579,7 +2582,7 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
           wind_speed: s.windSpeed || (s.socketLastUpdate?.ws || null),
           pressure: s.socketLastUpdate?.bp || null,
           latitude: s.lat,
-          longitude: s.long,
+          longitude: s.lng ?? s.long,
           owned_by: s.ownedBy
         };
       }
