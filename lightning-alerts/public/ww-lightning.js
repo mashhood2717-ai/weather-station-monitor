@@ -85,7 +85,7 @@
       '.ww-ltg-ctl>div{padding:7px 9px !important;justify-content:center;}' +
       '.ww-ltg-ctl .ww-lbl{display:none !important;}' +
       '.ww-ic{font-size:18px !important;}' +
-      '.ww-ltg-search input{width:108px !important;}' +
+      '.ww-ltg-search input{width:72px !important;}' +
       '}';
     (document.head || document.documentElement).appendChild(st);
   }
@@ -210,7 +210,7 @@
           L.DomEvent.disableScrollPropagation(box);
           var input = L.DomUtil.create('input', '', box);
           input.type = 'text'; input.placeholder = 'Search place…';
-          input.style.cssText = 'border:none;outline:none;font:13px system-ui,sans-serif;padding:4px 6px;width:150px;';
+          input.style.cssText = 'border:none;outline:none;font:13px system-ui,sans-serif;padding:4px 6px;width:96px;';
           var btn = L.DomUtil.create('div', '', box);
           btn.innerHTML = '🔍'; btn.title = 'Search & move ring';
           btn.style.cssText = 'cursor:pointer;padding:4px 7px;user-select:none;';
@@ -636,7 +636,9 @@
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           if (opts.sound === false) sndBtn.style.display = 'none';
           if (opts.radar === false) rdrBtn.style.display = 'none';
-          if (opts.satellite === false) satBtn.style.display = 'none';
+          // Satellite button stays visible even when off by default, so the
+          // user can still toggle the cloud layer on. Default on/off is driven
+          // by opts.satellite (see satOn above).
           return wrap;
         },
       });

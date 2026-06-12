@@ -41,7 +41,7 @@
         stations: false,   // no station markers/toggle
         sound: true,       // tick on new in-view strikes (needs one user tap to unlock audio)
         radar: true,       // EUMETSAT precipitation (covers Pakistan)
-        satellite: true,   // EUMETSAT clouds ON
+        satellite: false,  // EUMETSAT clouds OFF by default (user can toggle on)
         lat: hasLoc ? qLat : undefined,   // ring/alert center from the app
         lon: hasLoc ? qLon : undefined,
         label: qLabel || undefined,
