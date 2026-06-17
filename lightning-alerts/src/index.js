@@ -389,7 +389,7 @@ export class AlertHub {
           ring: String(ring),
           ts: String(Date.now()),
         },
-        android: { priority: 'high', notification: { sound: 'storm_alert', channel_id: 'lightning_alerts_v1', notification_priority: 'PRIORITY_MAX' } },
+        android: { priority: 'high', notification: { sound: 'storm_alert', channel_id: 'lightning_alerts_v2', notification_priority: 'PRIORITY_MAX' } },
         apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'storm_alert.caf' } } },
       },
     };
