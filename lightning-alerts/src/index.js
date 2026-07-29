@@ -307,10 +307,11 @@ export class AlertHub {
             }
             if (!bestPt) continue;
             // Escalation: re-alert (bypassing the cooldown) ONLY when the strike
-            // enters a tighter ring than we last alerted this device; otherwise
-            // honour the 10-min per-device cooldown.
+            // enters a tighter ring than we last alerted THIS POINT (per-location,
+            // so a distant favourite can't consume the current location's
+            // escalation); otherwise honour the 10-min per-device cooldown.
             const strikeRing = ringOf(best, bestPt.radius);
-            const escalate = strikeRing > (s.ring || 0);
+            const escalate = strikeRing > (bestPt.ring || 0);
             const cooldownOk = (now - s.last) >= COOLDOWN_MS;
             if (!escalate && !cooldownOk) continue;
             const cur = toSend.get(token);
@@ -330,7 +331,8 @@ export class AlertHub {
       const info = toSend.get(t);
       const ring = info.ring || 0;
       const s = this.subs.get(t);
-      if (s) { s.last = now; s.ring = ring; } // every alert (incl. escalation) resets the cooldown
+      if (s) { s.last = now; s.ring = ring; } // device cooldown (last alert time)
+      if (info.pt) info.pt.ring = ring; // per-point escalation ring (in-memory; resets on re-subscribe/restart)
       this.sql.exec('UPDATE subs SET last=?, ring=? WHERE token=?', now, ring, t);
     }
     const access = await this.getAccessToken();

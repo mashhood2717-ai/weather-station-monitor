@@ -23,13 +23,17 @@
 
   var API_BASE = 'https://station-history-api.wwfigma-dashboard.workers.dev/api/lightning';
   var WINDOW_MS = 12000; // worker read window for the polling fallback
-  var POLL_GAP_MS = 8000; // idle gap for the polling fallback
-  var STRIKE_TTL_MS = 15 * 60 * 1000; // total time a strike stays on the map
+  var POLL_GAP_MS = 15000; // poll /buffer every 15s
+  var STRIKE_TTL_MS = 31 * 60 * 1000; // max age of a backfilled strike we still add (covers the 30-min history backfill)
+  var BACKFILL_WINDOW_MS = 30 * 60 * 1000; // on load, pull the last 30 min from PK D1 so the trail is consistent on every device/refresh
   var SOLID_MS = 2 * 60 * 1000; // full colour for the first 2 min
   var COLOR_END_MS = 5 * 60 * 1000; // colour fades out by 5 min, then turns grey
   var GREY_COLOR = '#9ca3af'; // grey bolts for 5-15 min (old strikes)
+  var AGED_COLOR = '#38bdf8'; // (legacy) unused since aged dots keep intensity colour
+  var AGED_DOT_R = 4;         // aged-strike dot radius (px) — drawn on the shared CANVAS renderer, not DOM
+  var AGED_DOT_OPACITY = 0.85;
   var NEW_MS = 30 * 1000; // pulsing "just struck" highlight
-  var MAX_MARKERS = 4000;
+  var MAX_MARKERS = 8000; // aged strikes are cheap canvas glows now, so we can keep many more (better trail)
   var EUMET_WMS = 'https://view.eumetsat.int/geoserver/ows?'; // EUMETView WMS (free, no key)
   var EUMET_LAYER = 'msg_iodc:ir108'; // Meteosat IODC infrared clouds — covers Pakistan, day + night
   var EUMET_PRECIP_LAYER = 'msg_iodc:h63'; // IODC precipitation rate — covers Pakistan (replaces RainViewer)
@@ -37,6 +41,7 @@
   var EUMET_REFRESH_MS = 10 * 60 * 1000; // re-fetch newest IODC frame (publishes ~every 15 min)
   var CELL_DEG = 0.25;
   var SEVERE_AT = 10;
+  var EXTREME_AT = 20;
   var MODERATE_AT = 4;
   var ISLAMABAD = [33.6844, 73.0479]; // default center when geolocation is unavailable
   var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -57,13 +62,14 @@
   var BOLT_PATH = 'M13 2L3 14h9l-1 8 10-12h-9l1-8z'; // lightning bolt
 
   var STYLE = {
-    low: { c: '#22d3ee', size: 16, g: 9, go: 0.1 },
-    moderate: { c: '#f59e0b', size: 22, g: 15, go: 0.14 },
-    severe: { c: '#ef4444', size: 28, g: 22, go: 0.18 },
+    low: { c: '#FDE68A', size: 18, g: 10, go: 0.14 },
+    moderate: { c: '#FB923C', size: 22, g: 15, go: 0.18 },
+    severe: { c: '#ef4444', size: 26, g: 20, go: 0.22 },
+    extreme: { c: '#ef4444', size: 30, g: 26, go: 0.26 },
   };
 
   function sevOf(n) {
-    return n >= SEVERE_AT ? 'severe' : n >= MODERATE_AT ? 'moderate' : 'low';
+    return n >= EXTREME_AT ? 'extreme' : n >= SEVERE_AT ? 'severe' : n >= MODERATE_AT ? 'moderate' : 'low';
   }
   function cellOf(lat, lon) {
     return Math.floor(lat / CELL_DEG) + '_' + Math.floor(lon / CELL_DEG);
@@ -75,9 +81,21 @@
     var st = document.createElement('style');
     st.id = 'ww-ltg-style';
     st.textContent =
-      '.ww-bolt svg{display:block;filter:drop-shadow(0 0 2px rgba(0,0,0,.5));}' +
-      '.ww-bolt-new svg{animation:wwBoltPulse 1.1s ease-in-out infinite;transform-origin:50% 50%;}' +
-      '@keyframes wwBoltPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.45);opacity:.7;}}' +
+      '.ww-dot i{display:block;border-radius:50%;background:radial-gradient(circle at 50% 42%,#fff 0%,var(--c) 52%,rgba(0,0,0,0) 75%);box-shadow:0 0 8px 1px var(--c);}' +
+      '.ww-dot-new i{position:relative;}' +
+      '.ww-dot-new i::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px solid var(--c);animation:wwDotPulse 1.3s ease-out infinite;}' +
+      '@keyframes wwDotPulse{0%{transform:scale(.7);opacity:.9;}100%{transform:scale(2.6);opacity:0;}}' +
+      '.leaflet-div-icon{background:transparent;border:none;}' +
+      '.leaflet-container{-webkit-touch-callout:none;}' + // no long-press callout when dropping the ring
+
+      '.ww-bolt svg{display:block;}' +
+      '.ww-bolt-wrap{position:relative;display:block;}' +
+      '.ww-bolt .ww-bolt-wrap::after{content:"";position:absolute;left:50%;top:50%;width:100%;height:100%;border-radius:50%;border:2px solid var(--c);transform:translate(-50%,-50%);animation:wwPing 1.4s ease-out infinite;pointer-events:none;box-shadow:0 0 6px var(--c);}' +
+      '@keyframes wwPing{0%{transform:translate(-50%,-50%) scale(.5);opacity:.9;}100%{transform:translate(-50%,-50%) scale(3.2);opacity:0;}}' +
+      '.ww-anim-off .ww-bolt-wrap::after,.ww-anim-off .ww-dot-new i::after{animation:none!important;opacity:0!important;}' +
+      '.ww-ring-red{filter:drop-shadow(0 0 3px rgba(239,68,68,.7));}' +
+      '.ww-ring-blue{filter:drop-shadow(0 0 3px rgba(56,189,248,.6));}' +
+      '.ww-center{filter:drop-shadow(0 0 6px #89ceff);}' +
       '.ww-ic{font-size:14px;line-height:1;}' +
       // On phones: compact the layer panel to icons only (labels hidden), bigger tap target.
       '@media (max-width:640px){' +
@@ -85,7 +103,7 @@
       '.ww-ltg-ctl>div{padding:7px 9px !important;justify-content:center;}' +
       '.ww-ltg-ctl .ww-lbl{display:none !important;}' +
       '.ww-ic{font-size:18px !important;}' +
-      '.ww-ltg-search input{width:72px !important;}' +
+      '.ww-ltg-search input{width:108px !important;}' +
       '}';
     (document.head || document.documentElement).appendChild(st);
   }
@@ -123,12 +141,26 @@
     function boltIcon(sev, isNew, grey) {
       var s = STYLE[sev];
       var px = s.size;
-      var fill = grey ? GREY_COLOR : s.c;
+      var c = grey ? GREY_COLOR : s.c;
       return L.divIcon({
         className: 'ww-bolt' + (isNew && !grey ? ' ww-bolt-new' : ''),
-        html:
-          '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="' + BOLT_PATH + '" fill="' + fill + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+        html: '<span class="ww-bolt-wrap" style="--c:' + c + '">' +
+          '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" style="display:block;filter:drop-shadow(0 0 3px ' + c + ') drop-shadow(0 0 1px rgba(0,0,0,.55))">' +
+          '<path d="' + BOLT_PATH + '" fill="' + c + '" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
+          '</span>',
+        iconSize: [px, px],
+        iconAnchor: [px / 2, px / 2],
+      });
+    }
+
+    // Small glowing dot for aged strikes (>5 min) — they persist while the map is open.
+    // Keeps the strike's INTENSITY colour (yellow/orange/red) so the trail still shows strength.
+    function dotIcon(sev) {
+      var px = 8;
+      var c = (STYLE[sev] && STYLE[sev].c) || AGED_COLOR;
+      return L.divIcon({
+        className: 'ww-dot ww-dot-aged',
+        html: '<i style="--c:' + c + ';width:' + px + 'px;height:' + px + 'px"></i>',
         iconSize: [px, px],
         iconAnchor: [px / 2, px / 2],
       });
@@ -147,35 +179,62 @@
       try { return Math.round(map.distance([lat, lon], center) / 1000); } catch (e) { return null; }
     }
 
-    // ---- single alert ring (alertKm, default 50 km) around the center ----
+    // ---- colour-coded distance rings: 20 km RED (alert zone) + 50 km BLUE (context) ----
+    var RING_INNER_KM = 20;
+    var ringsVisible = opts.ringsVisible !== false;
     var ringLayers = [];
-    var centerDot = null, ringCircle = null, ringLabel = null;
+    var centerDot = null, rLabel20 = null, rLabel50 = null;
+    function ringLabelIcon(km, col) {
+      return L.divIcon({
+        className: '',
+        html: '<span style="background:rgba(18,23,33,.74);color:' + col + ';border:1px solid ' + col + '66;' +
+          'font:600 10px Inter,system-ui,sans-serif;padding:2px 7px;border-radius:9999px;white-space:nowrap;' +
+          'box-shadow:0 0 8px ' + col + '55;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);">' + km + ' km</span>',
+        iconSize: [44, 16], iconAnchor: [22, 8],
+      });
+    }
     function drawRing() {
       if (opts.rings === false) return;
-      var labelPos = [center[0] + alertKm / 111, center[1]];
+      pane('ww-ltg-zones', 240, false); // subtle colour fills, just above the base map
+      var p20 = [center[0] + RING_INNER_KM / 111, center[1]];
+      var p50 = [center[0] + alertKm / 111, center[1]];
       if (!centerDot) {
-        centerDot = L.circleMarker(center, {
-          pane: 'ww-ltg-rings', radius: 4, color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 1, weight: 1, interactive: false,
-        }).addTo(map);
-        ringCircle = L.circle(center, {
-          pane: 'ww-ltg-rings', radius: alertKm * 1000, color: '#0ea5e9', weight: 1, opacity: 0.6, fill: false, dashArray: '4 6', interactive: false,
-        }).addTo(map);
-        ringLabel = L.marker(labelPos, {
-          pane: 'ww-ltg-rings', interactive: false,
-          icon: L.divIcon({
-            className: '',
-            html: '<span style="background:rgba(14,165,233,.85);color:#fff;font-size:10px;font-weight:600;padding:1px 5px;border-radius:6px;white-space:nowrap;">' + alertKm + ' km</span>',
-            iconSize: [44, 16], iconAnchor: [22, 8],
-          }),
-        }).addTo(map);
-        ringLayers = [centerDot, ringCircle, ringLabel];
+        var fill50 = L.circle(center, { pane: 'ww-ltg-zones', radius: alertKm * 1000, stroke: false, fillColor: '#0ea5e9', fillOpacity: 0.12, interactive: false });
+        var fill20 = L.circle(center, { pane: 'ww-ltg-zones', radius: RING_INNER_KM * 1000, stroke: false, fillColor: '#ef4444', fillOpacity: 0.18, interactive: false });
+        var ring50 = L.circle(center, { pane: 'ww-ltg-rings', radius: alertKm * 1000, color: '#38bdf8', weight: 1, opacity: 0.65, fill: false, dashArray: '4 4', interactive: false, className: 'ww-ring-blue' });
+        var ring20 = L.circle(center, { pane: 'ww-ltg-rings', radius: RING_INNER_KM * 1000, color: '#ef4444', weight: 1.3, opacity: 0.8, fill: false, dashArray: '4 4', interactive: false, className: 'ww-ring-red' });
+        centerDot = L.circleMarker(center, { pane: 'ww-ltg-rings', radius: 5, color: '#89ceff', fillColor: '#89ceff', fillOpacity: 1, weight: 1, interactive: false, className: 'ww-center' });
+        rLabel20 = L.marker(p20, { pane: 'ww-ltg-rings', interactive: false, icon: ringLabelIcon(RING_INNER_KM, '#ef4444') });
+        rLabel50 = L.marker(p50, { pane: 'ww-ltg-rings', interactive: false, icon: ringLabelIcon(alertKm, '#38bdf8') });
+        ringLayers = [fill50, fill20, ring50, ring20, centerDot, rLabel20, rLabel50];
+        if (ringsVisible) ringLayers.forEach(function (l) { l.addTo(map); });
       } else {
-        centerDot.setLatLng(center);
-        ringCircle.setLatLng(center);
-        ringLabel.setLatLng(labelPos);
+        ringLayers.forEach(function (l) {
+          if (l === rLabel20) l.setLatLng(p20);
+          else if (l === rLabel50) l.setLatLng(p50);
+          else if (l.setLatLng) l.setLatLng(center);
+        });
       }
     }
     drawRing();
+
+    function setRings(v) {
+      ringsVisible = v;
+      ringLayers.forEach(function (l) {
+        if (v) { if (!map.hasLayer(l)) l.addTo(map); }
+        else if (map.hasLayer(l)) map.removeLayer(l);
+      });
+    }
+
+    // Pause/resume the marker animations (radar-ping + pulse) via a CSS class on
+    // the map container. Pure visual — strikes still update underneath.
+    var animOn = opts.animationOn === true; // default OFF — user turns it on via the ✨ button
+    function setAnim(v) {
+      animOn = v;
+      var el = map.getContainer && map.getContainer();
+      if (el) { if (v) L.DomUtil.removeClass(el, 'ww-anim-off'); else L.DomUtil.addClass(el, 'ww-anim-off'); }
+    }
+    setAnim(animOn); // apply initial state (off by default)
 
     function setCenter(lat, lon, label, zoom) {
       if (!isFinite(lat) || !isFinite(lon)) return;
@@ -189,6 +248,14 @@
       window.__wwLightning = window.__wwLightning || {};
       window.__wwLightning.setCenter = setCenter;
     }
+
+    // Drop the alert ring anywhere: TAP-AND-HOLD on touch (long-press → contextmenu),
+    // or CLICK on desktop. Display-only (moves the ring + recomputes distances/
+    // bearings); does NOT change the server-side push-alert subscription.
+    var wwIsTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    map.on(wwIsTouch ? 'contextmenu' : 'click', function (ev) {
+      if (ev && ev.latlng) setCenter(ev.latlng.lat, ev.latlng.lng, 'Selected location');
+    });
 
     // Only fall back to device GPS when the app didn't pass an explicit location.
     if (!hasExplicitCenter && navigator.geolocation) {
@@ -210,7 +277,7 @@
           L.DomEvent.disableScrollPropagation(box);
           var input = L.DomUtil.create('input', '', box);
           input.type = 'text'; input.placeholder = 'Search place…';
-          input.style.cssText = 'border:none;outline:none;font:13px system-ui,sans-serif;padding:4px 6px;width:96px;';
+          input.style.cssText = 'border:none;outline:none;font:13px system-ui,sans-serif;padding:4px 6px;width:150px;';
           var btn = L.DomUtil.create('div', '', box);
           btn.innerHTML = '🔍'; btn.title = 'Search & move ring';
           btn.style.cssText = 'cursor:pointer;padding:4px 7px;user-select:none;';
@@ -258,10 +325,81 @@
     var usingPoll = false;
     var backoff = 5000;
     var cancelled = false;
+    var histMode = 0; // 0 = Live (real-time /buffer); else N hours of PK history heatmap
     var visible = opts.visible !== false;
     var waitingForVisible = false;
     var hasDoc = typeof document !== 'undefined' && document.addEventListener;
     var stationsVisible = true;
+
+    // ---- Aged-strike "trail" on ONE canvas with additive blending ----
+    // Pre-rendered glow sprites drawn with globalCompositeOperation='lighter': dense
+    // clusters brighten into a hot core (storm structure) and thousands of aged
+    // strikes stay smooth. Recent strikes keep their DOM bolts + halo.
+    pane('ww-ltg-trail', 405, false);
+    var TRAIL_R = 13; // glow sprite radius (px)
+    var trailSprites = {};
+    var trailDirty = false;
+    function trailRgba(hex, a) {
+      var h = hex.replace('#', '');
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      var n = parseInt(h, 16);
+      return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+    }
+    function trailSprite(color) {
+      if (trailSprites[color]) return trailSprites[color];
+      var d = TRAIL_R * 2;
+      var cv = document.createElement('canvas'); cv.width = d; cv.height = d;
+      var cx = cv.getContext('2d');
+      var g = cx.createRadialGradient(TRAIL_R, TRAIL_R, 0, TRAIL_R, TRAIL_R, TRAIL_R);
+      g.addColorStop(0, trailRgba(color, 0.7));
+      g.addColorStop(0.35, trailRgba(color, 0.32));
+      g.addColorStop(1, trailRgba(color, 0));
+      cx.fillStyle = g;
+      cx.beginPath(); cx.arc(TRAIL_R, TRAIL_R, TRAIL_R, 0, 6.2832); cx.fill();
+      trailSprites[color] = cv;
+      return cv;
+    }
+    var TrailGlow = L.Layer.extend({
+      onAdd: function (m) {
+        this._m = m;
+        var c = this._c = L.DomUtil.create('canvas', '');
+        c.style.position = 'absolute';
+        m.getPane('ww-ltg-trail').appendChild(c);
+        m.on('moveend zoomend viewreset', this._draw, this);
+        m.on('resize', this._size, this);
+        this._size();
+      },
+      onRemove: function (m) {
+        m.off('moveend zoomend viewreset', this._draw, this);
+        m.off('resize', this._size, this);
+        if (this._c && this._c.parentNode) this._c.parentNode.removeChild(this._c);
+      },
+      _size: function () {
+        if (!this._m || !this._c) return;
+        var s = this._m.getSize();
+        this._c.width = s.x; this._c.height = s.y;
+        this._draw();
+      },
+      redraw: function () { this._draw(); },
+      _draw: function () {
+        var m = this._m, c = this._c;
+        if (!m || !c) return;
+        L.DomUtil.setPosition(c, m.containerPointToLayerPoint([0, 0]));
+        var ctx = c.getContext('2d');
+        ctx.clearRect(0, 0, c.width, c.height);
+        if (!visible) return;
+        var b = m.getBounds().pad(0.15);
+        ctx.globalCompositeOperation = 'lighter';
+        active.forEach(function (e) {
+          if (!e.aged || !e.ll || !b.contains(e.ll)) return;
+          var p = m.latLngToContainerPoint(e.ll);
+          ctx.drawImage(trailSprite(STYLE[e.sev].c), p.x - TRAIL_R, p.y - TRAIL_R);
+        });
+        ctx.globalCompositeOperation = 'source-over';
+      },
+    });
+    var trailLayer = new TrailGlow();
+    trailLayer.addTo(map);
     // Sound preference persists across refreshes (default OFF on first ever visit).
     // persist=false (e.g. embedded/Flutter map) ignores & never writes localStorage,
     // so a fixed-layer embed can't be changed by, or change, the dashboards' settings.
@@ -332,13 +470,14 @@
     }
 
     function removeEntry(key, e) {
-      if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
-      if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
+      if (e.dot && map.hasLayer(e.dot)) map.removeLayer(e.dot);
+      if (e.glow && map.hasLayer(e.glow)) map.removeLayer(e.glow);
       active.delete(key);
-      var ll = e.dot.getLatLng();
+      var ll = e.ll || (e.glow || e.dot).getLatLng();
       var cc = cellOf(ll.lat, ll.lng);
       var left = (counts.get(cc) || 1) - 1;
       if (left <= 0) counts.delete(cc); else counts.set(cc, left);
+      if (e.aged) trailDirty = true;
     }
 
     function addStrike(lat, lon, key, sev, t, bornAt) {
@@ -353,31 +492,40 @@
       }
       var s = STYLE[sev];
       var isNewStrike = (now - born) < NEW_MS;
+      var isAged = (now - born) >= COLOR_END_MS; // backfilled strikes >5 min old start as blue dots
       var km = distanceKm(lat, lon);
       var timeStr = '';
       try { if (t) timeStr = new Date(Number(t)).toLocaleTimeString(); } catch (e) {}
 
-      var glow = L.circleMarker([lat, lon], {
-        renderer: glowR, radius: s.g, stroke: false,
-        fillColor: s.c, fillOpacity: visible ? s.go : 0, interactive: false,
-      }).addTo(map);
+      // Aged strikes (the bulk) are drawn on the additive-blend trail CANVAS (no
+      // Leaflet layer per strike) → thousands stay smooth + glow. Recent strikes get
+      // the halo glow (circleMarker) + the fancy DOM bolt (+ popup).
+      var ll = L.latLng(lat, lon);
+      var glow = null, dot = null;
+      if (isAged) {
+        trailDirty = true;
+      } else {
+        glow = L.circleMarker(ll, {
+          renderer: glowR, radius: s.g, stroke: false,
+          fillColor: s.c, fillOpacity: visible ? s.go : 0, interactive: false,
+        }).addTo(map);
+        dot = L.marker(ll, {
+          pane: 'ww-ltg-dots', icon: boltIcon(sev, isNewStrike), interactive: true,
+          keyboard: false, opacity: visible ? 1 : 0,
+        }).addTo(map);
+        var brg = bearingFrom(lat, lon, center);
+        dot.bindPopup(
+          '<div style="font:12px system-ui,sans-serif;">' +
+            '<b>⚡ Lightning strike</b><br>' +
+            (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of ' + centerLabel + '<br>' : '') +
+            'Direction: ' + brg.dir + ' (' + brg.deg + '°)<br>' +
+            (timeStr ? 'Time: ' + timeStr + '<br>' : '') +
+            'Severity: ' + sev +
+          '</div>'
+        );
+      }
 
-      var dot = L.marker([lat, lon], {
-        pane: 'ww-ltg-dots', icon: boltIcon(sev, isNewStrike), interactive: true,
-        keyboard: false, opacity: visible ? 1 : 0,
-      }).addTo(map);
-      var brg = bearingFrom(lat, lon, center);
-      dot.bindPopup(
-        '<div style="font:12px system-ui,sans-serif;">' +
-          '<b>⚡ Lightning strike</b><br>' +
-          (km !== null ? '<b>' + km + ' km ' + brg.dir + '</b> of ' + centerLabel + '<br>' : '') +
-          'Direction: ' + brg.dir + ' (' + brg.deg + '°)<br>' +
-          (timeStr ? 'Time: ' + timeStr + '<br>' : '') +
-          'Severity: ' + sev +
-        '</div>'
-      );
-
-      active.set(key, { dot: dot, glow: glow, sev: sev, born: born, expireAt: born + STRIKE_TTL_MS, isNew: isNewStrike, greyed: false });
+      active.set(key, { dot: dot, glow: glow, ll: ll, sev: sev, born: born, isNew: isAged ? false : isNewStrike, aged: isAged });
       var c = cellOf(lat, lon);
       counts.set(c, (counts.get(c) || 0) + 1);
       return km;
@@ -414,21 +562,71 @@
     }
 
     // Pull the last ~10 min of strikes so reconnects / app-opens miss nothing.
+    var didFit = false;
     function backfill() {
       if (cancelled) return;
       fetch((opts.bufferUrl || BUFFER_URL), { headers: { Accept: 'application/json' } })
         .then(function (r) { return r.json(); })
-        .then(function (d) { if (!cancelled && d && Array.isArray(d.strikes)) ingest(d, true); })
+        .then(function (d) {
+          if (cancelled || !d || !Array.isArray(d.strikes)) return;
+          ingest(d, true);
+          // On first load, frame the map to wherever the lightning actually is
+          // (+ keep the alert rings in view) so a refresh never looks empty.
+          if (!didFit && opts.fitOnLoad && active.size > 0) {
+            didFit = true;
+            var pts = [];
+            active.forEach(function (e) { if (e.ll) pts.push([e.ll.lat, e.ll.lng]); });
+            pts.push(center);
+            try { map.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 10 }); } catch (e) {}
+          }
+        })
         .catch(function () {});
     }
 
-    // Primary: live SSE stream. Falls back to polling if streaming is
-    // unavailable (e.g. worker not yet updated) or unsupported.
+    // On load, ALSO pull the last 30 min from the PK history D1 so the strike trail
+    // is consistent on every device/refresh (not just this session's accumulation).
+    // Ingested as backfill → aged by timestamp (recent = bolts, older = blue dots).
+    // No re-fit: the live /buffer framing (above) stays; this just adds the trail.
+    var lastHistoryFetch = 0;
+    function backfillHistory() {
+      if (cancelled) return;
+      var nowTs = Date.now();
+      if (nowTs - lastHistoryFetch < 60000) return; // throttle: at most once/min per client
+      lastHistoryFetch = nowTs;
+      fetch(PK_HISTORY_API + '?hours=1&limit=20000', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (cancelled || histMode || !d || !Array.isArray(d.data)) return;
+          var cut = Date.now() - BACKFILL_WINDOW_MS;
+          var strikes = [];
+          for (var i = 0; i < d.data.length; i++) {
+            var t = +d.data[i].timestampMs, la = +d.data[i].lat, lo = +d.data[i].lon;
+            if (isFinite(t) && t >= cut && isFinite(la) && isFinite(lo)) strikes.push([la, lo, t]);
+          }
+          if (!strikes.length) return;
+          // Ingest in small batches so a big backfill (storm = 1000s of strikes)
+          // never freezes the UI on load. ingest() dedupes by key across batches.
+          var bi = 0;
+          (function step() {
+            if (cancelled || histMode) return;
+            var batch = strikes.slice(bi, bi + 150);
+            if (!batch.length) return;
+            ingest({ strikes: batch }, true);
+            bi += 150;
+            if (bi < strikes.length) setTimeout(step, 30);
+          })();
+        })
+        .catch(function () {});
+    }
+
+    // POLL the lightning-alerts /buffer ONLY — never open the station-history-api
+    // /stream (that opened a fresh WO-Cloud connection PER viewer and maxed the
+    // worker's free CPU cap). The buffer already holds the live last-10-min.
     function connect() {
       if (cancelled) return;
       backfill(); // pull last ~10 min so reconnects / app-opens miss nothing
-      if (usingPoll) { poll(); return; }
-      startStream();
+      backfillHistory(); // + last 30 min from PK D1 (consistent trail on every load)
+      poll();
     }
 
     function startStream() {
@@ -449,10 +647,12 @@
 
     function poll() {
       if (cancelled) return;
-      fetch(API_BASE + '/recent?windowMs=' + WINDOW_MS, { headers: { Accept: 'application/json' } })
+      // Read the lightning-alerts /buffer (stored last-10-min) — NOT
+      // station-history-api /recent (that re-hits WO-Cloud per request).
+      fetch(BUFFER_URL, { headers: { Accept: 'application/json' } })
         .then(function (r) { if (!r.ok) throw new Error('Lightning API ' + r.status); return r.json(); })
         .then(function (data) {
-          if (cancelled) return;
+          if (cancelled || histMode) return; // paused while viewing history
           if (data && Array.isArray(data.strikes)) ingest(data);
           backoff = 5000;
           pollTimer = setTimeout(poll, POLL_GAP_MS);
@@ -465,39 +665,39 @@
         });
     }
 
-    // Fade + expire + new->old transition.
+    // New → colour fade → convert to a persistent blue "trail" dot.
+    // No time expiry: strikes stay while the map is open; evicted only when
+    // MAX_MARKERS is reached (oldest first, in addStrike).
     fadeTimer = setInterval(function () {
       var now = Date.now();
       active.forEach(function (e, key) {
-        var remaining = e.expireAt - now;
-        if (remaining <= 0) { removeEntry(key, e); return; }
         if (!visible) return;
         var s = STYLE[e.sev];
         var age = now - e.born;
-        // Stop the "just struck" pulse after NEW_MS.
+        // Stop the "just struck" ping after NEW_MS.
         if (age >= NEW_MS && e.isNew) {
-          if (e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new');
+          if (e.dot && e.dot._icon) e.dot._icon.classList.remove('ww-bolt-new');
           e.isNew = false;
         }
-        // Phase 1 (0-2m): solid colour. Phase 2 (2-5m): colour fades to dim.
-        // Phase 3 (5-15m): grey bolt, fading further, then removed at 15m.
-        var op;
         if (age < SOLID_MS) {
-          op = 1;
+          // 0-2m: full-colour bolt
+          if (e.dot) e.dot.setOpacity(1);
+          if (e.glow) e.glow.setStyle({ fillOpacity: s.go });
         } else if (age < COLOR_END_MS) {
-          op = 1 - 0.55 * ((age - SOLID_MS) / (COLOR_END_MS - SOLID_MS)); // 1 -> 0.45
-        } else {
-          if (!e.greyed) {
-            e.dot.setIcon(boltIcon(e.sev, false, true)); // swap to grey bolt
-            e.glow.setStyle({ fillColor: GREY_COLOR });
-            e.greyed = true;
-          }
-          op = 0.45 - 0.33 * ((age - COLOR_END_MS) / (STRIKE_TTL_MS - COLOR_END_MS)); // 0.45 -> 0.12
-          if (op < 0.05) op = 0.05;
+          // 2-5m: colour bolt fading slightly
+          var op = 1 - 0.3 * ((age - SOLID_MS) / (COLOR_END_MS - SOLID_MS)); // 1 -> 0.7
+          if (e.dot) e.dot.setOpacity(op);
+          if (e.glow) e.glow.setStyle({ fillOpacity: op * s.go });
+        } else if (!e.aged) {
+          // 5m+: drop the DOM bolt + the halo circleMarker; the strike lives on as a
+          // glow on the additive-blend trail canvas (thousands stay smooth + pretty).
+          if (e.dot) { if (map.hasLayer(e.dot)) map.removeLayer(e.dot); e.dot = null; }
+          if (e.glow) { if (map.hasLayer(e.glow)) map.removeLayer(e.glow); e.glow = null; }
+          e.aged = true;
+          trailDirty = true;
         }
-        e.dot.setOpacity(op);
-        e.glow.setStyle({ fillOpacity: op * s.go });
       });
+      if (trailDirty && trailLayer) { trailLayer.redraw(); trailDirty = false; }
     }, 1000);
 
     // ---- stations toggle ----
@@ -516,8 +716,9 @@
 
     // ---- rain layer: EUMETSAT IODC precipitation rate (free WMS, COVERS PAKISTAN) ----
     var radarOn;
-    if (!persist) { radarOn = opts.radar !== false; }
-    else { try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? true : (savedRadar === '1'); } catch (e) { radarOn = true; } }
+    // opts.radar => show the 🌧️ button; opts.radarOn => default ON/OFF (independent).
+    if (!persist) { radarOn = ('radarOn' in opts) ? !!opts.radarOn : (opts.radar !== false); }
+    else { try { var savedRadar = localStorage.getItem('wwLightningRadar'); radarOn = savedRadar === null ? ('radarOn' in opts ? !!opts.radarOn : true) : (savedRadar === '1'); } catch (e) { radarOn = true; } }
     var radarLayer = null;
     var radarTimer = null;
 
@@ -559,8 +760,9 @@
 
     // ---- EUMETSAT Meteosat IODC satellite clouds (free WMS, covers Pakistan) ----
     var satOn;
-    if (!persist) { satOn = opts.satellite !== false; }
-    else { try { var savedSat = localStorage.getItem('wwLightningSat'); satOn = savedSat === null ? true : (savedSat === '1'); } catch (e) { satOn = true; } }
+    // opts.satellite => show the 🛰️ toggle button; opts.satelliteOn => default ON/OFF (independent).
+    if (!persist) { satOn = ('satelliteOn' in opts) ? !!opts.satelliteOn : (opts.satellite !== false); }
+    else { try { var savedSat = localStorage.getItem('wwLightningSat'); satOn = savedSat === null ? ('satelliteOn' in opts ? !!opts.satelliteOn : true) : (savedSat === '1'); } catch (e) { satOn = true; } }
     var satLayer = null;
     var satTimer = null;
     function setSat(v) {
@@ -591,13 +793,11 @@
       if (dotsPane) dotsPane.style.pointerEvents = v ? 'auto' : 'none';
       active.forEach(function (e) {
         var s = STYLE[e.sev];
-        e.dot.setOpacity(v ? 1 : 0);
-        e.glow.setStyle({ fillOpacity: v ? s.go : 0 });
+        if (e.dot) e.dot.setOpacity(v ? 1 : 0);
+        if (e.glow) e.glow.setStyle({ fillOpacity: v ? s.go : 0 });
       });
-      ringLayers.forEach(function (l) {
-        if (l.setStyle) l.setStyle({ opacity: v ? 0.55 : 0 });
-        if (l._icon) l._icon.style.display = v ? '' : 'none';
-      });
+      if (trailLayer) trailLayer.redraw(); // aged trail respects `visible`
+      // Rings are independent (their own 🎯 toggle via setRings) — not coupled to strikes.
       if (!v && banner) banner.style.display = 'none';
     }
 
@@ -614,6 +814,10 @@
           var btnStyle = 'padding:5px 9px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;white-space:nowrap;';
           var ltgBtn = L.DomUtil.create('div', '', wrap);
           ltgBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
+          var rngBtn = L.DomUtil.create('div', '', wrap);
+          rngBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
+          var animBtn = L.DomUtil.create('div', '', wrap);
+          animBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var staBtn = L.DomUtil.create('div', '', wrap);
           staBtn.style.cssText = btnStyle + 'border-bottom:1px solid #eee;';
           var sndBtn = L.DomUtil.create('div', '', wrap);
@@ -623,22 +827,25 @@
           var satBtn = L.DomUtil.create('div', '', wrap);
           satBtn.style.cssText = btnStyle;
           function renderLtg() { ltgBtn.innerHTML = '<span class="ww-ic">⚡</span><span class="ww-lbl"> Lightning: ' + (visible ? 'On' : 'Off') + '</span>'; ltgBtn.title = 'Lightning: ' + (visible ? 'On' : 'Off'); ltgBtn.style.opacity = visible ? '1' : '0.55'; }
+          function renderRng() { rngBtn.innerHTML = '<span class="ww-ic">🎯</span><span class="ww-lbl"> Rings: ' + (ringsVisible ? 'On' : 'Off') + '</span>'; rngBtn.title = 'Rings: ' + (ringsVisible ? 'On' : 'Off'); rngBtn.style.opacity = ringsVisible ? '1' : '0.55'; }
+          function renderAnim() { animBtn.innerHTML = '<span class="ww-ic">' + (animOn ? '✨' : '⏸️') + '</span><span class="ww-lbl"> Animation: ' + (animOn ? 'On' : 'Off') + '</span>'; animBtn.title = 'Animation: ' + (animOn ? 'On' : 'Off'); animBtn.style.opacity = animOn ? '1' : '0.55'; }
           function renderSta() { staBtn.innerHTML = '<span class="ww-ic">📍</span><span class="ww-lbl"> Stations: ' + (stationsVisible ? 'On' : 'Off') + '</span>'; staBtn.title = 'Stations: ' + (stationsVisible ? 'On' : 'Off'); staBtn.style.opacity = stationsVisible ? '1' : '0.55'; }
           function renderSnd() { sndBtn.innerHTML = '<span class="ww-ic">' + (soundOn ? '🔊' : '🔇') + '</span><span class="ww-lbl"> Sound: ' + (soundOn ? 'On' : 'Off') + '</span>'; sndBtn.title = 'Sound: ' + (soundOn ? 'On' : 'Off'); sndBtn.style.opacity = soundOn ? '1' : '0.55'; }
           function renderRdr() { rdrBtn.innerHTML = '<span class="ww-ic">🌧️</span><span class="ww-lbl"> Radar: ' + (radarOn ? 'On' : 'Off') + '</span>'; rdrBtn.title = 'Radar: ' + (radarOn ? 'On' : 'Off'); rdrBtn.style.opacity = radarOn ? '1' : '0.55'; }
           function renderSat() { satBtn.innerHTML = '<span class="ww-ic">🛰️</span><span class="ww-lbl"> Satellite: ' + (satOn ? 'On' : 'Off') + '</span>'; satBtn.title = 'Satellite: ' + (satOn ? 'On' : 'Off'); satBtn.style.opacity = satOn ? '1' : '0.55'; }
-          renderLtg(); renderSta(); renderSnd(); renderRdr(); renderSat();
+          renderLtg(); renderRng(); renderAnim(); renderSta(); renderSnd(); renderRdr(); renderSat();
           L.DomEvent.on(ltgBtn, 'click', function (ev) { L.DomEvent.stop(ev); setVisible(!visible); renderLtg(); });
+          L.DomEvent.on(rngBtn, 'click', function (ev) { L.DomEvent.stop(ev); setRings(!ringsVisible); renderRng(); });
+          L.DomEvent.on(animBtn, 'click', function (ev) { L.DomEvent.stop(ev); setAnim(!animOn); renderAnim(); });
           L.DomEvent.on(staBtn, 'click', function (ev) { L.DomEvent.stop(ev); setStations(!stationsVisible); renderSta(); });
           L.DomEvent.on(sndBtn, 'click', function (ev) { L.DomEvent.stop(ev); soundOn = !soundOn; if (persist) try { localStorage.setItem('wwLightningSound', soundOn ? '1' : '0'); } catch (e) {} if (soundOn) { unlockAudio(); playTick(); } renderSnd(); });
           L.DomEvent.on(rdrBtn, 'click', function (ev) { L.DomEvent.stop(ev); setRadar(!radarOn); renderRdr(); });
           L.DomEvent.on(satBtn, 'click', function (ev) { L.DomEvent.stop(ev); setSat(!satOn); renderSat(); });
+          if (opts.rings === false) rngBtn.style.display = 'none';
           if (opts.stations === false || !getStationsLayer()) staBtn.style.display = 'none';
           if (opts.sound === false) sndBtn.style.display = 'none';
           if (opts.radar === false) rdrBtn.style.display = 'none';
-          // Satellite button stays visible even when off by default, so the
-          // user can still toggle the cloud layer on. Default on/off is driven
-          // by opts.satellite (see satOn above).
+          if (opts.satellite === false) satBtn.style.display = 'none';
           return wrap;
         },
       });
@@ -654,7 +861,7 @@
     // Stream 24/7 even when the tab is hidden (monitoring display). On returning
     // to the foreground, re-establish the connection only if it was dropped.
     function onVisibility() {
-      if (cancelled || document.hidden) return;
+      if (cancelled || document.hidden || histMode) return;
       if (!es && !pollTimer) connect();
     }
     if (hasDoc) document.addEventListener('visibilitychange', onVisibility);
@@ -677,6 +884,137 @@
 
     connect();
 
+    // ---- 24h history PLAYER (PK worker D1) — additive; never blocks live ----
+    // Pick a window → fetch its strikes → step through it in 15-min frames as
+    // bolt icons with a time slider + play/pause. "Live" resumes real-time.
+    var PK_HISTORY_API = (opts.historyApi ||
+      'https://lightning-weatherx-pk-api.mashhood-droid.workers.dev/api/strikes');
+    var HIST_BUCKET_MS = 15 * 60 * 1000; // 15-min frames
+    var HIST_STEP_MS = 500;              // playback ~2 frames/sec (normal speed)
+    var HIST_MAX_PER_FRAME = 500;        // cap bolt icons per frame (perf)
+    var histAbort = null, histBuckets = [], histStep = 0, histTimer = null;
+    var histLayer = null, histInfo = null, histBtns = {}, histSlider = null, histPlayBtn = null;
+
+    function clearHistLayer() { if (histLayer) { map.removeLayer(histLayer); histLayer = null; } }
+    function renderStep(i) {
+      if (!histBuckets.length) return;
+      histStep = Math.max(0, Math.min(i, histBuckets.length - 1));
+      clearHistLayer();
+      var cur = histBuckets[histStep];
+      var grp = L.layerGroup();
+      var pts = cur.s.length > HIST_MAX_PER_FRAME ? cur.s.slice(0, HIST_MAX_PER_FRAME) : cur.s;
+      for (var j = 0; j < pts.length; j++) {
+        L.marker([pts[j][0], pts[j][1]], { pane: 'ww-ltg-dots', icon: boltIcon('low', false, false), interactive: false }).addTo(grp);
+      }
+      grp.addTo(map); histLayer = grp;
+      if (histSlider) histSlider.value = String(histStep);
+      if (histInfo) {
+        var d = new Date(cur.t);
+        histInfo.textContent = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) +
+          '  •  ' + cur.s.length + ' strikes';
+      }
+    }
+    function stopPlay() { if (histTimer) { clearInterval(histTimer); histTimer = null; } if (histPlayBtn) histPlayBtn.textContent = '▶'; }
+    function startPlay() {
+      if (!histBuckets.length) return;
+      if (histPlayBtn) histPlayBtn.textContent = '⏸';
+      histTimer = setInterval(function () {
+        var n = histStep + 1; if (n >= histBuckets.length) n = 0; // loop
+        renderStep(n);
+      }, HIST_STEP_MS);
+    }
+    function renderHistBtns() {
+      for (var h in histBtns) {
+        var on = (+h === histMode);
+        histBtns[h].style.background = on ? '#0ea5e9' : '#fff';
+        histBtns[h].style.color = on ? '#fff' : '#333';
+      }
+    }
+    function showLive() {
+      histMode = 0; stopPlay();
+      if (histAbort) { try { histAbort.abort(); } catch (e) {} histAbort = null; }
+      clearHistLayer(); histBuckets = [];
+      if (histSlider) histSlider.disabled = true;
+      if (histInfo) histInfo.textContent = 'Live';
+      renderHistBtns();
+      if (!cancelled && !es && !pollTimer) connect();
+    }
+    function showHistory(hours) {
+      histMode = hours; stopPlay(); renderHistBtns();
+      stopConnections();
+      active.forEach(function (e) {
+        if (e.dot && map.hasLayer(e.dot)) map.removeLayer(e.dot);
+        if (e.glow && map.hasLayer(e.glow)) map.removeLayer(e.glow);
+      });
+      active.clear(); counts.clear(); clearHistLayer(); histBuckets = [];
+      if (trailLayer) trailLayer.redraw(); // clear the aged-glow trail too
+      if (histInfo) histInfo.textContent = 'Loading…';
+      if (histAbort) { try { histAbort.abort(); } catch (e) {} }
+      histAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      fetch(PK_HISTORY_API + '?hours=' + hours + '&limit=20000', {
+        headers: { Accept: 'application/json' }, signal: histAbort ? histAbort.signal : undefined,
+      })
+        .then(function (r) { if (!r.ok) throw new Error('history ' + r.status); return r.json(); })
+        .then(function (d) {
+          if (histMode !== hours) return; // user switched away mid-fetch
+          var rows = (d && Array.isArray(d.data)) ? d.data : [];
+          var end = Date.now(), start = end - hours * 3600000;
+          var nb = Math.max(1, Math.ceil((end - start) / HIST_BUCKET_MS));
+          var buckets = [];
+          for (var b = 0; b < nb; b++) buckets.push({ t: start + b * HIST_BUCKET_MS, s: [] });
+          for (var i = 0; i < rows.length; i++) {
+            var t = +rows[i].timestampMs, la = +rows[i].lat, lo = +rows[i].lon;
+            if (!isFinite(t) || !isFinite(la) || !isFinite(lo)) continue;
+            var bi = Math.floor((t - start) / HIST_BUCKET_MS);
+            if (bi >= 0 && bi < nb) buckets[bi].s.push([la, lo]);
+          }
+          histBuckets = buckets;
+          if (histSlider) { histSlider.max = String(nb - 1); histSlider.value = '0'; histSlider.disabled = false; }
+          renderStep(0);
+          startPlay(); // auto-play
+        })
+        .catch(function () { if (histMode === hours && histInfo) histInfo.textContent = 'History unavailable'; });
+    }
+
+    var histControl = null;
+    if (opts.history !== false && L.Control) {
+      var HCtl = L.Control.extend({
+        options: { position: 'bottomright' },
+        onAdd: function () {
+          var wrap = L.DomUtil.create('div', 'leaflet-bar ww-ltg-hist');
+          wrap.style.cssText = 'background:#fff;font:600 11px system-ui,sans-serif;color:#333;padding:5px;display:flex;flex-direction:column;gap:5px;width:230px;max-width:72vw;';
+          L.DomEvent.disableClickPropagation(wrap);
+          L.DomEvent.disableScrollPropagation(wrap);
+          var row = L.DomUtil.create('div', '', wrap);
+          row.style.cssText = 'display:flex;gap:3px;';
+          [['0', 'Live'], ['1', '1h'], ['3', '3h'], ['6', '6h'], ['12', '12h'], ['24', '24h']].forEach(function (dd) {
+            var b = L.DomUtil.create('div', '', row);
+            b.textContent = dd[1];
+            b.style.cssText = 'flex:1;text-align:center;padding:4px 0;cursor:pointer;user-select:none;border:1px solid #e5e7eb;border-radius:4px;';
+            histBtns[dd[0]] = b;
+            L.DomEvent.on(b, 'click', function (ev) { L.DomEvent.stop(ev); if (dd[0] === '0') showLive(); else showHistory(+dd[0]); });
+          });
+          var prow = L.DomUtil.create('div', '', wrap);
+          prow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+          histPlayBtn = L.DomUtil.create('div', '', prow);
+          histPlayBtn.textContent = '▶';
+          histPlayBtn.style.cssText = 'cursor:pointer;user-select:none;font-size:15px;line-height:1;padding:2px 4px;';
+          L.DomEvent.on(histPlayBtn, 'click', function (ev) { L.DomEvent.stop(ev); if (!histMode) return; if (histTimer) stopPlay(); else startPlay(); });
+          histSlider = L.DomUtil.create('input', '', prow);
+          histSlider.type = 'range'; histSlider.min = '0'; histSlider.max = '0'; histSlider.value = '0'; histSlider.disabled = true;
+          histSlider.style.cssText = 'flex:1;min-width:0;';
+          L.DomEvent.on(histSlider, 'input', function (ev) { L.DomEvent.stop(ev); stopPlay(); renderStep(+histSlider.value); });
+          histInfo = L.DomUtil.create('div', '', wrap);
+          histInfo.style.cssText = 'color:#555;white-space:nowrap;text-align:center;font-weight:500;';
+          histInfo.textContent = 'Live';
+          renderHistBtns();
+          return wrap;
+        },
+      });
+      histControl = new HCtl();
+      histControl.addTo(map);
+    }
+
     var detach = function () {
       cancelled = true;
       if (hasDoc) document.removeEventListener('visibilitychange', onVisibility);
@@ -684,11 +1022,16 @@
       if (fadeTimer) clearInterval(fadeTimer);
       if (bannerTimer) clearTimeout(bannerTimer);
       active.forEach(function (e) {
-        if (map.hasLayer(e.dot)) map.removeLayer(e.dot);
-        if (map.hasLayer(e.glow)) map.removeLayer(e.glow);
+        if (e.dot && map.hasLayer(e.dot)) map.removeLayer(e.dot);
+        if (e.glow && map.hasLayer(e.glow)) map.removeLayer(e.glow);
       });
+      if (trailLayer && map.hasLayer(trailLayer)) map.removeLayer(trailLayer);
       ringLayers.forEach(function (l) { if (map.hasLayer(l)) map.removeLayer(l); });
       if (control) map.removeControl(control);
+      if (histAbort) { try { histAbort.abort(); } catch (e) {} }
+      stopPlay();
+      clearHistLayer();
+      if (histControl) map.removeControl(histControl);
       if (radarTimer) clearInterval(radarTimer);
       if (radarLayer && map.hasLayer(radarLayer)) map.removeLayer(radarLayer);
       if (satTimer) clearInterval(satTimer);

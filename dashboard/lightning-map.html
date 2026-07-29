@@ -6,14 +6,48 @@
   <title>Lightning &amp; Satellite</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body { margin: 0; height: 100%; background: #f8fafc; }
-    #map { position: absolute; inset: 0; }
+    :root {
+      --glass-bg: rgba(18, 23, 33, 0.66);
+      --glass-border: rgba(255, 255, 255, 0.10);
+      --on: #e6e9ee;
+      --primary: #0ea5e9;
+      --r: 14px;
+    }
+    html, body { margin: 0; height: 100%; background: #0A0A0A;
+      font-family: Inter, system-ui, -apple-system, sans-serif; }
+    #map { position: absolute; inset: 0; background: #0A0A0A; }
+
+    /* ---- Glassmorphism for all Leaflet controls (Atmospheric Intelligence) ---- */
+    .leaflet-bar, .leaflet-control-layers, .ww-ltg-ctl, .ww-ltg-hist {
+      background: var(--glass-bg) !important;
+      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border) !important;
+      border-radius: var(--r) !important;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+      color: var(--on) !important;
+      overflow: hidden;
+    }
+    .leaflet-bar a {
+      background: transparent !important; color: var(--on) !important;
+      border-bottom: 1px solid var(--glass-border) !important;
+    }
+    .leaflet-bar a:last-child { border-bottom: none !important; }
+    .leaflet-bar a:hover { background: rgba(255, 255, 255, 0.10) !important; }
+    .leaflet-control-layers-expanded { padding: 10px 12px !important; }
+    .leaflet-control-layers label, .leaflet-control-layers-list span { color: var(--on) !important; }
+    .ww-ltg-ctl, .ww-ltg-ctl > div { color: var(--on) !important; }
+    .ww-ltg-hist input[type=range] { accent-color: var(--primary); }
+    .leaflet-control-attribution {
+      background: rgba(0, 0, 0, 0.45) !important; color: #7a828c !important;
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    }
+    .leaflet-control-attribution a { color: #9aa3ad !important; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="ww-lightning.js?v=2"></script>
+  <script src="ww-lightning.js?v=22"></script>
   <script>
     // Optional ?lat=&lon=&label= from the host app → center the ring/map there.
     var qs = new URLSearchParams(location.search);
@@ -25,26 +59,32 @@
     // Named "lightningMap" (not "map") so ww-lightning.js does NOT auto-attach;
     // we attach manually below with a fixed lightning + satellite config.
     var lightningMap = L.map('map', { zoomControl: true, attributionControl: true })
-      .setView(hasLoc ? [qLat, qLon] : [30.3753, 69.3451], hasLoc ? 9 : 5);
+      .setView(hasLoc ? [qLat, qLon] : [33.6844, 73.0479], 8); // fallback; fitOnLoad reframes to live strikes
 
-    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
-    }).addTo(lightningMap); // light/white default
+    var streetsBase = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19,
+    }).addTo(lightningMap); // streets default (matches /pk portal)
     var darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
     });
-    L.control.layers({ 'Light': lightBase, 'Dark': darkBase }, null, { position: 'topleft' }).addTo(lightningMap);
+    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
+    });
+    L.control.layers({ 'Streets': streetsBase, 'Dark': darkBase, 'Light': lightBase }, null, { position: 'topleft' }).addTo(lightningMap);
 
     if (window.attachWWLightning) {
       window.attachWWLightning(lightningMap, {
         persist: false,    // ignore/never write localStorage (isolated from dashboards)
+        fitOnLoad: true,   // on load, frame the map to wherever the strikes are (+ rings)
         stations: false,   // no station markers/toggle
         sound: true,       // tick on new in-view strikes (needs one user tap to unlock audio)
-        radar: true,       // EUMETSAT precipitation (covers Pakistan)
-        satellite: true,   // EUMETSAT clouds ON
-        lat: hasLoc ? qLat : undefined,   // ring/alert center from the app
-        lon: hasLoc ? qLon : undefined,
-        label: qLabel || undefined,
+        radar: true,       // show the 🌧️ toggle button
+        radarOn: false,    // ...but OFF by default (user can turn it on)
+        satellite: true,      // show the 🛰️ toggle button
+        satelliteOn: false,   // ...but OFF by default (user can turn it on)
+        lat: hasLoc ? qLat : 33.6844,   // ring/alert center (Islamabad default)
+        lon: hasLoc ? qLon : 73.0479,
+        label: qLabel || 'Islamabad',
         // lightning is on by default (visible)
       });
     }
