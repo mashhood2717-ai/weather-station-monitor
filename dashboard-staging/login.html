@@ -215,20 +215,12 @@
     </div>
 
     <script>
-        const API_BASE = 'https://hubservice.weatherwalay.com';
-        const BASIC_AUTH_USERNAME = 'we@therwalay';
-        const BASIC_AUTH_PASSWORD = 'we@therwalay_dev#7780';
-
-        // Generate Basic Auth header with timestamp
-        function generateBasicAuth() {
-            const timestamp = Date.now();
-            const username = `${BASIC_AUTH_USERNAME}-${timestamp}`;
-            const credentials = btoa(`${username}:${BASIC_AUTH_PASSWORD}`);
-            return {
-                authorization: `Basic ${credentials}`,
-                timestamp: timestamp
-            };
-        }
+        // Log in through the monitor Worker rather than calling HubService directly.
+        // HubService now requires an RSA+AES encrypted envelope, and it only returns
+        // Access-Control-Allow-Origin for its own allowlisted origin (wwhub) — so a
+        // browser on *.pages.dev is blocked before auth is even attempted. The Worker
+        // performs the envelope handshake server-side and returns the session to us.
+        const WORKER_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev';
 
         // Handle login
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -249,18 +241,10 @@
             loading.classList.add('show');
             
             try {
-                const auth = generateBasicAuth();
-                
-                const response = await fetch(`${API_BASE}/ww-Hub/login`, {
+                const response = await fetch(`${WORKER_BASE}/api/login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': auth.authorization
-                    },
-                    body: JSON.stringify({
-                        loginParam: loginParam,
-                        password: password
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ loginParam, password })
                 });
                 
                 const data = await response.json();

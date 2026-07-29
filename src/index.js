@@ -59,113 +59,352 @@ async function cacheAndReturn(cacheKey, ttl, responsePromise) {
   return response;
 }
 
-// Get JWT token from HubService using Basic auth
-async function getHubServiceToken(userCredentials) {
+// ============================================================
+// JWT LIFECYCLE
+// HubService issues short-lived JWTs from /ww-Hub/login. Everything below
+// exists so an expired token self-heals instead of 401ing forever:
+//   - expiry is read from the `exp` claim with base64URL-safe decoding
+//   - a token whose `exp` we cannot read is trusted briefly, never for 24h
+//   - concurrent callers share one in-flight login instead of stampeding /login
+//   - hubFetch() invalidates + re-logins + replays once when HubService 401s
+// ============================================================
+const TOKEN_CACHE_KEY = 'hubservice_jwt';
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;  // renew this long before `exp`
+const TOKEN_FALLBACK_TTL_MS = 15 * 60 * 1000;  // only when `exp` is unreadable
+
+// Single in-flight login shared by all concurrent callers in this isolate.
+let tokenRefreshInFlight = null;
+
+// JWT payloads are base64URL ("-" / "_", padding stripped). Bare atob() throws
+// InvalidCharacterError on those characters, which previously fell through to an
+// "assume 24 hours" fallback and cached an already-expired token for a full day.
+function decodeJwtPayload(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const json = decodeURIComponent(
+    atob(b64)
+      .split('')
+      .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+      .join('')
+  );
+  return JSON.parse(json);
+}
+
+// Absolute ms-epoch at which this token stops being valid, or null if undatable.
+function getTokenExpiry(token) {
   try {
-    // Check if we have a valid cached token
-    const cached = tokenCache.get('hubservice_jwt');
-    if (cached && cached.expiresAt > Date.now()) {
-      console.log('🔑 Using cached JWT token');
-      return cached.token;
-    }
+    const payload = decodeJwtPayload(token);
+    if (payload && Number.isFinite(payload.exp)) return payload.exp * 1000;
+  } catch (e) {
+    console.warn('Could not parse JWT expiry:', e.message);
+  }
+  return null;
+}
 
-    // Parse user credentials (format: "phone:password")
-    const [loginParam, password] = userCredentials.split(':');
+function cacheToken(token) {
+  const exp = getTokenExpiry(token);
+  // Unreadable `exp` → short TTL so we re-login soon rather than trust it blindly.
+  const expiresAt = exp === null
+    ? Date.now() + TOKEN_FALLBACK_TTL_MS
+    : exp - TOKEN_EXPIRY_BUFFER_MS;
+  tokenCache.set(TOKEN_CACHE_KEY, { token, expiresAt, exp });
+  const secs = Math.floor((expiresAt - Date.now()) / 1000);
+  console.log(exp === null
+    ? `⚠️ Cached JWT with unreadable exp; re-checking in ${secs}s`
+    : `✅ Cached JWT, refreshing in ${secs}s`);
+  return token;
+}
 
-    // Generate dynamic Basic Auth (as per HubService web app pattern)
-    const dynamicUsername = `we@therwalay-${Date.now()}`;
-    const dynamicPassword = 'we@therwalay_dev#7780';
-    const basicAuth = btoa(`${dynamicUsername}:${dynamicPassword}`);
+// Cached token, or null when absent/expired. Evicts on the way out.
+function getCachedToken() {
+  const cached = tokenCache.get(TOKEN_CACHE_KEY);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+  if (cached) tokenCache.delete(TOKEN_CACHE_KEY);
+  return null;
+}
 
-    console.log('🔐 Requesting new JWT token from HubService...');
-    const response = await fetch('https://hubservice.weatherwalay.com/ww-Hub/login', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ loginParam, password })
-    });
-
-    if (!response.ok) {
-      console.error(`Login failed: ${response.status}`);
-      const text = await response.text();
-      console.error(`Response: ${text}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const token = data.token;
-
-    if (!token) {
-      console.error('No token in response');
-      return null;
-    }
-
-    // Try to decode token to get expiry time (JWT format: header.payload.signature)
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        // Decode payload
-        const payload = JSON.parse(
-          decodeURIComponent(
-            atob(parts[1])
-              .split('')
-              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-              .join('')
-          )
-        );
-
-        // Store token with expiry (subtract 5 minutes as buffer)
-        const expiresAt = (payload.exp * 1000) - (5 * 60 * 1000);
-        tokenCache.set('hubservice_jwt', { token, expiresAt });
-
-        console.log(`✅ Got new JWT token, expires in ${Math.floor((expiresAt - Date.now()) / 1000)}s`);
-        return token;
-      }
-    } catch (e) {
-      console.warn('Could not parse JWT expiry:', e);
-      // Store without expiry knowledge - will try again next time
-      tokenCache.set('hubservice_jwt', {
-        token,
-        expiresAt: Date.now() + (24 * 60 * 60 * 1000) // Assume 24 hours
-      });
-      return token;
-    }
-
-    return token;
-  } catch (error) {
-    console.error('Error getting HubService token:', error);
-    return null;
+function invalidateToken(reason) {
+  if (tokenCache.delete(TOKEN_CACHE_KEY)) {
+    console.warn(`🗑️ Discarded cached JWT: ${reason}`);
   }
 }
 
-// Use a pre-provided JWT token directly (if available)
-function useProvidedJWTToken(jwtToken) {
-  try {
-    // Decode token to get expiry time
-    const parts = jwtToken.split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(
-        decodeURIComponent(
-          atob(parts[1])
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        )
-      );
+// ============================================================
+// ENCRYPTED ENVELOPE (RSA + AES-GCM)
+// HubService no longer accepts plaintext Basic auth or Bearer JWTs. Every
+// request carries an RSA+AES encrypted envelope, and the session is a cookie:
+//   Authorization: Basic <envelope("we@therwalay-<ms>:<basicPassword>")>   [fresh per request]
+//   Cookie:        hub_access_token=<jwt>                                  [from /ww-Hub/login]
+//
+// Envelope layout (must match the server's decryptor byte-for-byte):
+//   AES-256-GCM(plaintext) with a random 32-byte key + 12-byte IV; the 16-byte
+//   GCM tag is appended to the ciphertext (WebCrypto does this natively). The
+//   AES key is wrapped with RSA-OAEP/SHA-256 under the hub's public key. Then:
+//     [ wrappedKeyLen (2B big-endian) | wrappedKey | iv (12B) | ciphertext+tag ]
+//   base64-encoded.
+// ============================================================
+const HUB_BASE_URL = 'https://hubservice.weatherwalay.com';
+const HUB_BASIC_USER_PREFIX = 'we@therwalay-';
+const SESSION_COOKIE_NAME = 'hub_access_token';
 
-      // Store token with expiry (subtract 5 minutes as buffer)
-      const expiresAt = (payload.exp * 1000) - (5 * 60 * 1000);
-      tokenCache.set('hubservice_jwt', { token: jwtToken, expiresAt });
+// App-level Basic password. NOT a secret: it ships in cleartext inside the public
+// frontend bundles (wwhub/b2b `getRotatingAuthToken`), so it is defaulted here and
+// only overridden if HUBSERVICE_BASIC_PASSWORD is set. Keeping the default matters
+// because the '#' makes it hostile to .dev.vars — wrangler's dotenv parser truncates
+// at '#' even inside quotes, silently yielding "we@therwalay_dev" and a 401.
+const HUB_APP_BASIC_PASSWORD = 'we@therwalay_dev#7780';
 
-      console.log(`✅ Cached provided JWT token, expires in ${Math.floor((expiresAt - Date.now()) / 1000)}s`);
-      return true;
-    }
-  } catch (e) {
-    console.warn('Could not parse provided JWT token:', e);
+// Imported RSA public key, cached per isolate (importKey is not free).
+let hubPublicKeyPromise = null;
+
+function bytesToBase64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Accepts an SPKI PEM, optionally with literal "\n" escapes (env-var friendly).
+function importHubPublicKey(pem) {
+  const body = String(pem)
+    .replace(/\\n/g, '\n')
+    .replace(/-----BEGIN [^-]+-----/, '')
+    .replace(/-----END [^-]+-----/, '')
+    .replace(/\s+/g, '');
+  if (!body) throw new Error('HUBSERVICE_PUBLIC_KEY is empty');
+  return crypto.subtle.importKey(
+    'spki',
+    base64ToBytes(body),
+    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    false,
+    ['encrypt']
+  );
+}
+
+function getHubPublicKey(env) {
+  if (!env.HUBSERVICE_PUBLIC_KEY) {
+    throw new Error('HUBSERVICE_PUBLIC_KEY is not configured');
   }
-  return false;
+  // Cache the promise so concurrent callers share a single import.
+  if (!hubPublicKeyPromise) {
+    hubPublicKeyPromise = importHubPublicKey(env.HUBSERVICE_PUBLIC_KEY)
+      .catch((e) => { hubPublicKeyPromise = null; throw e; });
+  }
+  return hubPublicKeyPromise;
+}
+
+async function encryptEnvelope(plaintext, env) {
+  const publicKey = await getHubPublicKey(env);
+
+  // 1) one-time AES-256-GCM key + 12-byte IV
+  const aesKeyBytes = crypto.getRandomValues(new Uint8Array(32));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const aesKey = await crypto.subtle.importKey('raw', aesKeyBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+
+  // 2) encrypt; WebCrypto appends the 16-byte auth tag to the ciphertext
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    aesKey,
+    new TextEncoder().encode(plaintext)
+  ));
+
+  // 3) wrap the raw AES key with RSA-OAEP / SHA-256
+  const wrappedKey = new Uint8Array(await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, aesKeyBytes));
+
+  // 4) pack [len(2B BE) | wrappedKey | iv | ciphertext+tag] and base64
+  const packed = new Uint8Array(2 + wrappedKey.length + iv.length + ciphertext.length);
+  packed[0] = (wrappedKey.length >> 8) & 0xff;
+  packed[1] = wrappedKey.length & 0xff;
+  packed.set(wrappedKey, 2);
+  packed.set(iv, 2 + wrappedKey.length);
+  packed.set(ciphertext, 2 + wrappedKey.length + iv.length);
+  return bytesToBase64(packed);
+}
+
+// Fresh encrypted Basic header. The embedded timestamp rotates every call, so
+// this must be rebuilt per request — a cached value is not reusable.
+async function buildEncryptedBasicAuth(env) {
+  const appPassword = env.HUBSERVICE_BASIC_PASSWORD || HUB_APP_BASIC_PASSWORD;
+  const username = `${HUB_BASIC_USER_PREFIX}${Date.now()}`;
+  return `Basic ${await encryptEnvelope(`${username}:${appPassword}`, env)}`;
+}
+
+// Pull hub_access_token out of Set-Cookie. getSetCookie() is the correct API for
+// multiple Set-Cookie headers; fall back to the folded single header if absent.
+function extractSessionJwt(response) {
+  const cookies = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean);
+  for (const c of cookies) {
+    const m = new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`).exec(c);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// POST /ww-Hub/login with the encrypted envelope; returns the session JWT.
+async function loginForToken(env) {
+  // HUBSERVICE_BASIC_AUTH holds the account credential as "loginParam:password".
+  if (String(env.HUBSERVICE_BASIC_AUTH || '').indexOf(':') < 1) {
+    console.error('HUBSERVICE_BASIC_AUTH must be formatted "loginParam:password"');
+    return null;
+  }
+  const result = await hubLogin(env, String(env.HUBSERVICE_BASIC_AUTH));
+  if (!result.ok) {
+    console.error(`Login failed: ${result.status} ${result.msg}`);
+    return null;
+  }
+  return cacheToken(result.token);
+}
+
+// Perform one /ww-Hub/login for an arbitrary "loginParam:password" credential.
+// Shared by the Worker's own session and by the /api/login browser proxy, so both
+// stay on exactly one implementation of the envelope handshake.
+// Returns { ok, token, body, status, msg } and never caches (the proxy logs in as
+// other users, whose sessions must not land in the Worker's shared token cache).
+async function hubLogin(env, credentialString) {
+  const credentials = await encryptEnvelope(credentialString, env);
+
+  console.log('🔐 Requesting new session from HubService (encrypted envelope)...');
+  const response = await fetch(`${HUB_BASE_URL}/ww-Hub/login`, {
+    method: 'POST',
+    headers: {
+      'Authorization': await buildEncryptedBasicAuth(env),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ credentials })
+  });
+
+  // Read the body once; it carries msg/record/accessTo and sometimes the token.
+  const body = await response.json().catch(() => null);
+
+  // A rejected *account* password comes back as HTTP 200 with {success:false},
+  // while a rejected envelope/app-credential is a 401. Both are auth failures —
+  // checking only response.ok reported a bad password as "no token returned".
+  if (!response.ok || body?.success === false) {
+    return {
+      ok: false,
+      status: response.ok ? 401 : response.status,
+      msg: body?.msg || `HTTP ${response.status}`,
+      body,
+    };
+  }
+
+  // The session arrives as a Set-Cookie; the body also echoes it on this deployment.
+  const token = extractSessionJwt(response) || body?.token || body?.accessToken || null;
+  if (!token) {
+    return {
+      ok: false,
+      status: response.status,
+      msg: `Login succeeded but no ${SESSION_COOKIE_NAME} cookie or body token was returned`,
+      body,
+    };
+  }
+  return { ok: true, status: response.status, token, body };
+}
+
+// Get a session JWT, reusing the cache and coalescing concurrent logins.
+async function getHubServiceToken(env) {
+  const cached = getCachedToken();
+  if (cached) {
+    console.log('🔑 Using cached session JWT');
+    return cached;
+  }
+  // Coalesce: the cron plus several endpoints can miss the cache simultaneously.
+  if (!tokenRefreshInFlight) {
+    tokenRefreshInFlight = loginForToken(env)
+      .catch((error) => {
+        console.error('Error getting HubService session:', error);
+        return null;
+      })
+      .finally(() => { tokenRefreshInFlight = null; });
+  }
+  return tokenRefreshInFlight;
+}
+
+// The single decision point for obtaining a session.
+// forceRefresh bypasses the cache and is used after HubService rejects a token.
+async function getValidToken(env, { forceRefresh = false } = {}) {
+  if (forceRefresh) {
+    invalidateToken('forced refresh');
+  } else {
+    const cached = getCachedToken();
+    if (cached) return cached;
+  }
+
+  if (env.HUBSERVICE_BASIC_AUTH) {
+    const token = await getHubServiceToken(env);
+    if (token) return token;
+    console.error('Login failed; falling back to static session JWT if usable');
+  }
+
+  // A static JWT cannot refresh itself, so it is only usable while genuinely
+  // valid. Handing an expired one back is what caused permanent 401s.
+  if (env.HUBSERVICE_JWT) {
+    const exp = getTokenExpiry(env.HUBSERVICE_JWT);
+    if (exp !== null && exp - TOKEN_EXPIRY_BUFFER_MS <= Date.now()) {
+      console.error(
+        `❌ HUBSERVICE_JWT expired at ${new Date(exp).toISOString()} and cannot self-refresh. ` +
+        'Set HUBSERVICE_BASIC_AUTH + HUBSERVICE_BASIC_PASSWORD + HUBSERVICE_PUBLIC_KEY so the Worker mints its own sessions.'
+      );
+      return null;
+    }
+    if (!env.HUBSERVICE_BASIC_AUTH) {
+      console.warn('⚠️ Using static HUBSERVICE_JWT (no auto-refresh configured)');
+    }
+    return cacheToken(env.HUBSERVICE_JWT);
+  }
+
+  // Distinguish "nothing configured" from "configured but rejected" — conflating the
+  // two sent us hunting for a missing secret when the credential was simply wrong.
+  if (env.HUBSERVICE_BASIC_AUTH) {
+    console.error(
+      '❌ Could not obtain a session: HubService rejected the login. Verify HUBSERVICE_BASIC_AUTH ' +
+      '("loginParam:password"), HUBSERVICE_BASIC_PASSWORD, and that HUBSERVICE_PUBLIC_KEY is the ' +
+      "hub's current key. NOTE: in .dev.vars a value containing '#' must be quoted or dotenv " +
+      'truncates it at the # as a comment.'
+    );
+  } else {
+    console.error('❌ No HubService credentials configured (need HUBSERVICE_BASIC_AUTH)');
+  }
+  return null;
+}
+
+// Authenticated HubService fetch. Sends a FRESH encrypted Basic header plus the
+// session cookie. On 401/403 it discards the session, logs in again, and replays
+// the request once — this is what lets an expired session self-heal.
+async function hubFetch(env, url, init = {}) {
+  const token = await getValidToken(env);
+  if (!token) throw new Error('No valid session token available');
+
+  const send = async (jwt) => fetch(url, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      // Rebuilt per attempt: the envelope embeds a rotating timestamp.
+      'Authorization': await buildEncryptedBasicAuth(env),
+      'Cookie': `${SESSION_COOKIE_NAME}=${jwt}`
+    }
+  });
+
+  const response = await send(token);
+  if (response.status !== 401 && response.status !== 403) return response;
+
+  invalidateToken(`HubService returned ${response.status}`);
+  const fresh = await getValidToken(env, { forceRefresh: true });
+  // Nothing new to try (no refreshable credential) → surface the original error.
+  if (!fresh || fresh === token) return response;
+
+  console.log('♻️ Retrying HubService request with refreshed session');
+  return send(fresh);
 }
 
 // Helper function to convert Fahrenheit to Celsius
@@ -198,44 +437,21 @@ function normalizeApiSource(station) {
 // Fetch all stations from HubService API (your main API)
 async function fetchAllStationsFromHubService(env) {
   try {
-    let token = null;
-
-    // First, try to use cached token (if not expired)
-    const cached = tokenCache.get('hubservice_jwt');
-    if (cached && cached.expiresAt > Date.now()) {
-      token = cached.token;
-      console.log('🔑 Using cached JWT token');
-    } else if (env.HUBSERVICE_BASIC_AUTH) {
-      // Prefer basic auth - it auto-refreshes tokens
-      console.log('🔐 Refreshing JWT token via Basic Auth...');
-      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-    } else if (env.HUBSERVICE_JWT) {
-      // Fall back to static JWT token (won't auto-refresh!)
-      console.log('⚠️ Using static JWT token (may be expired)');
-      useProvidedJWTToken(env.HUBSERVICE_JWT);
-      token = env.HUBSERVICE_JWT;
-    }
-
-    if (!token) {
-      throw new Error('No valid JWT token available');
-    }
-
     const allStations = [];
 
     // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={}).
-    // HubService's actual API uses `lng`, but we request BOTH `lng` AND `long` so we don't
-    // lose coordinates if HubService ever flips between the two field names. All downstream
-    // reads use `s.lng ?? s.long` to accept whichever one comes back.
+    // Verified against the live API 2026-07-28: HubService returns `long` for longitude and
+    // has NO `lng` field at all (fields={} lists lat, long). We still request BOTH so we don't
+    // lose coordinates if HubService ever flips names; all downstream reads use
+    // `s.lng ?? s.long`, which resolves correctly today via the `long` branch.
     const neededFields = JSON.stringify({
       stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
       status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
     });
     for (let page = 1; page <= 6; page++) {
-      const response = await fetch(
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
+      const response = await hubFetch(
+        env,
+        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`
       );
 
       if (!response.ok) {
@@ -444,6 +660,47 @@ export default {
       // Build cache key matching early lookup: method:path+search
       const routeCacheKey = request.method + ':' + url.pathname + url.search;
 
+      // ---- Login proxy ----
+      // The browser cannot log in to HubService directly: HubService only returns
+      // Access-Control-Allow-Origin for its own allowlisted origin (wwhub), and the
+      // login now needs an RSA+AES envelope. Both are solved by doing it here — the
+      // Worker is same-origin-friendly (corsHeaders below) and already holds the key.
+      if (path === '/api/login' && request.method === 'POST') {
+        const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+          status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+        let creds;
+        try {
+          creds = await request.json();
+        } catch {
+          return json({ success: false, msg: 'Invalid JSON body' }, 400);
+        }
+        const loginParam = String(creds?.loginParam ?? '').trim();
+        const password = String(creds?.password ?? '');
+        if (!loginParam || !password) {
+          return json({ success: false, msg: 'loginParam and password are required' }, 400);
+        }
+        try {
+          const result = await hubLogin(env, `${loginParam}:${password}`);
+          if (!result.ok) {
+            return json({ success: false, msg: result.msg || 'Auth not matched' }, result.status || 401);
+          }
+          // HubService echoes the user's password back in `record`. Never relay it.
+          const record = { ...(result.body?.record || {}) };
+          delete record.password;
+          return json({
+            success: true,
+            msg: result.body?.msg || 'Login Successfull',
+            token: result.token,
+            record,
+            accessTo: result.body?.accessTo || [],
+          });
+        } catch (e) {
+          console.error('Login proxy error:', e);
+          return json({ success: false, msg: 'Login service unavailable' }, 502);
+        }
+      }
+
       if (path === '/api/stations-with-uptime') {
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStationsWithUptimeRequest(env, corsHeaders));
       }
@@ -498,22 +755,75 @@ export default {
         } catch (e) {
           return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+      } else if (path === '/api/auth-status') {
+        // Diagnose HubService auth without exposing the token itself.
+        // ?refresh=1 forces a fresh login instead of reporting the cached token.
+        const staticExp = env.HUBSERVICE_JWT ? getTokenExpiry(env.HUBSERVICE_JWT) : undefined;
+        const cachedEntry = tokenCache.get(TOKEN_CACHE_KEY);
+        const force = url.searchParams.get('refresh') === '1';
+        let live = null;
+        try {
+          const token = await getValidToken(env, { forceRefresh: force });
+          if (token) {
+            const probe = await hubFetch(env, 'https://hubservice.weatherwalay.com/wms/stations?page=1&limit=1&filter={}&search={}&fields={"stationID":1}&globalSearch=');
+            live = { tokenAcquired: true, stationsProbeStatus: probe.status, ok: probe.ok };
+          } else {
+            live = { tokenAcquired: false, reason: 'no usable credential — see below' };
+          }
+        } catch (e) {
+          live = { tokenAcquired: false, error: e.message };
+        }
+        const after = tokenCache.get(TOKEN_CACHE_KEY);
+        return new Response(JSON.stringify({
+          authScheme: 'RSA-OAEP(SHA-256) + AES-256-GCM encrypted envelope; session via hub_access_token cookie',
+          // Shapes only, never values — catches truncation/quoting damage to secrets.
+          secretShapes: {
+            basicAuthLen: (env.HUBSERVICE_BASIC_AUTH || '').length,
+            basicAuthHasColon: String(env.HUBSERVICE_BASIC_AUTH || '').includes(':'),
+            basicPasswordLen: (env.HUBSERVICE_BASIC_PASSWORD || '').length,
+            basicPasswordHasHash: String(env.HUBSERVICE_BASIC_PASSWORD || '').includes('#'),
+            basicPasswordQuoted: /^["']|["']$/.test(String(env.HUBSERVICE_BASIC_PASSWORD || '')),
+            publicKeyLen: (env.HUBSERVICE_PUBLIC_KEY || '').length,
+            publicKeyHasRealNewlines: String(env.HUBSERVICE_PUBLIC_KEY || '').includes('\n'),
+          },
+          credentials: {
+            HUBSERVICE_BASIC_AUTH: env.HUBSERVICE_BASIC_AUTH ? 'set (account "loginParam:password")' : 'NOT SET',
+            HUBSERVICE_BASIC_PASSWORD: env.HUBSERVICE_BASIC_PASSWORD ? 'set (app Basic password)' : 'NOT SET',
+            HUBSERVICE_PUBLIC_KEY: env.HUBSERVICE_PUBLIC_KEY
+              ? (await getHubPublicKey(env).then(() => 'set (valid SPKI, imported OK)').catch((e) => `set but INVALID: ${e.message}`))
+              : 'NOT SET',
+            HUBSERVICE_JWT: env.HUBSERVICE_JWT
+              ? {
+                  state: 'set (static, cannot self-refresh)',
+                  expiresAt: staticExp === null ? 'unreadable exp claim' : new Date(staticExp).toISOString(),
+                  expired: staticExp !== null && staticExp <= Date.now(),
+                }
+              : 'NOT SET',
+          },
+          cachedTokenBefore: cachedEntry
+            ? { refreshAt: new Date(cachedEntry.expiresAt).toISOString(), expiresAt: cachedEntry.exp ? new Date(cachedEntry.exp).toISOString() : 'unknown' }
+            : null,
+          cachedTokenAfter: after
+            ? { refreshAt: new Date(after.expiresAt).toISOString(), expiresAt: after.exp ? new Date(after.exp).toISOString() : 'unknown' }
+            : null,
+          liveCheck: live,
+          forcedRefresh: force,
+          // Only the genuinely required ones. HUBSERVICE_BASIC_PASSWORD is optional —
+          // it falls back to HUB_APP_BASIC_PASSWORD, which is the correct public value.
+          missingRequiredSecrets: ['HUBSERVICE_BASIC_AUTH', 'HUBSERVICE_PUBLIC_KEY'].filter((k) => !env[k]),
+          appBasicPasswordSource: env.HUBSERVICE_BASIC_PASSWORD ? 'env override' : 'code default (expected)',
+        }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else if (path === '/api/test-hubservice') {
         // Debug endpoint to test HubService API response
         const stationName = url.searchParams.get('name') || 'saad';
-        let token = null;
-        if (env.HUBSERVICE_BASIC_AUTH) {
-          // Prefer basic auth - it auto-refreshes tokens
-          token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-        } else if (env.HUBSERVICE_JWT) {
-          token = env.HUBSERVICE_JWT;
-        }
-        if (!token) {
-          return new Response(JSON.stringify({ error: 'Failed to get token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
         // Request all fields including socketData
         const apiUrl = `https://hubservice.weatherwalay.com/wms/stations?page=1&limit=5&filter={}&search={"stationName":"${stationName}"}&fields={}&globalSearch=`;
-        const resp = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+        let resp;
+        try {
+          resp = await hubFetch(env, apiUrl);
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
         const data = await resp.json();
         return new Response(JSON.stringify(data, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else if (path === '/api/test-fetch') {
@@ -541,15 +851,9 @@ export default {
         // Debug: proxy any HubService endpoint with auth to discover API surface
         const ep = url.searchParams.get('ep') || '/wms/livedata';
         const sid = url.searchParams.get('sid') || 'C14';
-        let token = null;
-        if (env.HUBSERVICE_BASIC_AUTH) token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-        else if (env.HUBSERVICE_JWT) token = env.HUBSERVICE_JWT;
-        if (!token) return new Response(JSON.stringify({ error: 'No token' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        // Also prepare Basic Auth for /ww-Hub/ routes
-        const dynamicBasic = btoa(`we@therwalay-${Date.now()}:we@therwalay_dev#7780`);
-        const authHeaders = ep.startsWith('/ww-Hub/')
-          ? { 'Authorization': `Basic ${dynamicBasic}` }
-          : { 'Authorization': `Bearer ${token}` };
+        // /ww-Hub/ routes take only the encrypted Basic envelope (no session cookie);
+        // everything else goes through hubFetch, which adds the cookie too.
+        const isBasicRoute = ep.startsWith('/ww-Hub/');
         const tryUrls = [
           `https://hubservice.weatherwalay.com${ep}?stationID=${sid}`,
           `https://hubservice.weatherwalay.com${ep}/${sid}`,
@@ -557,7 +861,9 @@ export default {
         const results = [];
         for (const u of tryUrls) {
           try {
-            const r = await fetch(u, { headers: authHeaders });
+            const r = isBasicRoute
+              ? await fetch(u, { headers: { 'Authorization': await buildEncryptedBasicAuth(env) } })
+              : await hubFetch(env, u);
             const body = await r.text();
             results.push({ url: u, status: r.status, body: body.substring(0, 2000) });
           } catch (e) {
@@ -1126,7 +1432,7 @@ const STATION_CATEGORIES = {
   '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
   '160951': 'community', '169497': 'corporate',
   '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
-  '169639': 'corporate', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
+  '169639': 'community', 'IKUNRI2': 'wu', '165656': 'corporate', '174221': 'community',
   'C8': 'community', 'C9': 'community', 'C10': 'reference', '165665': 'community',
   '165726': 'corporate', '165732': 'community', '165757': 'community', '127500': 'community',
   '128168': 'reference', '128522': 'community', 'IISLAMAB22': 'wu', 'IISLAM13': 'wu',
@@ -1151,8 +1457,8 @@ const STATION_CATEGORIES = {
   'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
   'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
   'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
-  '150367': 'reference', '150967': 'corporate', '131812': 'reference', '129090': 'community',
-  '129952': 'community', '142628': 'corporate', '139347': 'community', '133500': 'community',
+  '150367': 'reference', '150967': 'community', '131812': 'reference', '129090': 'community',
+  '129952': 'community', '142628': 'community', '139347': 'community', '133500': 'community',
   '217831': 'community',
   // WOW - Toll Plaza Stations
   '216612': 'wow', '221544': 'wow', '221563': 'wow', '221555': 'wow', '221695': 'wow',
@@ -1977,32 +2283,10 @@ async function syncSingleStationById(env, stationId) {
   const syncStart = Date.now();
 
   try {
-    let token = null;
-
-    // First, try to use cached token (if not expired)
-    const cached = tokenCache.get('hubservice_jwt');
-    if (cached && cached.expiresAt > Date.now()) {
-      token = cached.token;
-    } else if (env.HUBSERVICE_BASIC_AUTH) {
-      // Prefer basic auth - it auto-refreshes tokens
-      token = await getHubServiceToken(env.HUBSERVICE_BASIC_AUTH);
-    } else if (env.HUBSERVICE_JWT) {
-      // Fall back to static JWT token (won't auto-refresh!)
-      useProvidedJWTToken(env.HUBSERVICE_JWT);
-      token = env.HUBSERVICE_JWT;
-    }
-
-    if (!token) {
-      console.warn(`Cannot sync station ${stationId}: No valid JWT token`);
-      return { success: false, error: 'No JWT token available' };
-    }
-
     // Get current station data from HubService
-    const response = await fetch(
-      `https://hubservice.weatherwalay.com/wms/stations?filter={"stationID":"${stationId}"}&fields={"stationID":1,"stationName":1,"status":1,"socketLastUpdate":1}&limit=1`,
-      {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }
+    const response = await hubFetch(
+      env,
+      `https://hubservice.weatherwalay.com/wms/stations?filter={"stationID":"${stationId}"}&fields={"stationID":1,"stationName":1,"status":1,"socketLastUpdate":1}&limit=1`
     );
 
     if (!response.ok) {

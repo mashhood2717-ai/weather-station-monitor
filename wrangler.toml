@@ -61,9 +61,20 @@ crons = []
 [env.production.vars]
 ENVIRONMENT = "production"
 
-# Secrets (set via: wrangler secret put SECRET_NAME)
-# HUBSERVICE_BASIC_AUTH  - Basic-auth credentials for hubservice.weatherwalay.com (preferred; Worker exchanges for JWT)
-# HUBSERVICE_JWT         - Pre-issued HubService JWT (fallback if BASIC_AUTH not set)
+# Secrets (set via: wrangler secret put SECRET_NAME --env production)
+#
+# HubService auth changed to an RSA+AES encrypted envelope (see src/index.js).
+# Plaintext Basic auth and `Authorization: Bearer <jwt>` are BOTH rejected now.
+# All three of these are required for the Worker to authenticate:
+#   HUBSERVICE_BASIC_AUTH     - account credential, formatted "loginParam:password"
+#                               (encrypted into the login body as {credentials})
+#   HUBSERVICE_BASIC_PASSWORD - app Basic password; encrypted with the rotating
+#                               username "we@therwalay-<ms>" into the Authorization header
+#   HUBSERVICE_PUBLIC_KEY     - hub's RSA public key, SPKI PEM. Literal "\n"
+#                               escapes are accepted, so it can be stored single-line.
+#
+# HUBSERVICE_JWT            - optional pre-issued session JWT; only a stopgap, it
+#                             cannot self-refresh and is ignored once expired.
 # RESEND_API_KEY         - Get from https://resend.com (free tier: 100 emails/day)
 # REPORT_EMAILS          - Comma-separated list of email recipients
 # REPORT_FROM_EMAIL      - Sender email address (optional, needs domain verification)
