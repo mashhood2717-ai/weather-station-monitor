@@ -49,41 +49,91 @@ async function cacheAndReturn(key, ttlMs, makeResponse) {
 
 // ---- Upstream fetch + normalization ----
 
+const UPSTREAM_TYPES = ['rain_gauge', 'weather_station', 'level_sensor', 'unknown'];
+
+function mapUpstreamDevice(d) {
+  const name = (d.name || '').trim();
+  // Trust the upstream `type` field when it's present — the backend classifies
+  // by GarajCloud deviceType, which is authoritative. The name-prefix guess is
+  // only a fallback for older upstream builds that didn't send `type`, and note
+  // it mislabels anything that isn't RG/WS (level sensors became "rain_gauge").
+  const type = UPSTREAM_TYPES.includes(d.type)
+    ? d.type
+    : /^WS/i.test(name) ? 'weather_station'
+    : /^LS/i.test(name) ? 'level_sensor'
+    : 'rain_gauge';
+  return {
+    id: d.id,
+    name,
+    type,
+    status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
+    // Rain-gauge totals (null for WS — upstream omits them)
+    rain_24h:       numOrNull(d['24h']),
+    rain_daily:     numOrNull(d.daily),
+    rain_7d:        numOrNull(d['7d']),
+    rain_30d:       numOrNull(d['30d']),
+    rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd),
+    rain_all_time:  numOrNull(d['all_time'] ?? d.allTime ?? d.total),
+    // Weather-station readings (null for RG — upstream omits them)
+    temperature:    numOrNull(d.temperature),
+    humidity:       numOrNull(d.humidity),
+    wind_direction: numOrNull(d.wind_direction),
+    wind_speed:     numOrNull(d.wind_speed),
+    pressure:       numOrNull(d.pressure),
+    heat_index:     numOrNull(d.heat_index),
+  };
+}
+
+// Render's free tier spins the upstream dyno down after ~15 minutes idle, and a
+// cold start wipes its on-disk cache — /api then 503s for ~60-70s while it
+// re-syncs from GarajCloud. A single un-retried fetch loses the entire tick,
+// which is exactly what silently emptied the uptime log: recorded samples fell
+// from 96/day (Jul 29-31) to 1/day (Aug 6) without the cron ever being off.
+//
+// So on failure, poke the cheap /ping route to start the wake, then keep
+// retrying across the cold-start window. Sleeping costs no CPU, and a cron
+// invocation has far more wall-clock headroom than one tick needs.
+const UPSTREAM_ATTEMPTS = 4;
+const UPSTREAM_RETRY_MS = 25000;
+
 async function fetchUpstreamGauges(env) {
   const url = env.RAIN_GAUGE_UPSTREAM_URL || 'https://rain-gauge-backend.onrender.com/api';
-  const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
-  if (!resp.ok) {
-    throw new Error(`Upstream rain-gauge API returned ${resp.status}`);
-  }
-  const data = await resp.json();
-  const devices = Array.isArray(data?.devices) ? data.devices : [];
-  return {
-    last_updated: data?.lastUpdated || null,
-    gauges: devices.map((d) => {
-      const name = (d.name || '').trim();
-      const isWS = /^WS/i.test(name);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= UPSTREAM_ATTEMPTS; attempt++) {
+    try {
+      const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+      if (!resp.ok) {
+        throw new Error(`Upstream rain-gauge API returned ${resp.status}`);
+      }
+      const data = await resp.json();
+      const devices = Array.isArray(data?.devices) ? data.devices : [];
+      // An empty list means the upstream is up but still building its cache.
+      // Treat it as retryable rather than recording a tick for zero devices.
+      if (!devices.length) {
+        throw new Error('Upstream returned 0 devices');
+      }
+      if (attempt > 1) {
+        console.log(`[upstream] recovered on attempt ${attempt}`);
+      }
       return {
-        id: d.id,
-        name,
-        type: isWS ? 'weather_station' : 'rain_gauge',
-        status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
-        // Rain-gauge totals (null for WS — upstream omits them)
-        rain_24h:       numOrNull(d['24h']),
-        rain_daily:     numOrNull(d.daily),
-        rain_7d:        numOrNull(d['7d']),
-        rain_30d:       numOrNull(d['30d']),
-        rain_this_year: numOrNull(d['this_year'] ?? d.thisYear ?? d.ytd),
-        rain_all_time:  numOrNull(d['all_time'] ?? d.allTime ?? d.total),
-        // Weather-station readings (null for RG — upstream omits them)
-        temperature:    numOrNull(d.temperature),
-        humidity:       numOrNull(d.humidity),
-        wind_direction: numOrNull(d.wind_direction),
-        wind_speed:     numOrNull(d.wind_speed),
-        pressure:       numOrNull(d.pressure),
-        heat_index:     numOrNull(d.heat_index),
+        last_updated: data?.lastUpdated || null,
+        gauges: devices.map(mapUpstreamDevice),
       };
-    }),
-  };
+    } catch (e) {
+      lastError = e;
+      console.warn(`[upstream] attempt ${attempt}/${UPSTREAM_ATTEMPTS} failed: ${e.message}`);
+      if (attempt === UPSTREAM_ATTEMPTS) break;
+      try {
+        await fetch(new URL('/ping', url).toString());
+      } catch (_) {
+        // Ping is only a nudge — its failure is not interesting on its own.
+      }
+      await new Promise((r) => setTimeout(r, UPSTREAM_RETRY_MS));
+    }
+  }
+
+  throw lastError;
 }
 
 function numOrNull(v) {
