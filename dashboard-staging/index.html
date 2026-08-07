@@ -2125,10 +2125,10 @@
 
         <!-- Tab 3: RG & WS -->
         <div id="tab-rain" class="tab-content" style="display: none;">
-            <!-- Sub-toggle: Rain Gauges (87) vs Weather Stations (3) -->
+            <!-- Sub-toggle: counts are filled in at runtime, see setRgWsTabCount() -->
             <div style="display:flex; justify-content:center; gap:8px; margin:12px 0;">
-                <button id="rgSubViewBtn" class="filter-btn active" onclick="switchRgWsSubView('rg')" style="font-weight:600;">🌧️ Rain Gauges (87)</button>
-                <button id="wsSubViewBtn" class="filter-btn" onclick="switchRgWsSubView('ws')" style="font-weight:600;">🌤️ Weather Stations (3)</button>
+                <button id="rgSubViewBtn" class="filter-btn active" onclick="switchRgWsSubView('rg')" style="font-weight:600;">🌧️ Rain Gauges (—)</button>
+                <button id="wsSubViewBtn" class="filter-btn" onclick="switchRgWsSubView('ws')" style="font-weight:600;">🌤️ Weather Stations (—)</button>
             </div>
 
             <!-- ── RG sub-view ────────────────────────────────────────────── -->
@@ -6212,10 +6212,20 @@
             </div>`;
         }
 
+        // The RG/WS sub-toggle counts used to be baked into the markup — 87 gauges
+        // and 3 stations — so they went stale whenever gauges or stations were added
+        // or removed. Both labels are now driven by the same arrays that feed the
+        // stat tiles below, so they can never disagree with them again.
+        function setRgWsTabCount(btnId, text, count) {
+            const btn = document.getElementById(btnId);
+            if (btn) btn.textContent = text + ' (' + count + ')';
+        }
+
         function updateRainGaugesStats() {
             const total = rainGaugesData.length;
             const online = rainGaugesData.filter(g => g.status === 'online').length;
             document.getElementById('rgTotalCount').textContent = total;
+            setRgWsTabCount('rgSubViewBtn', '🌧️ Rain Gauges', total);
             document.getElementById('rgOnlineCount').textContent = online;
             document.getElementById('rgOfflineCount').textContent = total - online;
 
@@ -6952,6 +6962,7 @@
                 ? (withUptime.reduce((a, s) => a + Number(s.uptime_24h), 0) / withUptime.length)
                 : null;
             document.getElementById('wsTotalCount').textContent   = total;
+            setRgWsTabCount('wsSubViewBtn', '🌤️ Weather Stations', total);
             document.getElementById('wsOnlineCount').textContent  = online;
             document.getElementById('wsOfflineCount').textContent = total - online;
             document.getElementById('wsAvgUptime').textContent    = avg !== null ? avg.toFixed(1) + '%' : '—';

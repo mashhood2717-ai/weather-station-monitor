@@ -344,7 +344,9 @@ function MiniChart({ trend, granularity, valueOf, label, unit, color, chartType,
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
-export default function WeatherStationsView({ isDark }) {
+// `onCount` lets the parent label its sub-view toggle with the real station count
+// instead of a hardcoded one. Optional, so the component still stands alone.
+export default function WeatherStationsView({ isDark, onCount }) {
     const [stations, setStations] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -369,6 +371,12 @@ export default function WeatherStationsView({ isDark }) {
     const [historicalStation, setHistoricalStation] = useState(null); // id or null = "all stations"
 
     const subColor = isDark ? '#94a3b8' : '#64748b';
+
+    // Report the station count upward whenever it changes, so the toggle label
+    // tracks the data rather than a number baked into the markup.
+    useEffect(() => {
+        if (onCount) onCount(stations.length);
+    }, [stations.length, onCount]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);

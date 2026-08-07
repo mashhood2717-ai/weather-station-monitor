@@ -45,6 +45,9 @@ export default function RainGauges({ isDark }) {
     // The two views have completely different columns / charts / modals, so
     // they're separate components — this state just picks which one to render.
     const [subView, setSubView] = useState('rg'); // 'rg' | 'ws'
+    // Reported up by WeatherStationsView so the toggle can show a real count.
+    // null until that view has loaded at least once.
+    const [wsCount, setWsCount] = useState(null);
 
     const [gauges, setGauges] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
@@ -727,12 +730,16 @@ export default function RainGauges({ isDark }) {
                 components rather than trying to unify the table. */}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 8 }}>
                 <Radio.Group value={subView} onChange={(e) => setSubView(e.target.value)} buttonStyle="solid" size="middle">
-                    <Radio.Button value="rg">🌧️ Rain Gauges (87)</Radio.Button>
-                    <Radio.Button value="ws">🌤️ Weather Stations (3)</Radio.Button>
+                    {/* Counts come from the data, not the markup — they used to be
+                        baked in as 87 and 3 and went stale as the network changed.
+                        The station count is only known once that view has loaded,
+                        so it shows a dash until then rather than a wrong number. */}
+                    <Radio.Button value="rg">🌧️ Rain Gauges ({gauges.length})</Radio.Button>
+                    <Radio.Button value="ws">🌤️ Weather Stations ({wsCount ?? '—'})</Radio.Button>
                 </Radio.Group>
             </div>
 
-            {subView === 'ws' && <WeatherStationsView isDark={isDark} />}
+            {subView === 'ws' && <WeatherStationsView isDark={isDark} onCount={setWsCount} />}
             {subView === 'rg' && (
                 <>
             {/* Stat Cards */}
