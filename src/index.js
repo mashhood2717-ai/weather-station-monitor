@@ -96,7 +96,11 @@ const API_CACHE_TTL = {
 // per cache miss, against 65-117ms to an ordinary host — so a plain expiry meant
 // whoever arrived first after the TTL paid that cost with a blank screen. Past
 // this window the data is too old to be worth showing and we block instead.
-const SWR_MAX_AGE_MS = 60 * 60 * 1000;
+// One hour was far too generous — it bought fast loads by showing data up to an
+// hour old. Bounded to just over the ~12-minute cron cadence: the cron warms the
+// cache on every run (see warmStationsCache), so in normal operation a served
+// copy is minutes old at worst, and this only applies if the cron itself stalls.
+const SWR_MAX_AGE_MS = 15 * 60 * 1000;
 
 function getCachedResponse(cacheKey) {
   const entry = apiResponseCache.get(cacheKey);
@@ -1269,6 +1273,27 @@ export default {
             return new Response(edge.body, { status: 200, headers: { ...edge.headers, 'X-Cache': 'EDGE' } });
           }
         }
+
+        // L3: the D1 snapshot, written by the cron. This is the only tier every
+        // isolate shares, so it is what stops one isolate serving 11-minute-old
+        // data while its neighbour serves fresh. Accepted up to the stale window;
+        // beyond that we fall through and recompute.
+        const snap = await loadSnapshot(env, cacheKey, SWR_MAX_AGE_MS);
+        if (snap) {
+          apiResponseCache.set(cacheKey, {
+            body: snap.body, status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            ttl: cacheTTL, cachedAt: Date.now() - snap.age,
+          });
+          return new Response(snap.body, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'X-Cache': 'SNAPSHOT',
+              'X-Cache-Age': String(Math.floor(snap.age / 1000)),
+            },
+          });
+        }
       }
       // Passed to cacheAndReturn so successful responses populate the edge cache.
       const edgeCtx = { request, url, ctx };
@@ -1349,8 +1374,21 @@ export default {
         const stationId = url.searchParams.get('id');
         return await handleStationDetailRequest(env, stationId, corsHeaders);
       } else if (path === '/api/sync') {
-        // Manual trigger for testing
-        return await syncAllStations(env, corsHeaders);
+        // Driven by the external cron (~every 12 min). After syncing, rebuild the
+        // stations response and store it in the cache. This is what keeps page
+        // loads BOTH fast and current: users always hit a warm cache, and it was
+        // last refreshed by the cron rather than by whoever happened to arrive
+        // after a TTL expiry. Without it, freshness depended on an unlucky
+        // visitor paying HubService's 5-42s throttled response time.
+        const syncResult = await syncAllStations(env, corsHeaders);
+        if (ctx?.waitUntil) {
+          ctx.waitUntil(
+            warmStationsCache(env, url, corsHeaders).catch((e) =>
+              console.warn('Cache warm after sync failed:', e.message)
+            )
+          );
+        }
+        return syncResult;
       } else if (path === '/api/uptime-trend') {
         // Get 24-hour uptime trend for all stations
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendRequest(env, corsHeaders), edgeCtx);
@@ -2856,6 +2894,75 @@ async function syncAllStationsBatched(env, apiStations) {
   }
 
   return { totalSuccess, totalFailed };
+}
+
+// ============================================================
+// D1 SNAPSHOT — the only globally consistent cache tier
+//
+// The in-memory map is per-isolate and the Cache API is per-colo, so neither is
+// shared across the whole account. Observed on production: three consecutive
+// requests to the same URL returned MISS/fresh, HIT/11-minutes-old, MISS/fresh —
+// because they landed on different isolates holding different copies. Warming
+// from the cron only ever warmed whichever colo the cron happened to hit.
+//
+// D1 is a single logical database every isolate can read, so a snapshot written
+// once by the cron is visible everywhere. ~88 KB per row, one row.
+// ============================================================
+async function saveSnapshot(env, key, body) {
+  await env.DB.prepare(
+    'CREATE TABLE IF NOT EXISTS response_snapshots (key TEXT PRIMARY KEY, body TEXT, cached_at TEXT)'
+  ).run();
+  await env.DB.prepare(
+    `INSERT INTO response_snapshots (key, body, cached_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET body = excluded.body, cached_at = excluded.cached_at`
+  ).bind(key, body).run();
+}
+
+async function loadSnapshot(env, key, maxAgeMs) {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT body, cached_at FROM response_snapshots WHERE key = ?'
+    ).bind(key).first();
+    if (!row?.body) return null;
+    // cached_at is naive UTC from datetime('now').
+    const age = Date.now() - new Date(row.cached_at.replace(' ', 'T') + 'Z').getTime();
+    if (!Number.isFinite(age) || age > maxAgeMs) return null;
+    return { body: row.body, age };
+  } catch (e) {
+    console.warn(`Snapshot read failed for ${key}: ${e.message}`);
+    return null; // never let the cache break the request
+  }
+}
+
+// Rebuild /api/stations-with-uptime and store it in both cache tiers.
+//
+// Called after each cron sync. The sync has just refreshed hubStationCache, so
+// this costs only the D1 uptime query — no extra HubService round-trip — and it
+// means the cache is refreshed on a schedule instead of by whichever visitor
+// happens to arrive after it expires.
+async function warmStationsCache(env, url, corsHeaders) {
+  const path = '/api/stations-with-uptime';
+  const ttl = API_CACHE_TTL[path];
+  if (!ttl) return;
+
+  const warmUrl = new URL(url.toString());
+  warmUrl.pathname = path;
+  warmUrl.search = '';
+  const cacheKey = 'GET:' + path;
+
+  const response = await storeResponse(
+    cacheKey,
+    ttl,
+    handleStationsWithUptimeRequest(env, corsHeaders),
+    { request: new Request(warmUrl.toString(), { method: 'GET' }), url: warmUrl, ctx: null }
+  );
+
+  // The snapshot is what actually makes this visible to every isolate — the two
+  // in-process tiers above only warm whichever isolate and colo the cron hit.
+  if (response.status === 200 && response.headers.get('X-Degraded') !== '1') {
+    await saveSnapshot(env, cacheKey, await response.clone().text());
+  }
+  console.log('🔥 Warmed stations cache + D1 snapshot after sync');
 }
 
 async function syncAllStations(env, corsHeaders = {}) {
