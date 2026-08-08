@@ -154,7 +154,12 @@ export function useStations() {
 
     useEffect(() => {
         fetchStations();
-        intervalRef.current = setInterval(fetchStations, REFRESH_INTERVAL);
+        // Forced, matching the production HTML dashboard. An unforced poll is
+        // answered from the Worker's 5-minute cache, which stacks on top of the
+        // 5-minute poll — so the view could sit ~10 minutes behind a sync that
+        // had already landed. That was the whole difference between production
+        // updating on schedule and React showing older data.
+        intervalRef.current = setInterval(() => fetchStations(true), REFRESH_INTERVAL);
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
