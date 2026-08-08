@@ -208,21 +208,13 @@ async function syncGaugesToD1(env) {
 
   const nowSql = "datetime('now')";
 
-  // 1) Online/offline log for rain gauges + weather stations only.
+  // 1) Online/offline log for ALL devices (rain gauges + weather stations).
   //    UNIQUE(gauge_id, timestamp) makes a double-fire idempotent.
-  //
-  //    Level sensors are deliberately excluded: their uptime is not surfaced
-  //    anywhere in the dashboards, so logging them would spend ~1,056 rows/day
-  //    (11 devices x 96 cron fires) on data nothing reads. This filter is the
-  //    only thing keeping them out — every other part of the sync is
-  //    type-agnostic, so dropping it silently resumes the writes.
-  const onlineStmts = gauges
-    .filter((g) => g.type !== 'level_sensor')
-    .map((g) =>
-      env.DB.prepare(
-        `INSERT OR IGNORE INTO rain_gauge_logs (gauge_id, timestamp, is_online) VALUES (?, ${nowSql}, ?)`
-      ).bind(g.id, g.status === 'online' ? 1 : 0)
-    );
+  const onlineStmts = gauges.map((g) =>
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO rain_gauge_logs (gauge_id, timestamp, is_online) VALUES (?, ${nowSql}, ?)`
+    ).bind(g.id, g.status === 'online' ? 1 : 0)
+  );
 
   // 2) Sensor readings for weather stations only. One row per WS per poll
   //    with temp/humidity/wind/pressure/heat-index.

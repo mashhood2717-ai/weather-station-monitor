@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { Card, Table, Tag, Space, Spin, Statistic, Row, Col, Typography, Button, Input, Select, Progress, Modal } from 'antd';
+import { Card, Table, Tag, Space, Spin, Statistic, Row, Col, Typography, Button, Input, Select, Progress } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
 import DeviceMap from './DeviceMap';
@@ -48,19 +48,35 @@ export default function LevelSensorsView({ isDark, onCount }) {
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [selected, setSelected] = useState(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Live readings only. These sensors are not uptime-tracked in the UI —
-            // what matters is the level and battery they currently report.
-            const resp = await axios.get(`${RAIN_GAUGES_API_BASE}/api/level-sensors`);
-            if (!resp.data?.success) throw new Error('Failed to load level sensors');
+            // Uptime shares rain_gauge_logs with the gauges — the online/offline
+            // sync is device-type agnostic, so LS history is already there.
+            const [lsResp, uptimeResp] = await Promise.allSettled([
+                axios.get(`${RAIN_GAUGES_API_BASE}/api/level-sensors`),
+                axios.get(`${RAIN_GAUGES_API_BASE}/api/rain-gauges-uptime?range=24h`),
+            ]);
 
-            const rows = resp.data.sensors || [];
+            if (lsResp.status !== 'fulfilled' || !lsResp.value.data?.success) {
+                throw new Error(lsResp.reason?.message || 'Failed to load level sensors');
+            }
+
+            const uptimeMap = {};
+            if (uptimeResp.status === 'fulfilled' && uptimeResp.value.data?.success) {
+                (uptimeResp.value.data.gauges || []).forEach((u) => { uptimeMap[u.gauge_id] = u; });
+            }
+
+            const rows = (lsResp.value.data.sensors || []).map((s) => ({
+                ...s,
+                uptime_24h: uptimeMap[s.id]?.uptime_24h ?? null,
+                checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
+                last_online: uptimeMap[s.id]?.last_online ?? null,
+            }));
+
             setSensors(rows);
-            setLastUpdated(resp.data.last_updated || null);
+            setLastUpdated(lsResp.value.data.last_updated || null);
             if (onCount) onCount(rows.length);
         } catch (e) {
             console.error('LevelSensorsView fetch error:', e);
@@ -152,6 +168,16 @@ export default function LevelSensorsView({ isDark, onCount }) {
             )),
         },
         {
+            title: 'Uptime (24h)',
+            dataIndex: 'uptime_24h',
+            key: 'uptime_24h',
+            align: 'right',
+            sorter: (a, b) => (a.uptime_24h ?? -Infinity) - (b.uptime_24h ?? -Infinity),
+            render: (v, r) => (v === null || v === undefined || !r.checks_24h
+                ? <Text type="secondary">—</Text>
+                : <span style={{ color: v >= 90 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444', fontWeight: 600 }}>{Number(v).toFixed(1)}%</span>),
+        },
+        {
             title: 'Last Seen',
             dataIndex: 'last_seen',
             key: 'last_seen',
@@ -188,7 +214,6 @@ export default function LevelSensorsView({ isDark, onCount }) {
                 isDark={isDark}
                 title="📍 Level Sensor Locations"
                 height={360}
-                onDeviceClick={setSelected}
                 renderPopup={(s) => `
                     <b style="font-size:14px;">${s.name}</b><br/>
                     <hr style="margin:6px 0;border:0;border-top:1px solid #f0f0f0;"/>
@@ -196,7 +221,8 @@ export default function LevelSensorsView({ isDark, onCount }) {
                       <b>Status:</b> <span style="color:${s.status === 'online' ? '#52c41a' : '#ff4d4f'}">${s.status}</span><br/>
                       <b>Water level:</b> ${num(s.water_level_ft, 2, ' ft')} (${num((s.water_level_ft ?? 0) * FT_TO_M, 2, ' m')})<br/>
                       <b>Battery:</b> <span style="color:${batteryColor(s.battery_level)}">${s.battery_level ?? '—'}%</span><br/>
-                      <b>Last seen:</b> ${timeAgo(s.last_seen)}
+                      <b>Last seen:</b> ${timeAgo(s.last_seen)}<br/>
+                      ${s.uptime_24h != null ? `<b>Uptime 24h:</b> ${Number(s.uptime_24h).toFixed(1)}%` : ''}
                     </div>
                 `}
             />
@@ -229,79 +255,9 @@ export default function LevelSensorsView({ isDark, onCount }) {
                         size="small"
                         pagination={false}
                         scroll={{ x: 'max-content' }}
-                        onRow={(record) => ({
-                            onClick: () => setSelected(record),
-                            style: { cursor: 'pointer' },
-                        })}
                     />
                 </Spin>
             </Card>
-
-            {/* Live values only. Nothing is persisted for these devices, so unlike
-                the RG/WS modals there is no history fetch and no charts. */}
-            <Modal
-                open={!!selected}
-                title={selected ? `🌊  ${selected.name}` : ''}
-                onCancel={() => setSelected(null)}
-                footer={<Button onClick={() => setSelected(null)}>Close</Button>}
-                width={620}
-            >
-                {selected && (
-                    <div>
-                        <div style={{ marginBottom: 12 }}>
-                            <Tag color={selected.status === 'online' ? 'green' : 'red'}>
-                                {String(selected.status).toUpperCase()}
-                            </Tag>
-                        </div>
-
-                        <Row gutter={[8, 8]} style={{ marginBottom: 14 }}>
-                            <Col xs={8}>
-                                <Card size="small" style={{ borderLeft: '3px solid #0ea5e9' }} styles={{ body: { padding: 10 } }}>
-                                    <div style={{ fontSize: 11, color: subColor }}>Water Level</div>
-                                    <div style={{ fontSize: 18, fontWeight: 700, color: '#0ea5e9' }}>{num(selected.water_level_ft, 2, ' ft')}</div>
-                                </Card>
-                            </Col>
-                            <Col xs={8}>
-                                <Card size="small" style={{ borderLeft: '3px solid #06b6d4' }} styles={{ body: { padding: 10 } }}>
-                                    <div style={{ fontSize: 11, color: subColor }}>Water Level</div>
-                                    <div style={{ fontSize: 18, fontWeight: 700, color: '#06b6d4' }}>
-                                        {selected.water_level_ft === null || selected.water_level_ft === undefined
-                                            ? '—' : num(selected.water_level_ft * FT_TO_M, 2, ' m')}
-                                    </div>
-                                </Card>
-                            </Col>
-                            <Col xs={8}>
-                                <Card size="small" style={{ borderLeft: `3px solid ${batteryColor(selected.battery_level)}` }} styles={{ body: { padding: 10 } }}>
-                                    <div style={{ fontSize: 11, color: subColor }}>Battery</div>
-                                    <div style={{ fontSize: 18, fontWeight: 700, color: batteryColor(selected.battery_level) }}>
-                                        {selected.battery_level ?? '—'}%
-                                    </div>
-                                </Card>
-                            </Col>
-                        </Row>
-
-                        <div style={{ fontSize: 12, color: subColor, lineHeight: 2 }}>
-                            <div><strong>Sensor ID:</strong> {selected.id}</div>
-                            <div>
-                                <strong>Last seen:</strong> {timeAgo(selected.last_seen)}{' '}
-                                <span style={{ opacity: 0.7 }}>
-                                    ({selected.last_seen ? new Date(selected.last_seen).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' }) : '—'} PKT)
-                                </span>
-                            </div>
-                            <div>
-                                <strong>Coordinates:</strong>{' '}
-                                {selected.lat == null || selected.lng == null
-                                    ? '—' : `${Number(selected.lat).toFixed(5)}, ${Number(selected.lng).toFixed(5)}`}
-                            </div>
-                            <div><strong>Position:</strong> {selected.position ?? '—'}</div>
-                        </div>
-
-                        <div style={{ marginTop: 14, padding: '10px 12px', background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12, color: subColor }}>
-                            ℹ️ Level sensors are not logged to the database, so there is no history to chart — these are the values the sensor is reporting right now.
-                        </div>
-                    </div>
-                )}
-            </Modal>
         </div>
     );
 }
