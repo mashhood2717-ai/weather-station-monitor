@@ -247,12 +247,15 @@ async function syncGaugesToD1(env) {
   const onlineResults = await batchInChunks(env, onlineStmts);
   const wsResults = await batchInChunks(env, wsStmts);
 
-  // 3) Rolling 1-year window — evict WS readings older than 1 year. Cheap
-  //    while the table is young (no matching rows); steadily drips rows
-  //    out after year 1 to keep storage flat.
+  // 3) Rolling 15-month window — evict WS readings older than the retention
+  //    policy. This was 1 year, which is SHORTER than the 15-month policy and
+  //    would have silently dropped three months of readings the moment the
+  //    table got old enough to have any. Cheap while the table is young.
+  //
+  //    RETENTION IS 15 MONTHS. Do not shorten this without asking.
   try {
     await env.DB.prepare(
-      `DELETE FROM weather_station_readings WHERE timestamp < datetime('now', '-1 year')`
+      `DELETE FROM weather_station_readings WHERE timestamp < datetime('now', '-15 months')`
     ).run();
   } catch (e) {
     console.warn('[sync] WS rolling-cleanup failed (non-fatal):', e.message);

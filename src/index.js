@@ -1411,8 +1411,9 @@ export default {
         // Remove stations that return 404 errors
         return await handleRemove404Stations(env, corsHeaders);
       } else if (path === '/api/cleanup') {
-        // Manual cleanup - delete logs older than N days (default 180 = 6 months)
-        const days = parseInt(url.searchParams.get('days')) || 180;
+        // Manual cleanup. RETENTION_DAYS (15 months) is a floor — cleanupOldLogs
+        // refuses anything smaller, so ?days= can only ever keep MORE history.
+        const days = parseInt(url.searchParams.get('days')) || RETENTION_DAYS;
         const deleted = await cleanupOldLogs(env, days);
         return new Response(JSON.stringify({ success: true, deleted, days_kept: days }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else if (path === '/api/drop-redundant-indexes') {
@@ -1970,8 +1971,8 @@ export default {
     // Cleanup old data only once per day (at 4 AM UTC / 9 AM PKT)
     if (utcHour === 4 && utcMinute < 30) {
       try {
-        console.log('Cleaning up old logs (keeping 180 days / 6 months)...');
-        await cleanupOldLogs(env, 180);
+        console.log(`Cleaning up old logs (keeping ${RETENTION_DAYS} days / 15 months)...`);
+        await cleanupOldLogs(env, RETENTION_DAYS);
       } catch (e) {
         console.warn('Cleanup failed:', e.message);
       }
@@ -1980,26 +1981,42 @@ export default {
 };
 
 // ============================================================
-// CLEANUP OLD LOGS - Keep only N days of data
+// CLEANUP OLD LOGS — 15-month rolling window
 // ============================================================
-async function cleanupOldLogs(env, daysToKeep = 180) {
+// RETENTION IS 15 MONTHS. Do not shorten this without asking.
+//
+// The previous default was 180 days, which was a number in the code rather than
+// a stated policy. Running it on 2026-08-08 deleted 711,677 status_logs rows
+// covering Dec 2025 - Feb 2026 — data well inside the real 15-month window.
+//
+// RETENTION_DAYS is the floor as well as the default: a smaller value passed by
+// a caller is ignored, so no query string or future edit can quietly delete
+// anything younger than 15 months.
+const RETENTION_DAYS = 456; // 15 months
+
+async function cleanupOldLogs(env, daysToKeep = RETENTION_DAYS) {
+  // Clamp upward only. A caller asking to keep FEWER days is refused.
+  const keep = Math.max(RETENTION_DAYS, Number(daysToKeep) || RETENTION_DAYS);
+  if (Number(daysToKeep) < RETENTION_DAYS) {
+    console.warn(`⛔ Refused cleanup with daysToKeep=${daysToKeep}; retention floor is ${RETENTION_DAYS} days (15 months)`);
+  }
   try {
-    // Delete status_logs older than N days
+    // Delete status_logs older than the retention window
     const logsResult = await env.DB.prepare(`
-      DELETE FROM status_logs 
-      WHERE timestamp < datetime('now', '-${daysToKeep} days')
+      DELETE FROM status_logs
+      WHERE timestamp < datetime('now', '-${keep} days')
     `).run();
 
-    // Delete station_samples older than N days
+    // Delete station_samples older than the retention window
     const samplesResult = await env.DB.prepare(`
-      DELETE FROM station_samples 
-      WHERE sample_time < datetime('now', '-${daysToKeep} days')
+      DELETE FROM station_samples
+      WHERE sample_time < datetime('now', '-${keep} days')
     `).run();
 
-    // Delete downtime_records older than N days
+    // Delete downtime_records older than the retention window
     const downtimeResult = await env.DB.prepare(`
-      DELETE FROM downtime_records 
-      WHERE start_time < datetime('now', '-${daysToKeep} days')
+      DELETE FROM downtime_records
+      WHERE start_time < datetime('now', '-${keep} days')
     `).run();
 
     const totalDeleted = (logsResult.meta?.changes || 0) + (samplesResult.meta?.changes || 0) + (downtimeResult.meta?.changes || 0);
@@ -3708,28 +3725,61 @@ async function handleStationHistoryRequest(env, stationId, url, corsHeaders) {
     else if (days >= 30) granularity = 'day';
     else if (days === 7) granularity = '6hour';
 
-    // Get station info from cached HubService data (avoids extra API call)
+    // Station identity for the modal header.
+    //
+    // This used to call fetchAllStationsFromHubServiceCached(), which pulls the
+    // WHOLE 294-station list from HubService just to read one station's name. On
+    // a cold 2-minute cache that put a throttled upstream fetch on the critical
+    // path of every modal open — 5-7s for the first click, then instant for two
+    // minutes, which is exactly the reported behaviour.
+    //
+    // The local stations table already holds name, coordinates and source: one
+    // indexed row, sub-millisecond. HubService is consulted only if that row is
+    // missing AND its cache is already warm, so opening a station can never
+    // trigger a cold upstream fetch.
     let stationInfo = null;
     try {
-      const allStations = await fetchAllStationsFromHubServiceCached(env);
-      const s = allStations.find(st => String(st.stationID) === String(stationId));
+      const row = await env.DB.prepare(
+        `SELECT station_id, station_name, location, latitude, longitude, api_source
+           FROM stations WHERE station_id = ?`
+      ).bind(String(stationId)).first();
+      if (row) {
+        stationInfo = {
+          station_id: row.station_id,
+          station_name: row.location || row.station_name,
+          status: null,        // live status comes from the aggregate below
+          is_active: null,
+          temperature: null,
+          humidity: null,
+          wind_speed: null,
+          pressure: null,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          owned_by: null,
+        };
+      }
+    } catch (e) {
+      console.warn(`Station lookup from D1 failed for ${stationId}: ${e.message}`);
+    }
+
+    // Only fall back to HubService when it is free — i.e. already cached.
+    if (!stationInfo && hubStationCache.data) {
+      const s = hubStationCache.data.find(st => String(st.stationID) === String(stationId));
       if (s) {
         stationInfo = {
           station_id: s.stationID,
           station_name: s.poi || s.stationName,
           status: s.status,
           is_active: s.status === 'Active' ? 1 : 0,
-          temperature: s.temperature || (s.socketLastUpdate?.temp || null),
-          humidity: s.socketLastUpdate?.hum || null,
-          wind_speed: s.windSpeed || (s.socketLastUpdate?.ws || null),
-          pressure: s.socketLastUpdate?.bp || null,
+          temperature: s.temperature ?? (s.socketLastUpdate?.temp ?? null),
+          humidity: s.socketLastUpdate?.hum ?? null,
+          wind_speed: s.windSpeed ?? (s.socketLastUpdate?.ws ?? null),
+          pressure: s.socketLastUpdate?.bp ?? null,
           latitude: s.lat,
           longitude: s.lng ?? s.long,
-          owned_by: s.ownedBy
+          owned_by: s.ownedBy,
         };
       }
-    } catch (e) {
-      console.warn('Could not fetch station info from HubService cache:', e.message);
     }
 
     // Choose SQL grouping expression and time filter
