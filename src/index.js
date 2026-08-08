@@ -10,15 +10,23 @@
 // open, so a missing secret degrades to "maintenance unavailable" instead of
 // "anyone can wipe the database".
 // ============================================================
+// NOT gated, and deliberately so: these are driven by an external cron-job.org
+// schedule (Cloudflare's own cron is disabled — `crons = []` in wrangler.toml),
+// and that scheduler cannot send an auth header. Gating /api/sync stopped the
+// data pipeline dead for ~50 minutes on 2026-08-08; status_logs simply stopped
+// growing. They are all INSERT/UPSERT-only, so the exposure is resource use
+// rather than data loss:
+//   /api/sync                    /api/ingest-station-samples
+//   /api/send-daily-report       /api/backfill-downtime
+//   /api/backfill-station-samples
+// If those move to authenticated calls later, add them back here.
+//
+// What stays gated is only what cannot be undone or what leaks credentials:
+// the two DELETE routes, the DDL route, and the debug/proxy routes.
 const ADMIN_ROUTES = new Set([
-  '/api/sync',
-  '/api/ingest-station-samples',
-  '/api/backfill-station-samples',
-  '/api/backfill-downtime',
   '/api/remove-404-stations',
   '/api/cleanup',
   '/api/drop-redundant-indexes',
-  '/api/send-daily-report',
   '/api/auth-status',
   '/api/test-hubservice',
   '/api/test-fetch',
