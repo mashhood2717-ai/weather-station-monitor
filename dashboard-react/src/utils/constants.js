@@ -8,9 +8,9 @@ export const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev';
 // rain-gauge backend so a second env would just be overhead.
 export const RAIN_GAUGES_API_BASE = 'https://weatherwalay-rain-gauges.weatherwalayofficial.workers.dev';
 
-// Auto-refresh interval (5 minutes — matches the production HTML dashboard and
-// the Worker's 5-minute response cache)
-export const REFRESH_INTERVAL = 5 * 60 * 1000;
+// Auto-refresh interval (30 minutes, matching the production HTML dashboard).
+// The poll is forced past the Worker cache, and the Refresh button is instant.
+export const REFRESH_INTERVAL = 30 * 60 * 1000;
 
 // Display total: pad online count with phantom stations so totals match the
 // HTML dashboard's published "350 stations" headline (see dashboard/index.html

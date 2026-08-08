@@ -1945,7 +1945,7 @@
 
                     <!-- Controls Row -->
                     <div class="controls" style="gap: 8px;">
-                        <button class="filter-btn" onclick="loadData(true)" title="Fetch the latest data now (bypasses the 5-minute server cache)">🔄 Refresh</button>
+                        <button class="filter-btn" onclick="loadData(true)" title="Fetch the latest data now (bypasses the server cache)">🔄 Refresh</button>
                         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..."
                             style="width: 120px;">
                         <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)"
@@ -8431,9 +8431,10 @@
             setupEventListeners();
             setupUptimeRangeToggles();
 
-            // Auto-refresh every 5 minutes, matching the ~5-minute sync cadence and
-            // the Worker's 5-minute response cache.
-            setInterval(() => loadData(true), 5 * 60 * 1000);
+            // Auto-refresh every 30 minutes. Forced, so when it does fire it reads
+            // live data rather than the Worker's cached copy — an unforced poll
+            // could hand back exactly what the page already has.
+            setInterval(() => loadData(true), 30 * 60 * 1000);
         }
 
         // Start when page loads
