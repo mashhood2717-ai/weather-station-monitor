@@ -836,6 +836,40 @@ async function refreshRainWindIfStale(env) {
       (ageMin === null ? 'no previous data' : `keeping ${ageMin}m-old values`) +
       `, retrying in ${RAINWIND_FAIL_BACKOFF_MS / 60000}m`
     );
+    // The map lives in isolate memory, so a cold isolate that also fails this
+    // fetch has NO rainfall at all and every Rain cell renders "-". D1 already
+    // holds what the last successful cycle recorded, so seed from there.
+    if (hubRainWind.map.size === 0) await seedRainWindFromD1(env);
+  }
+}
+
+// Last-resort rain/wind source: the most recent status_logs row per station.
+// Deliberately does NOT stamp fetchedAt — this is a stopgap, so the next
+// opportunity still goes to HubService for live values.
+async function seedRainWindFromD1(env) {
+  try {
+    const res = await env.DB.prepare(`
+      SELECT station_id, rainfall, wind_speed FROM (
+        SELECT station_id, rainfall, wind_speed,
+               ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) AS rn
+        FROM status_logs
+        WHERE timestamp >= datetime('now', '-6 hours') AND rainfall IS NOT NULL
+      ) WHERE rn = 1
+    `).all();
+
+    const map = new Map();
+    for (const row of res.results || []) {
+      map.set(String(row.station_id), {
+        rainfall: row.rainfall ?? null,
+        windSpeed: row.wind_speed ?? null,
+      });
+    }
+    if (map.size > 0) {
+      hubRainWind.map = map;
+      console.log(`🗄️ Rain/wind seeded from D1 for ${map.size} stations`);
+    }
+  } catch (e) {
+    console.warn('D1 rain/wind seed failed:', e.message);
   }
 }
 
