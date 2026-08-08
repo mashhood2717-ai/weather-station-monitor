@@ -8430,8 +8430,13 @@
             // Set network filter dropdown
             document.getElementById('networkFilter').value = currentNetworkFilter;
 
-            // Forced: a page load must read live data, not the Worker cache.
-            await loadData(true);
+            // Paint immediately from the Worker cache, then quietly re-fetch live
+            // data and update in place. HubService throttles Cloudflare egress —
+            // it answers a laptop in ~80ms but the Worker in 6-60s — so forcing
+            // the first load made users stare at a blank dashboard. The second
+            // call is deliberately NOT awaited.
+            await loadData(false);
+            loadData(true);
             loadIssueTrackerData();
             setupEventListeners();
             setupUptimeRangeToggles();

@@ -317,7 +317,12 @@ const HUB_APP_BASIC_PASSWORD = 'we@therwalay_dev#7780';
 const HUB_FETCH_TIMEOUT_MS = 20000;
 // The whole station-list fetch (login + 6 pages + retries) must fit in this, so
 // a degraded HubService costs one slow response rather than a dead endpoint.
-const HUB_TOTAL_BUDGET_MS = 55000;
+// Kept well under a minute. HubService throttles Cloudflare egress, so retries
+// can stack: one measured page load took 60.7s against ~80ms for the same pages
+// from a laptop. Nothing waits on this interactively any more — dashboards paint
+// from cache and refresh in the background — so a tighter ceiling only costs
+// freshness on a bad cycle, never a blank screen.
+const HUB_TOTAL_BUDGET_MS = 25000;
 
 // Imported RSA public key, cached per isolate (importKey is not free).
 let hubPublicKeyPromise = null;

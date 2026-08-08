@@ -157,10 +157,11 @@ export function useStations() {
     }, [fetchStations]);
 
     useEffect(() => {
-        // Forced on mount. A page load is the user explicitly asking for the
-        // current picture, so it must not be answered from the Worker cache —
-        // that is what made a reload show data older than the page already had.
-        fetchStations(true);
+        // Paint from cache first so the table appears at once, then re-fetch live
+        // data in the background and update in place. HubService throttles
+        // Cloudflare egress (6-60s to the Worker, ~80ms to a laptop), so awaiting
+        // a forced fetch on mount left the dashboard blank for that whole time.
+        fetchStations(false).then(() => fetchStations(true));
         // Forced, matching the production HTML dashboard. An unforced poll is
         // answered from the Worker's 5-minute cache, which stacks on top of the
         // 5-minute poll — so the view could sit ~10 minutes behind a sync that
