@@ -1462,8 +1462,9 @@ export default {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
       } else if (path === '/api/send-daily-report') {
-        // Manually trigger sending daily email report
-        return await handleSendDailyReport(env, corsHeaders);
+        // Send the daily email report. Guarded to once per PKT day; append
+        // ?force=1 to send regardless.
+        return await handleSendDailyReport(env, corsHeaders, url);
 
       // ---- Issue Tracking & Call Log Routes ----
       } else if (path === '/api/issues' && request.method === 'GET') {
@@ -1718,10 +1719,21 @@ export default {
     const utcHour = now.getUTCHours();
     const utcMinute = now.getUTCMinutes();
     if (utcHour === 3 && utcMinute < 30) {
-      console.log('Sending daily email report...');
+      // Same once-per-day guard as the HTTP route. The window is 30 minutes
+      // wide, so a 15-minute cron lands in it twice and would otherwise send
+      // the report twice.
       try {
-        await sendDailyEmailReport(env);
-        console.log('Daily email report sent successfully');
+        const dateKey = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+        if (await alreadySentToday(env, dateKey)) {
+          console.log(`Daily email report already sent for ${dateKey}; skipping`);
+        } else {
+          console.log('Sending daily email report...');
+          const result = await sendDailyEmailReport(env);
+          if (result?.success) {
+            await markSentToday(env, dateKey);
+            console.log('Daily email report sent successfully');
+          }
+        }
       } catch (e) {
         console.error('Failed to send daily email report:', e.message);
       }
@@ -2275,17 +2287,56 @@ async function handleDailyReportExcel(env, corsHeaders) {
   }
 }
 
-async function handleSendDailyReport(env, corsHeaders) {
+// Once-per-day guard for the daily report.
+//
+// This endpoint had no guard at all: every hit sent an email immediately. The
+// scheduled() handler checks for the 03:00-03:30 UTC window before sending, but
+// Cloudflare cron is disabled here, so the report is driven by an external
+// scheduler hitting this URL — and it emailed the whole recipient list on every
+// single fire. Whatever interval that scheduler runs at was the interval the
+// mailing list received reports at.
+//
+// The date key is Asia/Karachi, matching what the report itself covers, so
+// "today" means the same thing to the guard as it does in the email.
+async function alreadySentToday(env, dateKey) {
+  await env.DB.prepare(
+    'CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT)'
+  ).run();
+  const row = await env.DB.prepare(
+    "SELECT value FROM app_state WHERE key = 'last_daily_report'"
+  ).first();
+  return row?.value === dateKey;
+}
+
+async function markSentToday(env, dateKey) {
+  await env.DB.prepare(
+    `INSERT INTO app_state (key, value) VALUES ('last_daily_report', ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).bind(dateKey).run();
+}
+
+async function handleSendDailyReport(env, corsHeaders, url) {
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
   try {
+    // en-CA gives YYYY-MM-DD, which sorts and compares cleanly.
+    const dateKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+    const force = url?.searchParams.get('force') === '1';
+
+    if (!force && await alreadySentToday(env, dateKey)) {
+      // 200, not an error: a scheduler firing more often than daily is now the
+      // expected case, and it should see a calm no-op rather than a failure.
+      return json({ success: true, skipped: true, reason: `Daily report already sent for ${dateKey}`, date: dateKey });
+    }
+
     const result = await sendDailyEmailReport(env);
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // Only record success, so a failed send can be retried on the next fire.
+    if (result?.success) await markSentToday(env, dateKey);
+    return json({ ...result, date: dateKey, forced: force || undefined });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return json({ error: error.message }, 500);
   }
 }
 
