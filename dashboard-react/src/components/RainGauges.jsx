@@ -4,6 +4,7 @@ import { Card, Statistic, Row, Col, Input, Select, Button, Table, Tag, Space, Sp
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
 import WeatherStationsView from './WeatherStationsView';
+import DeviceMap from './DeviceMap';
 
 const { Text } = Typography;
 
@@ -759,6 +760,26 @@ export default function RainGauges({ isDark }) {
                     </Col>
                 ))}
             </Row>
+
+            {/* Map — fed from filteredRows so it always matches the table below,
+                rather than silently showing gauges the filters have excluded. */}
+            <DeviceMap
+                devices={filteredRows}
+                isDark={isDark}
+                title="📍 Rain Gauge Locations"
+                onDeviceClick={openDetail}
+                renderPopup={(g) => `
+                    <b style="font-size:14px;">${g.name}</b><br/>
+                    <hr style="margin:6px 0;border:0;border-top:1px solid #f0f0f0;"/>
+                    <div style="font-size:12px;">
+                      <b>Status:</b> <span style="color:${g.status === 'online' ? '#52c41a' : '#ff4d4f'}">${g.status}</span><br/>
+                      <b>Today:</b> ${g.rain_daily ?? '—'} mm<br/>
+                      <b>24h:</b> ${g.rain_24h ?? '—'} mm<br/>
+                      <b>7d:</b> ${g.rain_7d ?? '—'} mm<br/>
+                      ${g.uptime_24h != null ? `<b>Uptime:</b> ${parseFloat(g.uptime_24h).toFixed(1)}%` : ''}
+                    </div>
+                `}
+            />
 
             {/* Controls + Table */}
             <Card style={{ marginTop: 16 }} styles={{ body: { padding: 16 } }}>

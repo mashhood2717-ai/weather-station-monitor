@@ -777,6 +777,21 @@
             width: 100%;
         }
 
+        /* RG / WS tab maps. Shorter than the stations map (#map) because they
+           sit above a table rather than owning the viewport. */
+        #rgMap,
+        #wsMap {
+            height: 420px;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            #rgMap,
+            #wsMap {
+                height: 300px;
+            }
+        }
+
         /* Station List */
         .station-list-wrapper {
             display: grid;
@@ -2178,6 +2193,15 @@
                 </div>
             </div>
 
+            <!-- Rain gauge map -->
+            <div class="map-container">
+                <div class="map-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <h2 class="map-title">📍 Rain Gauge Locations</h2>
+                    <span id="rgMapCount" style="font-size:12px; color:var(--text-secondary);"></span>
+                </div>
+                <div id="rgMap"></div>
+            </div>
+
             <div class="station-list">
                 <div class="list-header" style="justify-content: space-between; flex-direction: row; flex-wrap: wrap; gap: 8px;">
                     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -2290,6 +2314,15 @@
                         <div class="stat-value" id="wsMinPressValue" style="color:#0ea5e9;">—</div>
                         <div class="stat-station" id="wsMinPressStation">—</div>
                     </div>
+                </div>
+
+                <!-- Weather station map -->
+                <div class="map-container">
+                    <div class="map-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <h2 class="map-title">📍 Weather Station Locations</h2>
+                        <span id="wsMapCount" style="font-size:12px; color:var(--text-secondary);"></span>
+                    </div>
+                    <div id="wsMap"></div>
                 </div>
 
                 <div class="station-list">
@@ -3379,6 +3412,138 @@
                     maxZoom: 18
                 }).addTo(map);
             }
+            // The RG/WS maps use the same themed basemap, so they have to be
+            // retiled alongside the stations map or they stay on the old theme.
+            if (rgMapTiles && rgMap) {
+                rgMap.removeLayer(rgMapTiles);
+                rgMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(rgMap);
+            }
+            if (wsMapTiles && wsMap) {
+                wsMap.removeLayer(wsMapTiles);
+                wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(wsMap);
+            }
+        }
+
+        // ============================================================
+        // RG / WS TAB MAPS
+        // ============================================================
+        // Coordinates come from the rain-gauges Worker, which range-checks them
+        // and nulls out anything invalid — so a missing lat/lng here means
+        // "unknown location" and the device is skipped rather than pinned at 0,0.
+        //
+        // Both maps live inside panes that are display:none at page load, and
+        // Leaflet measures a hidden container as 0x0 and paints a gray strip.
+        // They are therefore created lazily on first reveal, and invalidateSize()
+        // runs every time their pane is shown.
+        let rgMap = null, rgMapCluster = null, rgMapTiles = null, rgMapFitted = false;
+        let wsMap = null, wsMapLayer = null, wsMapTiles = null, wsMapFitted = false;
+
+        function deviceMarkerIcon(status) {
+            return L.divIcon({
+                className: 'custom-marker',
+                html: '<div class="pulse-marker ' + (status === 'online' ? 'online' : 'offline') + '"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+        }
+
+        function ensureRgMap() {
+            if (rgMap) return rgMap;
+            if (!document.getElementById('rgMap')) return null;
+            rgMap = L.map('rgMap', { zoomControl: true, scrollWheelZoom: true }).setView([30.3753, 69.3451], 6);
+            rgMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(rgMap);
+            rgMapCluster = L.markerClusterGroup({ maxClusterRadius: 45, spiderfyOnMaxZoom: true, showCoverageOnHover: false });
+            rgMap.addLayer(rgMapCluster);
+            return rgMap;
+        }
+
+        function ensureWsMap() {
+            if (wsMap) return wsMap;
+            if (!document.getElementById('wsMap')) return null;
+            wsMap = L.map('wsMap', { zoomControl: true, scrollWheelZoom: true }).setView([30.3753, 69.3451], 6);
+            wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(wsMap);
+            // Only a handful of stations — clustering would hide them behind a
+            // single bubble at the default zoom for no benefit.
+            wsMapLayer = L.layerGroup().addTo(wsMap);
+            return wsMap;
+        }
+
+        function rgNum(v, suffix) {
+            return (v === null || v === undefined || !Number.isFinite(Number(v))) ? '—' : Number(v) + (suffix || '');
+        }
+
+        // `rows` is the already-filtered/sorted table data, so the map always
+        // shows exactly what the table shows.
+        function updateRgMapMarkers(rows) {
+            if (!ensureRgMap()) return;
+            rgMapCluster.clearLayers();
+            const list = rows || [];
+            const pts = [];
+            list.forEach(g => {
+                if (g.lat === null || g.lat === undefined || g.lng === null || g.lng === undefined) return;
+                const marker = L.marker([g.lat, g.lng], { icon: deviceMarkerIcon(g.status) })
+                    .bindPopup(
+                        '<div class="custom-popup">' +
+                        '<div class="popup-title">' + (g.name || 'Unknown') + '</div>' +
+                        '<div class="popup-info">🆔 ' + g.id + '</div>' +
+                        '<div class="popup-info">🌧️ Today: ' + rgNum(g.rain_daily, ' mm') + ' | 24h: ' + rgNum(g.rain_24h, ' mm') + '</div>' +
+                        '<div class="popup-info">📅 7d: ' + rgNum(g.rain_7d, ' mm') + ' | 30d: ' + rgNum(g.rain_30d, ' mm') + '</div>' +
+                        (g.uptime_24h !== null && g.uptime_24h !== undefined
+                            ? '<div class="popup-info">📊 Uptime: ' + Number(g.uptime_24h).toFixed(1) + '%</div>' : '') +
+                        '<div class="popup-status ' + (g.status === 'online' ? 'online' : 'offline') + '">' +
+                        (g.status === 'online' ? '● Online' : '○ Offline') + '</div>' +
+                        '</div>',
+                        { maxWidth: 260, className: 'custom-leaflet-popup' }
+                    );
+                marker.on('click', () => openRainGaugeDetail(g.id));
+                rgMapCluster.addLayer(marker);
+                pts.push([g.lat, g.lng]);
+            });
+            const badge = document.getElementById('rgMapCount');
+            if (badge) badge.textContent = pts.length + ' of ' + list.length + ' located';
+            // Fit once only — re-fitting on every refresh would undo the user's pan/zoom.
+            if (!rgMapFitted && pts.length) {
+                rgMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 11 });
+                rgMapFitted = true;
+            }
+        }
+
+        function updateWsMapMarkers() {
+            if (!ensureWsMap()) return;
+            wsMapLayer.clearLayers();
+            const pts = [];
+            (wsData || []).forEach(s => {
+                if (s.lat === null || s.lat === undefined || s.lng === null || s.lng === undefined) return;
+                const marker = L.marker([s.lat, s.lng], { icon: deviceMarkerIcon(s.status) })
+                    .bindPopup(
+                        '<div class="custom-popup">' +
+                        '<div class="popup-title">' + (s.name || 'Unknown') + '</div>' +
+                        '<div class="popup-info">🌡️ Temp: ' + wsFormatNum(s.temperature, 1, '°C') + ' | 💧 ' + wsFormatNum(s.humidity, 0, '%') + '</div>' +
+                        '<div class="popup-info">💨 Wind: ' + wsFormatNum(wsMsToKmh(s.wind_speed), 1, ' km/h') + ' ' + wsDegToCardinal(s.wind_direction) + '</div>' +
+                        '<div class="popup-info">📊 Pressure: ' + wsFormatNum(wsToMSLP(s.id, s.pressure), 1, ' hPa') + '</div>' +
+                        (s.uptime_24h !== null && s.uptime_24h !== undefined
+                            ? '<div class="popup-info">📈 Uptime 24h: ' + Number(s.uptime_24h).toFixed(1) + '%</div>' : '') +
+                        '<div class="popup-status ' + (s.status === 'online' ? 'online' : 'offline') + '">' +
+                        (s.status === 'online' ? '● Online' : '○ Offline') + '</div>' +
+                        '</div>',
+                        { maxWidth: 260, className: 'custom-leaflet-popup' }
+                    );
+                marker.on('click', () => openWeatherStationDetail(s.id));
+                wsMapLayer.addLayer(marker);
+                pts.push([s.lat, s.lng]);
+            });
+            const badge = document.getElementById('wsMapCount');
+            if (badge) badge.textContent = pts.length + ' of ' + (wsData || []).length + ' located';
+            if (!wsMapFitted && pts.length) {
+                wsMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 10 });
+                wsMapFitted = true;
+            }
+        }
+
+        // Called whenever a pane holding one of these maps becomes visible.
+        function refreshTabMaps() {
+            if (rgMap) rgMap.invalidateSize();
+            if (wsMap) wsMap.invalidateSize();
         }
 
         // Overall Uptime Trend Line Chart
@@ -6120,9 +6285,12 @@
                 await autoResolveActiveStationIssues();
                 autoPopulateInactiveIssues(true);
             }
-            if (tab === 'rain' && !rainTabLoaded) {
-                rainTabLoaded = true;
-                await fetchRainGaugesData();
+            if (tab === 'rain') {
+                if (!rainTabLoaded) {
+                    rainTabLoaded = true;
+                    await fetchRainGaugesData();
+                }
+                requestAnimationFrame(refreshTabMaps);
             }
         }
 
@@ -6321,6 +6489,10 @@
                 const el = document.getElementById('rgSortArrow_' + k);
                 if (el) el.textContent = k === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : '';
             });
+
+            // Map mirrors the table, so it updates from the same filtered rows
+            // and must run before the early return that handles an empty result.
+            updateRgMapMarkers(rows);
 
             if (rows.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-secondary);">No gauges match the current filters</td></tr>';
@@ -6906,6 +7078,9 @@
                 wsBtn.classList.remove('active'); rgBtn.classList.add('active');
                 wsPane.style.display = 'none';    rgPane.style.display = '';
             }
+            // The revealed pane just changed size from 0x0; let Leaflet re-measure
+            // on the next frame, once the browser has applied the display change.
+            requestAnimationFrame(refreshTabMaps);
         }
 
         // ── Fetch + render ────────────────────────────────────────────────
@@ -7009,6 +7184,7 @@
 
         function renderWeatherStationsTable() {
             const tbody = document.getElementById('wsTable');
+            updateWsMapMarkers();
             if (!tbody) return;
             if (!wsData.length) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No weather stations.</td></tr>';

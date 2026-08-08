@@ -6,6 +6,7 @@ import {
 import { ReloadOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
+import DeviceMap from './DeviceMap';
 
 const { RangePicker } = DatePicker;
 
@@ -596,6 +597,27 @@ export default function WeatherStationsView({ isDark, onCount }) {
                 <Col xs={12} md={4}><ExtremeTile title="📈 Today's Highest Pressure" color="#10b981" entry={dMax.pressure} format={e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`} /></Col>
                 <Col xs={12} md={4}><ExtremeTile title="📉 Today's Lowest Pressure"  color="#0ea5e9" entry={dMin.pressure} format={e => `${(e.value_mslp ?? e.value).toFixed(1)} hPa`} /></Col>
             </Row>
+
+            {/* Map — clicking a marker opens the same detail modal as a table row. */}
+            <DeviceMap
+                devices={stations}
+                isDark={isDark}
+                title="📍 Weather Station Locations"
+                height={360}
+                onDeviceClick={setSelected}
+                renderPopup={(s) => `
+                    <b style="font-size:14px;">${s.name}</b><br/>
+                    <hr style="margin:6px 0;border:0;border-top:1px solid #f0f0f0;"/>
+                    <div style="font-size:12px;">
+                      <b>Status:</b> <span style="color:${s.status === 'online' ? '#52c41a' : '#ff4d4f'}">${s.status}</span><br/>
+                      <b>Temp:</b> ${num(s.temperature, 1, '°C')}<br/>
+                      <b>Humidity:</b> ${num(s.humidity, 0, '%')}<br/>
+                      <b>Wind:</b> ${num(msToKmh(s.wind_speed), 1, ' km/h')} ${degToCardinal(s.wind_direction)}<br/>
+                      <b>Pressure:</b> ${num(toMSLP(s.id, s.pressure), 1, ' hPa')}<br/>
+                      ${s.uptime_24h != null ? `<b>Uptime 24h:</b> ${parseFloat(s.uptime_24h).toFixed(1)}%` : ''}
+                    </div>
+                `}
+            />
 
             {/* Stations table */}
             <Card styles={{ body: { padding: 16 } }}>
