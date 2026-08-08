@@ -65,6 +65,9 @@ const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
 // comes back partial (HubService rate limiting). Never overwritten by a partial
 // result — that is the whole point of keeping it separate from hubStationCache.
 let hubStationLastGood = { data: null, fetchedAt: 0 };
+// Beyond this, stale data stops being "better than nothing" and starts being
+// misleading — the dashboard would show hours-old readings as if they were live.
+const LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 
 // ============================================================
 // API RESPONSE CACHE - Prevents repeated D1 queries for same data
@@ -78,7 +81,7 @@ const API_CACHE_MAX_ENTRIES = 100;
 const API_CACHE_EVICT_BATCH = 20;
 const API_CACHE_TTL = {
   '/api/dashboard-stats': 600_000,       // 10 min
-  '/api/stations-with-uptime': 600_000,  // 10 min
+  '/api/stations-with-uptime': 300_000,  // 5 min — matches the ~5-minute sync cadence
   '/api/uptime-trend-chart': 600_000,    // 10 min
   '/api/uptime-percentages': 600_000,    // 10 min
   '/api/stats': 600_000,                 // 10 min
@@ -99,7 +102,59 @@ function getCachedResponse(cacheKey) {
   return null;
 }
 
-async function cacheAndReturn(cacheKey, ttl, responsePromise) {
+// ============================================================
+// EDGE CACHE (shared across isolates)
+//
+// apiResponseCache above lives in ISOLATE memory. Cloudflare runs many isolates
+// per colo and recycles them constantly, so that cache helps far less than it
+// looks: measured on production, 8 of 15 sequential requests were misses, each
+// paying the full HubService cost (5.5s-59.6s) while hits returned in ~0.8s.
+//
+// It also made responses inconsistent. Each isolate holds its own copy at its
+// own age, so two refreshes seconds apart could be served a fresh response and
+// a 10-minute-old one — which reads as "the page won't update".
+//
+// caches.default is shared by every isolate in the colo, so one fetch warms the
+// cache for all of them. The in-memory map stays as a first-level lookup since
+// it avoids even the edge round-trip.
+// ============================================================
+function edgeCacheKey(url) {
+  // Cache API keys on the URL. Only GETs are cached — POST bodies are not part
+  // of the key, so a shared entry would serve the wrong payload.
+  return new Request(url.toString(), { method: 'GET' });
+}
+
+async function getEdgeCached(request, url) {
+  if (request.method !== 'GET') return null;
+  try {
+    const hit = await caches.default.match(edgeCacheKey(url));
+    if (!hit) return null;
+    const body = await hit.text();
+    return { body, headers: Object.fromEntries(hit.headers.entries()) };
+  } catch {
+    return null; // cache trouble must never break the request
+  }
+}
+
+async function putEdgeCached(request, url, body, headers, ttlMs) {
+  if (request.method !== 'GET') return;
+  try {
+    await caches.default.put(
+      edgeCacheKey(url),
+      new Response(body, {
+        headers: {
+          ...headers,
+          // Cache API honours this for expiry.
+          'Cache-Control': `public, max-age=${Math.floor(ttlMs / 1000)}`,
+        },
+      })
+    );
+  } catch {
+    // Non-fatal: a failed put just means the next request recomputes.
+  }
+}
+
+async function cacheAndReturn(cacheKey, ttl, responsePromise, edgeCtx = null) {
   const response = await responsePromise;
   // Never cache a degraded result. It is a 200, but it carries fallback data
   // rather than live data, and caching it turns a momentary upstream blip into
@@ -131,6 +186,13 @@ async function cacheAndReturn(cacheKey, ttl, responsePromise) {
       ttl,
       cachedAt: Date.now(),
     });
+    // Populate the shared edge cache too, so the next request on ANY isolate in
+    // this colo is a hit rather than another full upstream fetch.
+    if (edgeCtx) {
+      const put = putEdgeCached(edgeCtx.request, edgeCtx.url, body, headers, ttl);
+      if (edgeCtx.ctx?.waitUntil) edgeCtx.ctx.waitUntil(put);
+      else await put;
+    }
     return new Response(body, { status: 200, headers: { ...headers, 'X-Cache': 'MISS' } });
   }
   return response;
@@ -964,12 +1026,21 @@ async function fetchAllStationsFromHubServiceCached(env) {
     // A complete-but-stale list beats a fresh truncated one. Station metadata
     // barely moves, so the worst case here is slightly old temperature/rain
     // readings — versus whole regions vanishing from the dashboard.
-    if (hubStationLastGood.data) {
-      const ageMin = Math.floor((Date.now() - hubStationLastGood.fetchedAt) / 60000);
+    // Bounded staleness. This used to serve the last good list forever with no
+    // age check and degraded=false, so once a fetch started failing the
+    // dashboard could sit on old readings indefinitely and look fine — the
+    // "page won't update even after refresh" symptom. Past the cap we throw, so
+    // the caller falls back to D1 and flags the response degraded, which is at
+    // least honest about being stale.
+    const age = Date.now() - hubStationLastGood.fetchedAt;
+    if (hubStationLastGood.data && age < LAST_GOOD_MAX_AGE_MS) {
       console.warn(
-        `⚠️ Serving last-good station list (${hubStationLastGood.data.length} stations, ${ageMin}m old): ${error.message}`
+        `⚠️ Serving last-good station list (${hubStationLastGood.data.length} stations, ${Math.floor(age / 60000)}m old): ${error.message}`
       );
       return hubStationLastGood.data;
+    }
+    if (hubStationLastGood.data) {
+      console.warn(`⚠️ Last-good station list is ${Math.floor(age / 60000)}m old — too stale to serve`);
     }
     throw error;
   }
@@ -1051,7 +1122,7 @@ async function syncNewStations(env) {
 // Fetch station data from HubService API
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -1080,9 +1151,23 @@ export default {
       if (cacheTTL) {
         // Include query params in cache key, and method to separate GET/POST
         const cacheKey = request.method + ':' + url.pathname + url.search;
+        // L1: this isolate's memory — cheapest, but only helps if we land on the
+        // same isolate again, which is roughly half the time.
         const cached = getCachedResponse(cacheKey);
         if (cached) return cached;
+        // L2: the colo-wide edge cache — one upstream fetch now serves every
+        // isolate here, which is what removes the 5-60s cold-start responses.
+        const edge = await getEdgeCached(request, url);
+        if (edge) {
+          // Refill L1 so repeat hits on this isolate skip the edge lookup too.
+          apiResponseCache.set(cacheKey, {
+            body: edge.body, status: 200, headers: edge.headers, ttl: cacheTTL, cachedAt: Date.now(),
+          });
+          return new Response(edge.body, { status: 200, headers: { ...edge.headers, 'X-Cache': 'EDGE' } });
+        }
       }
+      // Passed to cacheAndReturn so successful responses populate the edge cache.
+      const edgeCtx = { request, url, ctx };
 
       // API Routes
       // Build cache key matching early lookup: method:path+search
@@ -1148,14 +1233,14 @@ export default {
       }
 
       if (path === '/api/stations-with-uptime') {
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStationsWithUptimeRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStationsWithUptimeRequest(env, corsHeaders), edgeCtx);
       }
       if (path === '/api/stations') {
         return await handleStationsRequest(env, corsHeaders);
       } else if (path === '/api/stats') {
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStatsRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStatsRequest(env, corsHeaders), edgeCtx);
       } else if (path === '/api/alerts') {
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleAlertsRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleAlertsRequest(env, corsHeaders), edgeCtx);
       } else if (path === '/api/station') {
         const stationId = url.searchParams.get('id');
         return await handleStationDetailRequest(env, stationId, corsHeaders);
@@ -1164,10 +1249,10 @@ export default {
         return await syncAllStations(env, corsHeaders);
       } else if (path === '/api/uptime-trend') {
         // Get 24-hour uptime trend for all stations
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendRequest(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendRequest(env, corsHeaders), edgeCtx);
       } else if (path === '/api/uptime-percentages') {
         // Get uptime percentages for all stations or specific ones
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimePercentagesRequest(env, request, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimePercentagesRequest(env, request, corsHeaders), edgeCtx);
       } else if (path === '/api/ingest-station-samples') {
         // Aggregate recent status_logs into hourly samples and persist
         return await handleIngestStationSamples(env, corsHeaders);
@@ -1328,7 +1413,7 @@ export default {
         return new Response(JSON.stringify(results, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } else if (path === '/api/storage-stats') {
         // Get storage statistics
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStorageStats(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStorageStats(env, corsHeaders), edgeCtx);
       } else if (path === '/api/daily-report') {
         // Generate daily report JSON
         return await handleDailyReportRequest(env, corsHeaders);
@@ -1455,12 +1540,12 @@ export default {
         }
       } else if (path === '/api/dashboard-stats') {
         // Get avg uptime/downtime and daily extremes (since midnight PKT)
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleDashboardStats(env, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleDashboardStats(env, corsHeaders), edgeCtx);
       } else if (path === '/api/rain-gauges') {
         return await cacheAndReturn(routeCacheKey, 600_000, handleRainGaugesRequest(env, url, corsHeaders));
       } else if (path === '/api/uptime-trend-chart') {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
-        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
+        return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders), edgeCtx);
       } else if (path === '/api/send-daily-report') {
         // Send the daily email report. Guarded to once per PKT day; append
         // ?force=1 to send regardless.
