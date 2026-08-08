@@ -2673,6 +2673,24 @@
     </div>
 
     <!-- Historical CSV picker -->
+    <!-- Level sensor detail -->
+    <div id="lsDetailModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:620px;">
+            <button class="modal-close" onclick="closeLevelSensorDetail()">&times;</button>
+            <div class="modal-header">
+                <h2 id="lsDetailTitle">🌊  Level Sensor</h2>
+                <span id="lsDetailStatus" class="status-badge" style="margin-left:8px;"></span>
+            </div>
+            <div class="modal-body">
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px;" id="lsDetailReadings"></div>
+                <div id="lsDetailMeta" style="font-size:12px; color:var(--text-secondary); line-height:2;"></div>
+                <div style="margin-top:14px; padding:10px 12px; background:rgba(148,163,184,0.06); border:1px solid rgba(148,163,184,0.2); border-radius:8px; font-size:12px; color:var(--text-secondary);">
+                    ℹ️ Level sensors are not logged to the database, so there is no history to chart — these are the values the sensor is reporting right now.
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="historicalPickerModal" class="modal-overlay" style="display:none;">
         <div class="modal-content" style="max-width:560px;">
             <button class="modal-close" onclick="closeHistoricalPicker()">&times;</button>
@@ -7289,6 +7307,8 @@
             const frag = document.createDocumentFragment();
             rows.forEach(s => {
                 const tr = document.createElement('tr');
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', () => openLevelSensorDetail(s.id));
                 const statusHtml = s.status === 'online'
                     ? '<span class="status-badge online">ONLINE</span>'
                     : '<span class="status-badge offline">OFFLINE</span>';
@@ -7327,6 +7347,7 @@
                         '</div>',
                         { maxWidth: 280, className: 'custom-leaflet-popup' }
                     );
+                marker.on('click', () => openLevelSensorDetail(s.id));
                 lsMapLayer.addLayer(marker);
                 pts.push([s.lat, s.lng]);
             });
@@ -7339,6 +7360,52 @@
         }
 
         // ── Sub-toggle (RG ↔ WS) ──────────────────────────────────────────
+        // ── Level sensor detail modal ─────────────────────────────────────
+        // Live values only. Nothing is persisted for these devices, so unlike the
+        // RG/WS modals there is no history fetch and no charts to build or tear down.
+        function openLevelSensorDetail(sensorId) {
+            const s = lsData.find(x => x.id === sensorId);
+            if (!s) return;
+
+            document.getElementById('lsDetailTitle').textContent = '🌊  ' + (s.name || 'Level Sensor');
+            const statusEl = document.getElementById('lsDetailStatus');
+            statusEl.className = 'status-badge ' + (s.status === 'online' ? 'online' : 'offline');
+            statusEl.textContent = s.status === 'online' ? 'Online' : 'Offline';
+
+            const tile = (label, value, color) =>
+                '<div class="modal-stat" style="border-left:3px solid ' + color + ';">' +
+                '<div class="modal-stat-label">' + label + '</div>' +
+                '<div class="modal-stat-value" style="color:' + color + ';">' + value + '</div></div>';
+
+            const ft = s.water_level_ft;
+            const m = (ft === null || ft === undefined) ? null : Number(ft) * LS_FT_TO_M;
+            const batt = Number.isFinite(Number(s.battery_level)) ? Number(s.battery_level) : null;
+
+            document.getElementById('lsDetailReadings').innerHTML =
+                  tile('Water Level', lsNum(ft, 2, ' ft'), '#0ea5e9')
+                + tile('Water Level', lsNum(m, 2, ' m'), '#06b6d4')
+                + tile('Battery', batt === null ? '—' : batt + '%', lsBatteryColor(batt));
+
+            const coords = (s.lat === null || s.lat === undefined || s.lng === null || s.lng === undefined)
+                ? '—'
+                : Number(s.lat).toFixed(5) + ', ' + Number(s.lng).toFixed(5);
+            const seenAbs = s.last_seen
+                ? new Date(s.last_seen).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
+                : '—';
+
+            document.getElementById('lsDetailMeta').innerHTML =
+                  '<div><strong>Sensor ID:</strong> ' + s.id + '</div>'
+                + '<div><strong>Last seen:</strong> ' + lsTimeAgo(s.last_seen) + ' <span style="opacity:.7;">(' + seenAbs + ' PKT)</span></div>'
+                + '<div><strong>Coordinates:</strong> ' + coords + '</div>'
+                + '<div><strong>Position:</strong> ' + (s.position === null || s.position === undefined ? '—' : s.position) + '</div>';
+
+            document.getElementById('lsDetailModal').style.display = 'flex';
+        }
+
+        function closeLevelSensorDetail() {
+            document.getElementById('lsDetailModal').style.display = 'none';
+        }
+
         // Table-driven so adding a fourth device type is one entry, not another
         // branch in an if/else chain.
         const RG_WS_SUBVIEWS = {
