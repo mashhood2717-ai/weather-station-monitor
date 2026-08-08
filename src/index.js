@@ -160,6 +160,14 @@ const SESSION_COOKIE_NAME = 'hub_access_token';
 // at '#' even inside quotes, silently yielding "we@therwalay_dev" and a 401.
 const HUB_APP_BASIC_PASSWORD = 'we@therwalay_dev#7780';
 
+// Ceiling on any single HubService call. Their throttling stalls connections
+// instead of rejecting them, and Workers' fetch never times out on its own, so
+// this is the only thing bounding a request that would otherwise hang forever.
+const HUB_FETCH_TIMEOUT_MS = 8000;
+// The whole station-list fetch (login + 6 pages + retries) must fit in this, so
+// a degraded HubService costs one slow response rather than a dead endpoint.
+const HUB_TOTAL_BUDGET_MS = 25000;
+
 // Imported RSA public key, cached per isolate (importKey is not free).
 let hubPublicKeyPromise = null;
 
@@ -280,6 +288,9 @@ async function hubLogin(env, credentialString) {
   console.log('🔐 Requesting new session from HubService (encrypted envelope)...');
   const response = await fetch(`${HUB_BASE_URL}/ww-Hub/login`, {
     method: 'POST',
+    // Same reasoning as hubFetch: a throttled login stalls rather than failing,
+    // and every request funnels through here.
+    signal: AbortSignal.timeout(HUB_FETCH_TIMEOUT_MS),
     headers: {
       'Authorization': await buildEncryptedBasicAuth(env),
       'Content-Type': 'application/json'
@@ -391,6 +402,13 @@ async function hubFetch(env, url, init = {}) {
 
   const send = async (jwt) => fetch(url, {
     ...init,
+    // HARD TIMEOUT — do not remove.
+    // When HubService throttles us it does NOT reply 429 on these routes; nginx
+    // holds the connection open. Workers' fetch has no default timeout, so an
+    // untimed call waits indefinitely and takes the whole request with it. That
+    // is exactly how /api/stations-with-uptime went from 1s to hanging past 90s
+    // while HubService was answering other callers in 60ms.
+    signal: init.signal || AbortSignal.timeout(HUB_FETCH_TIMEOUT_MS),
     headers: {
       ...(init.headers || {}),
       // Rebuilt per attempt: the envelope embeds a rotating timestamp.
@@ -469,6 +487,8 @@ const NOWCAST_BATCH_PAUSE_MS = 300;
 // every servicesResponse from turning one sync into 294 subrequests (Workers caps
 // subrequests per invocation, and we already spend 6 on the station pages).
 const NOWCAST_MAX_STATIONS = 30;
+// Wall-clock ceiling for the whole fallback.
+const NOWCAST_BUDGET_MS = 6000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -522,7 +542,14 @@ async function applyNowcastFallback(env, stations) {
   }
 
   let filled = 0;
+  // This is a nice-to-have on a latency-critical path: rainfall for a handful of
+  // Misol stations must never be the reason the whole station list is late.
+  const deadline = Date.now() + NOWCAST_BUDGET_MS;
   for (let i = 0; i < targets.length; i += NOWCAST_BATCH_SIZE) {
+    if (Date.now() > deadline) {
+      console.warn('⏱️ Nowcast budget exhausted — remaining stations keep their nulls');
+      break;
+    }
     const batch = targets.slice(i, i + NOWCAST_BATCH_SIZE);
     const results = await Promise.all(
       batch.map((s) =>
@@ -565,7 +592,16 @@ const HUB_PAGE_ATTEMPTS = 3;
 async function hubPageFetch(env, url, page) {
   let response;
   for (let attempt = 1; attempt <= HUB_PAGE_ATTEMPTS; attempt++) {
-    response = await hubFetch(env, url);
+    try {
+      response = await hubFetch(env, url);
+    } catch (e) {
+      // AbortSignal.timeout rejects — a stalled page must not kill the whole
+      // fetch, so surface it as a failed page and let the caller decide.
+      console.warn(`HubService page ${page} attempt ${attempt} failed: ${e.name || e.message}`);
+      if (attempt === HUB_PAGE_ATTEMPTS) return new Response(null, { status: 504 });
+      await sleep(500 * attempt);
+      continue;
+    }
     if (response.status !== 429) return response;
 
     if (attempt < HUB_PAGE_ATTEMPTS) {
@@ -595,7 +631,15 @@ async function fetchAllStationsFromHubService(env) {
       status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
     });
     let failedPages = 0;
+    const deadline = Date.now() + HUB_TOTAL_BUDGET_MS;
     for (let page = 1; page <= 6; page++) {
+      // Stop rather than pile more retries onto an already-slow HubService;
+      // the incomplete-list check below then serves the last known-good data.
+      if (Date.now() > deadline) {
+        console.warn(`⏱️ Station fetch budget exhausted at page ${page}`);
+        failedPages += (7 - page);
+        break;
+      }
       const response = await hubPageFetch(
         env,
         `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`,
