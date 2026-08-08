@@ -780,14 +780,16 @@
         /* RG / WS tab maps. Shorter than the stations map (#map) because they
            sit above a table rather than owning the viewport. */
         #rgMap,
-        #wsMap {
+        #wsMap,
+        #lsMap {
             height: 420px;
             width: 100%;
         }
 
         @media (max-width: 768px) {
             #rgMap,
-            #wsMap {
+            #wsMap,
+            #lsMap {
                 height: 300px;
             }
         }
@@ -2144,6 +2146,7 @@
             <div style="display:flex; justify-content:center; gap:8px; margin:12px 0;">
                 <button id="rgSubViewBtn" class="filter-btn active" onclick="switchRgWsSubView('rg')" style="font-weight:600;">🌧️ Rain Gauges (—)</button>
                 <button id="wsSubViewBtn" class="filter-btn" onclick="switchRgWsSubView('ws')" style="font-weight:600;">🌤️ Weather Stations (—)</button>
+                <button id="lsSubViewBtn" class="filter-btn" onclick="switchRgWsSubView('ls')" style="font-weight:600;">🌊 Level Sensors (—)</button>
             </div>
 
             <!-- ── RG sub-view ────────────────────────────────────────────── -->
@@ -2363,6 +2366,82 @@
                     </div>
                 </div>
             </div><!-- End WS sub-view -->
+
+            <!-- ── LS sub-view ────────────────────────────────────────────── -->
+            <div id="lsSubView" style="display:none;">
+                <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-label">🌊 Total Sensors</div>
+                        <div class="stat-value" id="lsTotalCount">0</div>
+                        <div class="stat-station">Lahore Drainage Network</div>
+                    </div>
+                    <div class="stat-card online">
+                        <div class="stat-label">🟢 Online</div>
+                        <div class="stat-value" id="lsOnlineCount" style="color:#10b981;">0</div>
+                        <div class="stat-station">Reporting now</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">🔴 Offline</div>
+                        <div class="stat-value" id="lsOfflineCount" style="color:#ef4444;">0</div>
+                        <div class="stat-station">Not reporting</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #f59e0b;">
+                        <div class="stat-label">🔋 Low Battery (&lt;30%)</div>
+                        <div class="stat-value" id="lsLowBattCount" style="color:#f59e0b;">0</div>
+                        <div class="stat-station" id="lsLowBattNames">—</div>
+                    </div>
+                    <div class="stat-card" style="border-left: 3px solid #0ea5e9;">
+                        <div class="stat-label">🌊 Highest Level</div>
+                        <div class="stat-value" id="lsMaxLevelValue" style="color:#0ea5e9;">—</div>
+                        <div class="stat-station" id="lsMaxLevelStation">—</div>
+                    </div>
+                </div>
+
+                <!-- Level sensor map -->
+                <div class="map-container">
+                    <div class="map-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <h2 class="map-title">📍 Level Sensor Locations</h2>
+                        <span id="lsMapCount" style="font-size:12px; color:var(--text-secondary);"></span>
+                    </div>
+                    <div id="lsMap"></div>
+                </div>
+
+                <div class="station-list">
+                    <div class="list-header" style="justify-content: space-between; flex-direction: row; flex-wrap: wrap; gap: 8px;">
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            <h2 class="list-title" style="margin: 0;">🌊 Level Sensors</h2>
+                            <span id="lsLastUpdated" style="font-size:11px; color:var(--text-secondary);"></span>
+                        </div>
+                        <div class="controls" style="gap: 8px; display: flex; flex-wrap:wrap; align-items:center;">
+                            <input type="text" class="search-box" id="lsSearchBox" oninput="renderLevelSensorsTable()" placeholder="🔍 Search sensor..." style="width: 180px;">
+                            <select id="lsStatusFilter" class="source-filter" onchange="renderLevelSensorsTable()" style="min-width: 120px;">
+                                <option value="all">All Status</option>
+                                <option value="online">Online Only</option>
+                                <option value="offline">Offline Only</option>
+                            </select>
+                            <button class="filter-btn" onclick="loadLevelSensors()" title="Refresh">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="min-width:260px;">Sensor</th>
+                                    <th style="text-align:center;">Status</th>
+                                    <th style="text-align:right;">Water Level (ft)</th>
+                                    <th style="text-align:right;">Level (m)</th>
+                                    <th style="text-align:right;">Battery</th>
+                                    <th style="text-align:right;">Uptime (24h)</th>
+                                    <th>Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lsTable">
+                                <tr><td colspan="7" style="text-align: center; padding: 20px;">Loading level sensors...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div><!-- End LS sub-view -->
         </div><!-- End Tab 3: RG & WS -->
 
     </div>
@@ -3429,6 +3508,10 @@
                 wsMap.removeLayer(wsMapTiles);
                 wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(wsMap);
             }
+            if (lsMapTiles && lsMap) {
+                lsMap.removeLayer(lsMapTiles);
+                lsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(lsMap);
+            }
         }
 
         // ============================================================
@@ -3444,6 +3527,7 @@
         // runs every time their pane is shown.
         let rgMap = null, rgMapCluster = null, rgMapTiles = null, rgMapFitted = false;
         let wsMap = null, wsMapLayer = null, wsMapTiles = null, wsMapFitted = false;
+        let lsMap = null, lsMapLayer = null, lsMapTiles = null, lsMapFitted = false;
 
         function deviceMarkerIcon(status) {
             return L.divIcon({
@@ -3473,6 +3557,17 @@
             // single bubble at the default zoom for no benefit.
             wsMapLayer = L.layerGroup().addTo(wsMap);
             return wsMap;
+        }
+
+        function ensureLsMap() {
+            if (lsMap) return lsMap;
+            if (!document.getElementById('lsMap')) return null;
+            lsMap = L.map('lsMap', { zoomControl: true, scrollWheelZoom: true }).setView([31.52, 74.35], 11);
+            lsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(lsMap);
+            // All 11 sit within Lahore; clustering would collapse them into one
+            // bubble at city zoom, which is exactly the view that matters here.
+            lsMapLayer = L.layerGroup().addTo(lsMap);
+            return lsMap;
         }
 
         function rgNum(v, suffix) {
@@ -3551,6 +3646,7 @@
         function refreshTabMaps() {
             if (rgMap) rgMap.invalidateSize();
             if (wsMap) wsMap.invalidateSize();
+            if (lsMap) lsMap.invalidateSize();
         }
 
         // Overall Uptime Trend Line Chart
@@ -7071,20 +7167,220 @@
             return d + 'd ago';
         }
 
-        // ── Sub-toggle (RG ↔ WS) ──────────────────────────────────────────
-        function switchRgWsSubView(view) {
-            const rgBtn = document.getElementById('rgSubViewBtn');
-            const wsBtn = document.getElementById('wsSubViewBtn');
-            const rgPane = document.getElementById('rgSubView');
-            const wsPane = document.getElementById('wsSubView');
-            if (view === 'ws') {
-                rgBtn.classList.remove('active'); wsBtn.classList.add('active');
-                rgPane.style.display = 'none';    wsPane.style.display = '';
-                if (!wsData.length) loadWeatherStations();
-            } else {
-                wsBtn.classList.remove('active'); rgBtn.classList.add('active');
-                wsPane.style.display = 'none';    rgPane.style.display = '';
+        // ============================================================
+        // LEVEL SENSORS (LS) — sub-view inside RG & WS tab
+        // ============================================================
+        // Water-level sensors in Lahore drains and channels. They were invisible
+        // until the Worker learned to classify them: the old build filed them as
+        // rain gauges, so they sat in the RG table with null rainfall.
+        //
+        // Only online/offline history is stored for them — the sync writes
+        // readings rows for weather stations only, so there is no water-level
+        // history to chart yet. Uptime therefore works; level trends do not.
+
+        let lsData = [];   // [{id, name, status, lat, lng, water_level_ft, battery_level, position, last_seen, uptime_24h, checks_24h}, …]
+
+        const LS_FT_TO_M = 0.3048;
+
+        // last_seen arrives as a real ISO-8601 string with a Z. wsTimeAgo() is
+        // NOT reusable here — it appends its own 'Z' to handle D1's naive
+        // timestamps, which would corrupt an already-zoned value.
+        function lsTimeAgo(iso) {
+            if (!iso) return '—';
+            const ms = Date.now() - new Date(iso).getTime();
+            if (!Number.isFinite(ms) || ms < 0) return '—';
+            const m = Math.floor(ms / 60000);
+            if (m < 1) return 'just now';
+            if (m < 60) return m + 'm ago';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h ago';
+            return Math.floor(h / 24) + 'd ago';
+        }
+
+        // Unlike the mains-powered gauges these run on cells, so battery is a
+        // first-class operational signal rather than a footnote.
+        function lsBatteryColor(pct) {
+            if (pct === null || pct === undefined) return 'var(--text-secondary)';
+            if (pct < 15) return '#ef4444';
+            if (pct < 30) return '#f59e0b';
+            return '#10b981';
+        }
+
+        function lsNum(v, digits, suffix) {
+            if (v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+            return Number(v).toFixed(digits) + (suffix || '');
+        }
+
+        async function loadLevelSensors() {
+            const tbody = document.getElementById('lsTable');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading level sensors...</td></tr>';
+            try {
+                // Uptime shares rain_gauge_logs with the gauges — the online/offline
+                // sync is device-type agnostic, so LS history is already recorded.
+                const [lsResp, uptimeResp] = await Promise.allSettled([
+                    fetch(RAIN_GAUGES_WORKER + '/api/level-sensors').then(r => r.json()),
+                    fetch(RAIN_GAUGES_WORKER + '/api/rain-gauges-uptime?range=24h').then(r => r.json()),
+                ]);
+
+                if (lsResp.status !== 'fulfilled' || !lsResp.value?.success) {
+                    throw new Error(lsResp.value?.error || lsResp.reason?.message || 'Failed to fetch level sensors');
+                }
+
+                const uptimeMap = {};
+                if (uptimeResp.status === 'fulfilled' && uptimeResp.value?.success) {
+                    (uptimeResp.value.gauges || []).forEach(u => { uptimeMap[u.gauge_id] = u; });
+                }
+
+                lsData = (lsResp.value.sensors || []).map(s => ({
+                    ...s,
+                    uptime_24h: uptimeMap[s.id]?.uptime_24h ?? null,
+                    checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
+                }));
+
+                const lu = document.getElementById('lsLastUpdated');
+                if (lu) {
+                    lu.textContent = lsResp.value.last_updated
+                        ? 'Last updated: ' + new Date(lsResp.value.last_updated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
+                        : '';
+                }
+
+                setRgWsTabCount('lsSubViewBtn', '🌊 Level Sensors', lsData.length);
+                updateLevelSensorsStats();
+                renderLevelSensorsTable();
+            } catch (e) {
+                console.error('Error in loadLevelSensors:', e);
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--danger); padding:20px;">Error: ' + e.message + '</td></tr>';
             }
+        }
+
+        function updateLevelSensorsStats() {
+            const total = lsData.length;
+            const online = lsData.filter(s => s.status === 'online').length;
+            const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            setTxt('lsTotalCount', total);
+            setTxt('lsOnlineCount', online);
+            setTxt('lsOfflineCount', total - online);
+
+            const low = lsData.filter(s => Number.isFinite(Number(s.battery_level)) && Number(s.battery_level) < 30);
+            setTxt('lsLowBattCount', low.length);
+            setTxt('lsLowBattNames', low.length
+                ? low.slice(0, 2).map(s => (s.name || '').replace(/^LS - /, '')).join(', ') + (low.length > 2 ? ' +' + (low.length - 2) : '')
+                : 'All healthy');
+
+            const withLevel = lsData.filter(s => Number.isFinite(Number(s.water_level_ft)));
+            if (withLevel.length) {
+                const max = withLevel.reduce((a, b) => (Number(b.water_level_ft) > Number(a.water_level_ft) ? b : a));
+                setTxt('lsMaxLevelValue', lsNum(max.water_level_ft, 2, ' ft'));
+                setTxt('lsMaxLevelStation', (max.name || '').replace(/^LS - /, ''));
+            } else {
+                setTxt('lsMaxLevelValue', '—');
+                setTxt('lsMaxLevelStation', '—');
+            }
+        }
+
+        function getFilteredLevelSensors() {
+            const search = (document.getElementById('lsSearchBox')?.value || '').toLowerCase().trim();
+            const statusFilter = document.getElementById('lsStatusFilter')?.value || 'all';
+            let rows = lsData.slice();
+            if (statusFilter !== 'all') rows = rows.filter(s => s.status === statusFilter);
+            if (search) rows = rows.filter(s => (s.name || '').toLowerCase().includes(search));
+            rows.sort((a, b) => (Number(b.water_level_ft) || -Infinity) - (Number(a.water_level_ft) || -Infinity));
+            return rows;
+        }
+
+        function renderLevelSensorsTable() {
+            const tbody = document.getElementById('lsTable');
+            const rows = getFilteredLevelSensors();
+            updateLsMapMarkers(rows);
+            if (!tbody) return;
+
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-secondary);">No level sensors match the current filters</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            rows.forEach(s => {
+                const tr = document.createElement('tr');
+                const statusHtml = s.status === 'online'
+                    ? '<span class="status-badge online">ONLINE</span>'
+                    : '<span class="status-badge offline">OFFLINE</span>';
+                const batt = Number.isFinite(Number(s.battery_level)) ? Number(s.battery_level) : null;
+                const battHtml = batt === null
+                    ? '<span style="color:var(--text-secondary);">—</span>'
+                    : '<span style="color:' + lsBatteryColor(batt) + '; font-weight:600;">' + batt + '%</span>';
+                const uptimeHtml = (s.uptime_24h !== null && s.uptime_24h !== undefined && s.checks_24h > 0)
+                    ? '<span style="color:' + (Number(s.uptime_24h) >= 90 ? '#10b981' : Number(s.uptime_24h) >= 50 ? '#f59e0b' : '#ef4444') + '; font-weight:600;">' + Number(s.uptime_24h).toFixed(1) + '%</span>'
+                    : '<span style="color:var(--text-secondary);">—</span>';
+
+                tr.innerHTML =
+                    '<td><strong>' + (s.name || 'Unknown') + '</strong><br><small style="color:var(--text-secondary)">' + s.id + '</small></td>' +
+                    '<td style="text-align:center;">' + statusHtml + '</td>' +
+                    '<td style="text-align:right; font-weight:600;">' + lsNum(s.water_level_ft, 2) + '</td>' +
+                    '<td style="text-align:right;">' + lsNum(s.water_level_ft === null || s.water_level_ft === undefined ? null : Number(s.water_level_ft) * LS_FT_TO_M, 2) + '</td>' +
+                    '<td style="text-align:right;">' + battHtml + '</td>' +
+                    '<td style="text-align:right;">' + uptimeHtml + '</td>' +
+                    '<td style="color:var(--text-secondary); font-size:12px;">' + lsTimeAgo(s.last_seen) + '</td>';
+                frag.appendChild(tr);
+            });
+            tbody.appendChild(frag);
+        }
+
+        function updateLsMapMarkers(rows) {
+            if (!ensureLsMap()) return;
+            lsMapLayer.clearLayers();
+            const list = rows || [];
+            const pts = [];
+            list.forEach(s => {
+                if (s.lat === null || s.lat === undefined || s.lng === null || s.lng === undefined) return;
+                const marker = L.marker([s.lat, s.lng], { icon: deviceMarkerIcon(s.status) })
+                    .bindPopup(
+                        '<div class="custom-popup">' +
+                        '<div class="popup-title">' + (s.name || 'Unknown') + '</div>' +
+                        '<div class="popup-info">🌊 Level: ' + lsNum(s.water_level_ft, 2, ' ft') + ' (' + lsNum(s.water_level_ft === null || s.water_level_ft === undefined ? null : Number(s.water_level_ft) * LS_FT_TO_M, 2, ' m') + ')</div>' +
+                        '<div class="popup-info">🔋 Battery: <span style="color:' + lsBatteryColor(s.battery_level) + '">' + (s.battery_level ?? '—') + '%</span></div>' +
+                        '<div class="popup-info">🕒 Last seen: ' + lsTimeAgo(s.last_seen) + '</div>' +
+                        (s.uptime_24h !== null && s.uptime_24h !== undefined
+                            ? '<div class="popup-info">📈 Uptime 24h: ' + Number(s.uptime_24h).toFixed(1) + '%</div>' : '') +
+                        '<div class="popup-status ' + (s.status === 'online' ? 'online' : 'offline') + '">' +
+                        (s.status === 'online' ? '● Online' : '○ Offline') + '</div>' +
+                        '</div>',
+                        { maxWidth: 280, className: 'custom-leaflet-popup' }
+                    );
+                lsMapLayer.addLayer(marker);
+                pts.push([s.lat, s.lng]);
+            });
+            const badge = document.getElementById('lsMapCount');
+            if (badge) badge.textContent = pts.length + ' of ' + list.length + ' located';
+            if (!lsMapFitted && pts.length) {
+                lsMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 13 });
+                lsMapFitted = true;
+            }
+        }
+
+        // ── Sub-toggle (RG ↔ WS) ──────────────────────────────────────────
+        // Table-driven so adding a fourth device type is one entry, not another
+        // branch in an if/else chain.
+        const RG_WS_SUBVIEWS = {
+            rg: { btn: 'rgSubViewBtn', pane: 'rgSubView' },
+            ws: { btn: 'wsSubViewBtn', pane: 'wsSubView' },
+            ls: { btn: 'lsSubViewBtn', pane: 'lsSubView' },
+        };
+
+        function switchRgWsSubView(view) {
+            if (!RG_WS_SUBVIEWS[view]) view = 'rg';
+            Object.keys(RG_WS_SUBVIEWS).forEach(key => {
+                const btn = document.getElementById(RG_WS_SUBVIEWS[key].btn);
+                const pane = document.getElementById(RG_WS_SUBVIEWS[key].pane);
+                if (btn) btn.classList.toggle('active', key === view);
+                if (pane) pane.style.display = key === view ? '' : 'none';
+            });
+
+            // Load on first reveal only; the panes keep their data afterwards.
+            if (view === 'ws' && !wsData.length) loadWeatherStations();
+            if (view === 'ls' && !lsData.length) loadLevelSensors();
+
             // The revealed pane just changed size from 0x0; let Leaflet re-measure
             // on the next frame, once the browser has applied the display change.
             requestAnimationFrame(refreshTabMaps);

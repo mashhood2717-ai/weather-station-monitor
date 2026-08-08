@@ -86,6 +86,13 @@ function mapUpstreamDevice(d) {
     wind_speed:     numOrNull(d.wind_speed),
     pressure:       numOrNull(d.pressure),
     heat_index:     numOrNull(d.heat_index),
+    // Level-sensor readings (null for RG/WS — upstream omits them).
+    // battery_level matters operationally here: unlike the mains-powered
+    // gauges these run on cells, and several are already down in single digits.
+    water_level_ft: numOrNull(d.water_level_ft),
+    battery_level:  numOrNull(d.battery_level),
+    position:       numOrNull(d.position),
+    last_seen:      d.last_seen || null,
   };
 }
 
@@ -348,6 +355,24 @@ export default {
           const ws = gauges.filter(g => g.type === 'weather_station');
           return jsonResponse(
             { success: true, last_updated, count: ws.length, stations: ws },
+            {},
+            corsHeaders
+          );
+        });
+      }
+
+      // --- Live proxy: level sensors only (11) ---
+      // Water-level sensors in Lahore drains/channels. They were invisible until
+      // now: the old build misclassified them as rain gauges (no `LS` branch in
+      // the name-prefix guess), so they showed up in the RG list with null rain.
+      // Uptime comes from the same rain_gauge_logs table — the online/offline
+      // sync is device-type agnostic, so their history was being recorded all along.
+      if (path === '/api/level-sensors' && request.method === 'GET') {
+        return await cacheAndReturn(`upstream-ls:${path}`, CACHE_TTL_MS, async () => {
+          const { last_updated, gauges } = await fetchUpstreamGauges(env);
+          const ls = gauges.filter(g => g.type === 'level_sensor');
+          return jsonResponse(
+            { success: true, last_updated, count: ls.length, sensors: ls },
             {},
             corsHeaders
           );
@@ -1094,7 +1119,9 @@ export default {
             environment: env.ENVIRONMENT,
             endpoints: [
               'GET  /api/rain-gauges         — live proxy of upstream rain totals',
-              'GET  /api/rain-gauges-uptime  — uptime_24h + uptime_1h per gauge from D1',
+              'GET  /api/weather-stations    — live proxy of WS sensor readings',
+              'GET  /api/level-sensors       — live proxy of water level + battery',
+              'GET  /api/rain-gauges-uptime  — uptime_24h + uptime_1h per device from D1',
               'POST /api/sync-rain-gauges    — manual sync trigger (cron does this every 15 min in prod)',
             ],
           },

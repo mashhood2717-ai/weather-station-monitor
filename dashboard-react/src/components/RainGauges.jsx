@@ -4,6 +4,7 @@ import { Card, Statistic, Row, Col, Input, Select, Button, Table, Tag, Space, Sp
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { RAIN_GAUGES_API_BASE } from '../utils/constants';
 import WeatherStationsView from './WeatherStationsView';
+import LevelSensorsView from './LevelSensorsView';
 import DeviceMap from './DeviceMap';
 
 const { Text } = Typography;
@@ -45,10 +46,11 @@ export default function RainGauges({ isDark }) {
     // Sub-toggle inside this tab: rain gauges (87) vs weather stations (3).
     // The two views have completely different columns / charts / modals, so
     // they're separate components — this state just picks which one to render.
-    const [subView, setSubView] = useState('rg'); // 'rg' | 'ws'
+    const [subView, setSubView] = useState('rg'); // 'rg' | 'ws' | 'ls'
     // Reported up by WeatherStationsView so the toggle can show a real count.
     // null until that view has loaded at least once.
     const [wsCount, setWsCount] = useState(null);
+    const [lsCount, setLsCount] = useState(null);
 
     const [gauges, setGauges] = useState([]);
     const [lastUpdated, setLastUpdated] = useState(null);
@@ -737,10 +739,12 @@ export default function RainGauges({ isDark }) {
                         so it shows a dash until then rather than a wrong number. */}
                     <Radio.Button value="rg">🌧️ Rain Gauges ({gauges.length})</Radio.Button>
                     <Radio.Button value="ws">🌤️ Weather Stations ({wsCount ?? '—'})</Radio.Button>
+                    <Radio.Button value="ls">🌊 Level Sensors ({lsCount ?? '—'})</Radio.Button>
                 </Radio.Group>
             </div>
 
             {subView === 'ws' && <WeatherStationsView isDark={isDark} onCount={setWsCount} />}
+            {subView === 'ls' && <LevelSensorsView isDark={isDark} onCount={setLsCount} />}
             {subView === 'rg' && (
                 <>
             {/* Stat Cards */}
