@@ -704,107 +704,147 @@ async function hubPageFetch(env, url, page) {
   return response;
 }
 
-// Fetch all stations from HubService API (your main API)
-async function fetchAllStationsFromHubService(env) {
-  try {
-    const allStations = [];
+// ============================================================
+// TWO-TIER STATION FETCH
+//
+// The station list used to be requested with `socketLastUpdate: 1`, which drags
+// in socketLastUpdate.servicesResponses — the raw upstream payload per station.
+// That is ~1.5 MB per page, ~9 MB for the six pages, and it is 99% of the bytes.
+// Everything the dashboard actually shows except rainfall and wind comes from a
+// handful of scalar fields.
+//
+// Measured against the live API:
+//     socketLastUpdate.temp only          12 KB/page,   68 ms
+//     ...plus servicesResponses         1569 KB/page,  545 ms
+//
+// So the identity/status/temperature fetch is now LIGHT, and the rain/wind data
+// is fetched separately on a slower cycle. The point is not just speed: when
+// HubService slows down, a 9 MB read is the first thing to time out, and that
+// was taking the whole endpoint with it — every station came back Unknown and
+// offline because one oversized request missed its deadline.
+//
+// HubService supports dotted sub-field projection; verified 2026-08-08.
+// ============================================================
+const HUB_LIGHT_FIELDS = JSON.stringify({
+  // Verified 2026-07-28: HubService returns `long`, not `lng`. Both are requested
+  // so a rename upstream cannot silently drop coordinates; readers use `lng ?? long`.
+  stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
+  status: 1, apiSource: 1, apiType: 1, ownedBy: 1, 'socketLastUpdate.temp': 1,
+});
+const HUB_RAINWIND_FIELDS = JSON.stringify({
+  stationID: 1, 'socketLastUpdate.servicesResponses': 1,
+});
 
-    // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={}).
-    // Verified against the live API 2026-07-28: HubService returns `long` for longitude and
-    // has NO `lng` field at all (fields={} lists lat, long). We still request BOTH so we don't
-    // lose coordinates if HubService ever flips names; all downstream reads use
-    // `s.lng ?? s.long`, which resolves correctly today via the `long` branch.
-    const neededFields = JSON.stringify({
-      stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
-      status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
-    });
-    let failedPages = 0;
-    const deadline = Date.now() + HUB_TOTAL_BUDGET_MS;
-    for (let page = 1; page <= 6; page++) {
-      // Stop rather than pile more retries onto an already-slow HubService;
-      // the incomplete-list check below then serves the last known-good data.
-      if (Date.now() > deadline) {
-        console.warn(`⏱️ Station fetch budget exhausted at page ${page}`);
-        failedPages += (7 - page);
-        break;
+// stationID -> { rainfall, windSpeed }. Refreshed on its own schedule and kept
+// across failures: stale rain totals are far better than a dead station list.
+let hubRainWind = { map: new Map(), fetchedAt: 0, nextAttemptAt: 0 };
+const RAINWIND_TTL_MS = 10 * 60 * 1000;
+// After a failure, wait before paying the cost again rather than making every
+// request re-attempt an expensive read that is currently failing.
+const RAINWIND_FAIL_BACKOFF_MS = 5 * 60 * 1000;
+
+// Paginated station fetch shared by both tiers.
+async function fetchStationPages(env, fields, label, budgetMs) {
+  const records = [];
+  let failedPages = 0;
+  const deadline = Date.now() + budgetMs;
+
+  for (let page = 1; page <= 6; page++) {
+    // Stop rather than pile more retries onto an already-slow HubService.
+    if (Date.now() > deadline) {
+      console.warn(`⏱️ ${label} fetch budget exhausted at page ${page}`);
+      failedPages += (7 - page);
+      break;
+    }
+    const response = await hubPageFetch(
+      env,
+      `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(fields)}&globalSearch=`,
+      page
+    );
+    if (!response.ok) {
+      console.warn(`HubService ${label} page ${page} error: ${response.status}`);
+      failedPages++;
+      continue;
+    }
+    const data = await response.json();
+    if (data.record && Array.isArray(data.record)) records.push(...data.record);
+  }
+  return { records, failedPages };
+}
+
+// Pull rainfall + wind out of one station's servicesResponses. Unchanged logic,
+// lifted out so both the heavy refresh and any future caller share it.
+function parseRainWind(station) {
+  let rainfall = null;
+  let windSpeed = null;
+  const responses = station.socketLastUpdate?.servicesResponses;
+  if (!Array.isArray(responses) || responses.length === 0) return { rainfall, windSpeed };
+
+  // Walk backwards: the last entry is the most recent reading.
+  for (let i = responses.length - 1; i >= 0 && (rainfall === null || windSpeed === null); i--) {
+    const svcResp = responses[i];
+
+    // Davis: response is an array of readings.
+    if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
+      const reading = svcResp.response[0];
+      if (rainfall === null && reading.rainfall_daily_mm !== undefined && reading.rainfall_daily_mm !== null) {
+        rainfall = reading.rainfall_daily_mm;
       }
-      const response = await hubPageFetch(
-        env,
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`,
-        page
-      );
-
-      if (!response.ok) {
-        console.warn(`HubService API page ${page} error: ${response.status}`);
-        failedPages++;
-        continue;
-      }
-
-      const data = await response.json();
-      if (data.record && Array.isArray(data.record)) {
-        // Extract temperature and rainfall from socketLastUpdate
-        const processedRecords = data.record.map(station => {
-          let temperature = null;
-          let rainfall = null;
-          let windSpeed = null;
-
-          // Get temp from socketLastUpdate (already in Celsius)
-          if (station.socketLastUpdate && station.socketLastUpdate.temp !== undefined && station.socketLastUpdate.temp !== null && station.socketLastUpdate.temp !== 'N/A') {
-            temperature = parseFloat(station.socketLastUpdate.temp);
-            if (isNaN(temperature)) temperature = null;
-          }
-
-          // Try to get rainfall and wind speed from socketLastUpdate.servicesResponses if available
-          if (station.socketLastUpdate && station.socketLastUpdate.servicesResponses && Array.isArray(station.socketLastUpdate.servicesResponses) && station.socketLastUpdate.servicesResponses.length > 0) {
-            // Check last entry first (most recent data)
-            for (let i = station.socketLastUpdate.servicesResponses.length - 1; i >= 0 && (rainfall === null || windSpeed === null); i--) {
-              const svcResp = station.socketLastUpdate.servicesResponses[i];
-
-              // Davis format: response is an array with rainfall_daily_mm and wind_speed_hi_last_10_min
-              if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
-                const reading = svcResp.response[0];
-                if (rainfall === null && reading.rainfall_daily_mm !== undefined && reading.rainfall_daily_mm !== null) {
-                  rainfall = reading.rainfall_daily_mm;
-                }
-                // Davis wind speed: wind_speed_hi_last_10_min (highest gust in last 10 min, in mph - convert to km/h)
-                if (windSpeed === null && reading.wind_speed_hi_last_10_min !== undefined && reading.wind_speed_hi_last_10_min !== null) {
-                  windSpeed = parseFloat((reading.wind_speed_hi_last_10_min * 1.60934).toFixed(1)); // mph to km/h
-                }
-              }
-
-              // WU format: response.observations[0].imperial.precipTotal and windGust
-              if ((rainfall === null || windSpeed === null) && svcResp.response && svcResp.response.observations && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
-                const obs = svcResp.response.observations[0];
-                if (obs.imperial) {
-                  // Rainfall: convert inches to mm
-                  if (rainfall === null && obs.imperial.precipTotal !== undefined && obs.imperial.precipTotal !== null) {
-                    rainfall = parseFloat((obs.imperial.precipTotal * 25.4).toFixed(1));
-                  }
-                  // Wind gust: convert mph to km/h
-                  if (windSpeed === null && obs.imperial.windGust !== undefined && obs.imperial.windGust !== null) {
-                    windSpeed = parseFloat((obs.imperial.windGust * 1.60934).toFixed(1));
-                  }
-                }
-              }
-            }
-          }
-
-          // Normalize apiSource: fix missing/incorrect values (e.g. API keys, nulls)
-          const normalizedSource = normalizeApiSource(station);
-
-          return {
-            ...station,
-            apiSource: normalizedSource,
-            temperature,
-            rainfall,
-            windSpeed
-          };
-        });
-        allStations.push(...processedRecords);
+      // Highest gust in the last 10 min, mph -> km/h.
+      if (windSpeed === null && reading.wind_speed_hi_last_10_min !== undefined && reading.wind_speed_hi_last_10_min !== null) {
+        windSpeed = parseFloat((reading.wind_speed_hi_last_10_min * 1.60934).toFixed(1));
       }
     }
 
-    if (allStations.length === 0) {
+    // WU: response.observations[0].imperial.
+    if ((rainfall === null || windSpeed === null) && svcResp.response && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
+      const obs = svcResp.response.observations[0];
+      if (obs.imperial) {
+        if (rainfall === null && obs.imperial.precipTotal !== undefined && obs.imperial.precipTotal !== null) {
+          rainfall = parseFloat((obs.imperial.precipTotal * 25.4).toFixed(1)); // in -> mm
+        }
+        if (windSpeed === null && obs.imperial.windGust !== undefined && obs.imperial.windGust !== null) {
+          windSpeed = parseFloat((obs.imperial.windGust * 1.60934).toFixed(1)); // mph -> km/h
+        }
+      }
+    }
+  }
+  return { rainfall, windSpeed };
+}
+
+// Refresh the rain/wind map. Never throws: on failure the previous map is kept
+// and retried after a backoff, so a slow HubService costs freshness, not uptime.
+async function refreshRainWindIfStale(env) {
+  const now = Date.now();
+  if (now < hubRainWind.nextAttemptAt) return;
+  if (hubRainWind.map.size > 0 && now - hubRainWind.fetchedAt < RAINWIND_TTL_MS) return;
+
+  try {
+    const { records, failedPages } = await fetchStationPages(env, HUB_RAINWIND_FIELDS, 'rain/wind', HUB_TOTAL_BUDGET_MS);
+    if (failedPages > 0 || records.length === 0) {
+      throw new Error(`incomplete rain/wind fetch (${failedPages} pages failed, ${records.length} records)`);
+    }
+    const map = new Map();
+    for (const rec of records) map.set(String(rec.stationID), parseRainWind(rec));
+    hubRainWind = { map, fetchedAt: Date.now(), nextAttemptAt: 0 };
+    console.log(`🌧️ Rain/wind map refreshed for ${map.size} stations`);
+  } catch (e) {
+    hubRainWind.nextAttemptAt = Date.now() + RAINWIND_FAIL_BACKOFF_MS;
+    const ageMin = hubRainWind.fetchedAt ? Math.floor((Date.now() - hubRainWind.fetchedAt) / 60000) : null;
+    console.warn(
+      `⚠️ Rain/wind refresh failed (${e.message}); ` +
+      (ageMin === null ? 'no previous data' : `keeping ${ageMin}m-old values`) +
+      `, retrying in ${RAINWIND_FAIL_BACKOFF_MS / 60000}m`
+    );
+  }
+}
+
+// Fetch all stations from HubService API (your main API)
+async function fetchAllStationsFromHubService(env) {
+  try {
+    const { records, failedPages } = await fetchStationPages(env, HUB_LIGHT_FIELDS, 'stations', HUB_TOTAL_BUDGET_MS);
+
+    if (records.length === 0) {
       throw new Error('No stations retrieved from HubService API');
     }
 
@@ -816,18 +856,46 @@ async function fetchAllStationsFromHubService(env) {
     // known-good list rather than a silently truncated one.
     if (failedPages > 0) {
       throw new Error(
-        `Incomplete station list: ${failedPages} of 6 pages failed, got only ${allStations.length} stations`
+        `Incomplete station list: ${failedPages} of 6 pages failed, got only ${records.length} stations`
       );
     }
 
-    // Misol stations carry no weather in servicesResponses — top them up from the
-    // nowcast route before anything downstream reads .rainfall/.windSpeed.
-    try {
-      await applyNowcastFallback(env, allStations);
-    } catch (e) {
-      // A rate-limited or failing nowcast must not sink the whole sync; the
-      // affected stations simply keep the nulls they already had.
-      console.warn('Nowcast fallback failed:', e.message);
+    // Rain/wind rides its own cache and must never break the station list.
+    await refreshRainWindIfStale(env);
+    const rainWindFresh = hubRainWind.map.size > 0;
+
+    const allStations = records.map((station) => {
+      let temperature = null;
+      const rawTemp = station.socketLastUpdate?.temp;
+      if (rawTemp !== undefined && rawTemp !== null && rawTemp !== 'N/A') {
+        const parsed = parseFloat(rawTemp);
+        if (!isNaN(parsed)) temperature = parsed;
+      }
+
+      const rw = hubRainWind.map.get(String(station.stationID)) || { rainfall: null, windSpeed: null };
+
+      return {
+        ...station,
+        apiSource: normalizeApiSource(station),
+        temperature,
+        rainfall: rw.rainfall,
+        windSpeed: rw.windSpeed,
+      };
+    });
+
+    // Misol stations carry no weather in servicesResponses, so they need the
+    // nowcast route. Only run it when the rain/wind map is populated: if that
+    // fetch failed, EVERY station reads null and this would fan out across the
+    // whole network instead of the ~13 Misol ones, hammering a rate-limited
+    // route for nothing.
+    if (rainWindFresh) {
+      try {
+        await applyNowcastFallback(env, allStations);
+      } catch (e) {
+        console.warn('Nowcast fallback failed:', e.message);
+      }
+    } else {
+      console.warn('⏭️ Skipping nowcast fallback — no rain/wind baseline this cycle');
     }
 
     console.log(`✅ Fetched ${allStations.length} stations from HubService`);
