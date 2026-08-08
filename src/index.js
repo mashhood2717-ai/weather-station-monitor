@@ -90,6 +90,14 @@ const API_CACHE_TTL = {
   '/api/storage-stats': 900_000,         // 15 min
 };
 
+// How long an expired entry may still be SERVED while a refresh runs behind it.
+//
+// Nobody should ever wait on HubService. It throttles Cloudflare egress — 5-42s
+// per cache miss, against 65-117ms to an ordinary host — so a plain expiry meant
+// whoever arrived first after the TTL paid that cost with a blank screen. Past
+// this window the data is too old to be worth showing and we block instead.
+const SWR_MAX_AGE_MS = 60 * 60 * 1000;
+
 function getCachedResponse(cacheKey) {
   const entry = apiResponseCache.get(cacheKey);
   if (entry && (Date.now() - entry.cachedAt) < entry.ttl) {
@@ -98,8 +106,23 @@ function getCachedResponse(cacheKey) {
       headers: { ...entry.headers, 'X-Cache': 'HIT' },
     });
   }
-  apiResponseCache.delete(cacheKey); // expired
+  // Deliberately NOT deleted on expiry — an expired entry is still the best
+  // thing to show while the refresh happens. getStaleEntry() reaps it once it
+  // passes SWR_MAX_AGE_MS.
   return null;
+}
+
+// An expired-but-recent entry, usable for stale-while-revalidate.
+function getStaleEntry(cacheKey) {
+  const entry = apiResponseCache.get(cacheKey);
+  if (!entry) return null;
+  const age = Date.now() - entry.cachedAt;
+  if (age < entry.ttl) return null; // fresh; getCachedResponse handles it
+  if (age > SWR_MAX_AGE_MS) {
+    apiResponseCache.delete(cacheKey);
+    return null;
+  }
+  return entry;
 }
 
 // ============================================================
@@ -159,7 +182,12 @@ async function getEdgeCached(request, url) {
     // freshness here, not the browser.
     delete headers['cache-control'];
     delete headers['Cache-Control'];
-    return { body, headers };
+    // When the entry was actually computed, so the caller can tell fresh from
+    // stale rather than trusting the Cache API's much longer expiry.
+    const cachedAt = Number(headers['x-cached-at'] || headers['X-Cached-At']) || Date.now();
+    delete headers['x-cached-at'];
+    delete headers['X-Cached-At'];
+    return { body, headers, cachedAt };
   } catch {
     return null; // cache trouble must never break the request
   }
@@ -173,8 +201,12 @@ async function putEdgeCached(request, url, body, headers, ttlMs) {
       new Response(body, {
         headers: {
           ...headers,
-          // Cache API honours this for expiry.
-          'Cache-Control': `public, max-age=${Math.floor(ttlMs / 1000)}`,
+          // Kept for the whole stale-while-revalidate window, not just the TTL.
+          // Freshness is decided by X-Cached-At below; if the entry expired here
+          // at the TTL there would be no stale copy for other isolates to serve,
+          // and every isolate would take its own 5-42s HubService hit.
+          'Cache-Control': `public, max-age=${Math.floor(SWR_MAX_AGE_MS / 1000)}`,
+          'X-Cached-At': String(Date.now()),
         },
       })
     );
@@ -184,6 +216,30 @@ async function putEdgeCached(request, url, body, headers, ttlMs) {
 }
 
 async function cacheAndReturn(cacheKey, ttl, responsePromise, edgeCtx = null) {
+  // Stale-while-revalidate. If an expired-but-recent copy exists, hand it back
+  // immediately and let the refresh finish in the background. This is what keeps
+  // page loads at ~1s even when HubService is taking 40s to answer the Worker.
+  const stale = getStaleEntry(cacheKey);
+  if (stale && edgeCtx?.ctx?.waitUntil) {
+    edgeCtx.ctx.waitUntil(
+      storeResponse(cacheKey, ttl, responsePromise, edgeCtx).catch((e) =>
+        console.warn(`Background revalidate failed for ${cacheKey}: ${e.message}`)
+      )
+    );
+    const ageSec = Math.floor((Date.now() - stale.cachedAt) / 1000);
+    return new Response(stale.body, {
+      status: stale.status,
+      headers: { ...stale.headers, 'X-Cache': 'STALE', 'X-Cache-Age': String(ageSec) },
+    });
+  }
+
+  return storeResponse(cacheKey, ttl, responsePromise, edgeCtx);
+}
+
+// Await a handler's response, store it in both cache tiers, and return it.
+// Split out of cacheAndReturn so the stale-while-revalidate path can run exactly
+// the same store logic in the background without returning anything to a client.
+async function storeResponse(cacheKey, ttl, responsePromise, edgeCtx = null) {
   const response = await responsePromise;
   // Never cache a degraded result. It is a 200, but it carries fallback data
   // rather than live data, and caching it turns a momentary upstream blip into
@@ -1200,11 +1256,18 @@ export default {
         // isolate here, which is what removes the 5-60s cold-start responses.
         const edge = await getEdgeCached(request, url);
         if (edge) {
-          // Refill L1 so repeat hits on this isolate skip the edge lookup too.
+          // Refill L1 with the ORIGINAL timestamp, not now(). Stamping it fresh
+          // would make an hour-old edge entry look newly computed and it would
+          // never be revalidated.
           apiResponseCache.set(cacheKey, {
-            body: edge.body, status: 200, headers: edge.headers, ttl: cacheTTL, cachedAt: Date.now(),
+            body: edge.body, status: 200, headers: edge.headers, ttl: cacheTTL, cachedAt: edge.cachedAt,
           });
-          return new Response(edge.body, { status: 200, headers: { ...edge.headers, 'X-Cache': 'EDGE' } });
+          // Only serve it directly if genuinely fresh. If it is stale, fall
+          // through: the route runs, and cacheAndReturn's stale-while-revalidate
+          // path serves this copy instantly while refreshing behind it.
+          if (Date.now() - edge.cachedAt < cacheTTL) {
+            return new Response(edge.body, { status: 200, headers: { ...edge.headers, 'X-Cache': 'EDGE' } });
+          }
         }
       }
       // Passed to cacheAndReturn so successful responses populate the edge cache.
