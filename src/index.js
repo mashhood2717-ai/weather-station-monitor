@@ -1715,28 +1715,16 @@ export default {
     const now = new Date();
     console.log('Cron triggered:', now.toISOString());
 
-    // Check if it's time for daily report (8 AM PKT = 3:00 UTC)
-    const utcHour = now.getUTCHours();
-    const utcMinute = now.getUTCMinutes();
-    if (utcHour === 3 && utcMinute < 30) {
-      // Same once-per-day guard as the HTTP route. The window is 30 minutes
-      // wide, so a 15-minute cron lands in it twice and would otherwise send
-      // the report twice.
-      try {
-        const dateKey = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
-        if (await alreadySentToday(env, dateKey)) {
-          console.log(`Daily email report already sent for ${dateKey}; skipping`);
-        } else {
-          console.log('Sending daily email report...');
-          const result = await sendDailyEmailReport(env);
-          if (result?.success) {
-            await markSentToday(env, dateKey);
-            console.log('Daily email report sent successfully');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to send daily email report:', e.message);
-      }
+    // Daily report. Timing and the once-per-day guard both live in
+    // maybeSendDailyReport, so this path and the HTTP one cannot drift apart —
+    // the old hard-coded 03:00-03:30 UTC window here was a second, different
+    // schedule that also happened to be wide enough to fire twice.
+    try {
+      const outcome = await maybeSendDailyReport(env);
+      if (outcome.skipped) console.log(`Daily report skipped: ${outcome.reason}`);
+      else if (outcome.success) console.log(`Daily report sent at ${outcome.sentAt}`);
+    } catch (e) {
+      console.error('Failed to send daily email report:', e.message);
     }
 
     // Sync stations (now uses D1 batch for ~10x fewer DB round-trips)
@@ -2315,26 +2303,65 @@ async function markSentToday(env, dateKey) {
   ).bind(dateKey).run();
 }
 
+// Local time in Asia/Karachi. Built from formatToParts rather than string
+// parsing so it is not at the mercy of locale formatting, and because some ICU
+// builds report midnight as hour 24.
+function pktNow(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+      .formatToParts(date)
+      .filter((p) => p.type !== 'literal')
+      .map((p) => [p.type, p.value])
+  );
+  let hour = parseInt(parts.hour, 10);
+  if (hour === 24) hour = 0;
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`, // YYYY-MM-DD, sorts cleanly
+    hour,
+    minute: parseInt(parts.minute, 10),
+  };
+}
+
+// The daily report goes out at 10:00 PKT, once per day.
+//
+// The external scheduler fires on its own interval and knows nothing about
+// this, so the timing has to be enforced here: hold until 10:00 local, send on
+// the first fire at or after it, then suppress the rest of the day. There is no
+// upper bound on purpose — if the scheduler is down at 10 and only comes back
+// at 14:00, a late report beats no report.
+const DAILY_REPORT_HOUR_PKT = 10;
+
+async function maybeSendDailyReport(env, { force = false } = {}) {
+  const { dateKey, hour, minute } = pktNow();
+  const clock = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} PKT`;
+
+  if (!force) {
+    if (hour < DAILY_REPORT_HOUR_PKT) {
+      return { success: true, skipped: true, reason: `Before ${DAILY_REPORT_HOUR_PKT}:00 PKT (now ${clock})`, date: dateKey };
+    }
+    if (await alreadySentToday(env, dateKey)) {
+      return { success: true, skipped: true, reason: `Already sent for ${dateKey}`, date: dateKey };
+    }
+  }
+
+  const result = await sendDailyEmailReport(env);
+  // Only record a success, so a failed send is retried on the next fire.
+  if (result?.success) await markSentToday(env, dateKey);
+  return { ...result, date: dateKey, sentAt: clock, forced: force || undefined };
+}
+
 async function handleSendDailyReport(env, corsHeaders, url) {
   const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
     status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
-
   try {
-    // en-CA gives YYYY-MM-DD, which sorts and compares cleanly.
-    const dateKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
-    const force = url?.searchParams.get('force') === '1';
-
-    if (!force && await alreadySentToday(env, dateKey)) {
-      // 200, not an error: a scheduler firing more often than daily is now the
-      // expected case, and it should see a calm no-op rather than a failure.
-      return json({ success: true, skipped: true, reason: `Daily report already sent for ${dateKey}`, date: dateKey });
-    }
-
-    const result = await sendDailyEmailReport(env);
-    // Only record success, so a failed send can be retried on the next fire.
-    if (result?.success) await markSentToday(env, dateKey);
-    return json({ ...result, date: dateKey, forced: force || undefined });
+    // 200 even when skipped: a scheduler firing more often than daily is the
+    // expected case and should see a calm no-op, not a failure.
+    return json(await maybeSendDailyReport(env, { force: url?.searchParams.get('force') === '1' }));
   } catch (error) {
     return json({ error: error.message }, 500);
   }
