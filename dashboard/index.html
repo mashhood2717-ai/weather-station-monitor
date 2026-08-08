@@ -6228,8 +6228,12 @@
                 // Initialize uptime trend line chart with saved preference
                 initUptimeTrendLineChart(currentUptimeRange);
 
-                // Load uptime percentages from Worker
-                await loadUptimePercentages(force);
+                // /api/uptime-percentages is no longer fetched on refresh. It returned
+                // the same fields as /api/stations-with-uptime plus only uptime_1h,
+                // checks_1h and tracking_since — which that endpoint now supplies
+                // directly. Dropping it halves the rows read per refresh and removes
+                // the overwrite that let a stale second response replace fresh data.
+                // The function is kept: the range selector still calls it with ?range=.
 
                 // If user has selected a time range other than 24h, re-fetch that range
                 // so the auto-refresh doesn't reset their selected period

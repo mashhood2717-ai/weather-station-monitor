@@ -2898,11 +2898,20 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
     }
 
     // Single optimized query for all uptime data
+    // uptime_1h / checks_1h / tracking_since were the ONLY fields the dashboards
+    // still needed /api/uptime-percentages for. Everything else that endpoint
+    // returned duplicated this one — and the dashboards used it to overwrite
+    // these same fields, which is how a stale second call could replace fresh
+    // data. Computing them here as extra aggregates over the same scan removes
+    // the second request entirely; no additional table scan.
     const uptimeSQL = `
-      SELECT station_id, 
-             COUNT(*) as checks_24h, 
+      SELECT station_id,
+             COUNT(*) as checks_24h,
              SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as uptime_24h,
-             MAX(CASE WHEN is_online = 1 THEN datetime(timestamp, '+5 hours') END) as last_seen
+             MAX(CASE WHEN is_online = 1 THEN datetime(timestamp, '+5 hours') END) as last_seen,
+             SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as checks_1h,
+             SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') AND is_online = 1 THEN 1 ELSE 0 END) as online_1h,
+             MIN(timestamp) as tracking_since
       FROM status_logs
       WHERE timestamp >= datetime('now', '-24 hours')
       GROUP BY station_id
@@ -2915,7 +2924,10 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         uptimeMap[String(r.station_id)] = {
           checks_24h: r.checks_24h || 0,
           uptime_24h: r.uptime_24h !== null ? Number(parseFloat(r.uptime_24h).toFixed(2)) : null,
-          last_seen: r.last_seen
+          last_seen: r.last_seen,
+          checks_1h: r.checks_1h || 0,
+          uptime_1h: r.checks_1h > 0 ? Number(((r.online_1h / r.checks_1h) * 100).toFixed(2)) : null,
+          tracking_since: r.tracking_since || null,
         };
       });
     } catch (e) {
@@ -2929,7 +2941,11 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
         ...s,
         checks_24h: up.checks_24h || 0,
         uptime_24h: up.uptime_24h !== undefined ? up.uptime_24h : null,
-        last_seen: up.last_seen || null
+        last_seen: up.last_seen || null,
+        // Carried so the dashboards no longer need /api/uptime-percentages.
+        checks_1h: up.checks_1h || 0,
+        uptime_1h: up.uptime_1h !== undefined ? up.uptime_1h : null,
+        tracking_since: up.tracking_since || null,
       };
     });
 

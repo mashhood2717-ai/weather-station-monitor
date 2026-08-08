@@ -48,18 +48,11 @@ export function useStations() {
             console.warn('Could not load dashboard stats:', e.message);
         }
 
-        // Fetch last API sync time from storage stats
-        try {
-            const syncResp = await axios.get(`${API_BASE}/api/storage-stats${bust}`);
-            if (syncResp.data && syncResp.data.success && syncResp.data.date_range && syncResp.data.date_range.newest) {
-                const syncDate = new Date(`${syncResp.data.date_range.newest}Z`);
-                if (!Number.isNaN(syncDate.getTime())) {
-                    setLastSync(syncDate);
-                }
-            }
-        } catch (e) {
-            console.warn('Could not load storage stats:', e.message);
-        }
+        // /api/storage-stats is no longer fetched here. It was called only for
+        // date_range.newest — the newest status_logs timestamp — which is just the
+        // maximum last_seen across the stations payload we are about to fetch
+        // anyway. Derived below instead of spending a second request and a second
+        // scan of status_logs on it.
 
         // Fetch live station data from HubService + D1
         try {
@@ -98,51 +91,32 @@ export function useStations() {
                 };
             });
 
-            // Load real-time uptime percentages
-            try {
-                // MUST carry the same cache-buster. This response overwrites status,
-                // temperature, last_update and uptime on every station, so a cached
-                // copy here silently replaces the fresh values fetched above — the
-                // page then shows OLDER data after a refresh, not newer.
-                const uptimeResp = await axios.post(`${API_BASE}/api/uptime-percentages${bust}`, {});
-                if (uptimeResp.data && uptimeResp.data.uptime_data) {
-                    const uptimeMap = {};
-                    uptimeResp.data.uptime_data.forEach((item) => {
-                        uptimeMap[String(item.station_id)] = item;
-                    });
-                    processedStations = processedStations.map((station) => {
-                        const apiData = uptimeMap[String(station.station_id)];
-                        if (apiData) {
-                            // Mirror dashboard/index.html line 5340-5350: unconditionally accept
-                            // /api/uptime-percentages values. Using `||` for checks_24h treats 0
-                            // as falsy and keeps stale non-zero counts, which then sneaks stations
-                            // back into chart averages they should be excluded from.
-                            return {
-                                ...station,
-                                status: apiData.status,
-                                is_online: apiData.is_active,
-                                temperature: apiData.temperature,
-                                last_update: apiData.last_update,
-                                uptime_24h: apiData.uptime_24h,
-                                checks_24h: apiData.checks_24h,
-                                uptime_1h: apiData.uptime_1h,
-                                checks_1h: apiData.checks_1h,
-                                tracking_since: apiData.tracking_since,
-                                uptime: apiData.uptime_24h !== undefined ? apiData.uptime_24h : (apiData.is_active === 1 ? 100.0 : 0.0),
-                            };
-                        }
-                        return station;
-                    });
-                }
-            } catch (e) {
-                console.warn('Could not load uptime percentages:', e.message);
-            }
+            // /api/uptime-percentages used to be fetched here and its values written
+            // over status, temperature, last_update and uptime on every station.
+            // It returned nothing that /api/stations-with-uptime does not now return
+            // — uptime_1h, checks_1h and tracking_since were the only additions, and
+            // that endpoint supplies them directly as of this change. Removing the
+            // call halves the rows read per refresh, and removes the overwrite that
+            // let a stale second response replace data the first call had just
+            // fetched fresh.
 
             setStations(processedStations);
-            const lastSync = payload.stations && payload.stations.length > 0
-                ? new Date(payload.stations[0].last_update || new Date())
-                : new Date();
-            setLastUpdated(lastSync);
+            setLastUpdated(new Date());
+
+            // Last sync = newest reading across the network, which is exactly what
+            // /api/storage-stats used to be called for (date_range.newest is the
+            // max status_logs timestamp). Derived from the payload we already have
+            // instead of a second request. last_seen is already PKT-shifted by the
+            // Worker, so it is compared as a plain string and parsed as local time.
+            const newestSeen = processedStations
+                .map((s) => s.last_seen)
+                .filter(Boolean)
+                .sort()
+                .pop();
+            if (newestSeen) {
+                const d = new Date(newestSeen.replace(' ', 'T'));
+                if (!Number.isNaN(d.getTime())) setLastSync(d);
+            }
         } catch (err) {
             console.error('Error fetching stations:', err);
             setError(err.message);
