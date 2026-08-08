@@ -434,6 +434,113 @@ function normalizeApiSource(station) {
   return 'Davis';
 }
 
+// ============================================================
+// NOWCAST FALLBACK — the only source of rain/wind for Misol stations
+//
+// /wms/stations returns `socketLastUpdate.servicesResponses`, which carries the
+// raw upstream payload for Davis (rainfall_daily_mm) and WU (imperial.precipTotal).
+// Misol stations get NO weather in that array — their entries are either `null` or
+// bare {_id,date,time,timestamp} stubs — so the parser below always yielded null and
+// the dashboard showed "-" for all 13 active Misol gauges even though HubService had
+// the data. It lives on a different route:
+//
+//   POST /wms/recentStats/all-recent-data  {"stationID":"C13"}
+//     -> record[0].nowcast.rainfall  (mm, daily accumulation)
+//     -> record[0].nowcast.windGust  (km/h)
+//
+// Verified 2026-08-07 against stations where BOTH sources exist: nowcast.rainfall
+// and nowcast.windGust match the servicesResponses parse exactly (Davis 224681
+// 0.6/0.6mm and 6.4/6.44km/h, WU IKUNRI2 0/0mm and 17.7/17.7km/h). So this is the
+// same measurement, not a model estimate — safe to use as a drop-in fallback.
+//
+// NOTE the field choice: nowcast.windSpeed is the *average* and does NOT match
+// (2.41 vs 6.4). windGust is the metric this dashboard already reports.
+// ============================================================
+const NOWCAST_URL = 'https://hubservice.weatherwalay.com/wms/recentStats/all-recent-data';
+// This route is rate limited to 10 requests per window, counted separately from
+// /wms/stations. Stay under it: 5 at a time, with a pause between batches.
+const NOWCAST_BATCH_SIZE = 5;
+const NOWCAST_BATCH_PAUSE_MS = 300;
+// Only 13 stations need this today. The cap stops a HubService change that nulls
+// every servicesResponse from turning one sync into 294 subrequests (Workers caps
+// subrequests per invocation, and we already spend 6 on the station pages).
+const NOWCAST_MAX_STATIONS = 30;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// One nowcast lookup. Returns { rainfall, windSpeed } — either may be null.
+async function fetchNowcastFor(env, stationID) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await hubFetch(env, NOWCAST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stationID: String(stationID) })
+    });
+
+    // 429 is expected under burst; the window is ~1s, so one honoured retry clears it.
+    if (response.status === 429 && attempt === 0) {
+      const retryAfter = parseFloat(response.headers.get('retry-after'));
+      await sleep(Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 5000) : 1000);
+      continue;
+    }
+    if (!response.ok) {
+      console.warn(`Nowcast for ${stationID}: HTTP ${response.status}`);
+      return { rainfall: null, windSpeed: null };
+    }
+
+    const data = await response.json().catch(() => null);
+    const nowcast = data?.record?.[0]?.nowcast;
+    if (!nowcast) return { rainfall: null, windSpeed: null };
+
+    const num = (v) => {
+      if (v === undefined || v === null || v === 'N/A') return null;
+      const n = parseFloat(v);
+      return isNaN(n) ? null : n;
+    };
+    return { rainfall: num(nowcast.rainfall), windSpeed: num(nowcast.windGust) };
+  }
+  return { rainfall: null, windSpeed: null };
+}
+
+// Fill rainfall/windSpeed for stations the servicesResponses parse could not resolve.
+// Mutates the records in place; failures leave the existing nulls untouched.
+async function applyNowcastFallback(env, stations) {
+  // Offline stations have no current reading to report, so spending a rate-limited
+  // request on them would only surface a stale number.
+  const needsNowcast = stations.filter(
+    (s) => s.status === 'Active' && (s.rainfall === null || s.windSpeed === null)
+  );
+  if (needsNowcast.length === 0) return 0;
+
+  const targets = needsNowcast.slice(0, NOWCAST_MAX_STATIONS);
+  if (needsNowcast.length > targets.length) {
+    console.warn(`⚠️ ${needsNowcast.length} stations need nowcast; capped at ${NOWCAST_MAX_STATIONS}`);
+  }
+
+  let filled = 0;
+  for (let i = 0; i < targets.length; i += NOWCAST_BATCH_SIZE) {
+    const batch = targets.slice(i, i + NOWCAST_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map((s) =>
+        fetchNowcastFor(env, s.stationID).catch((e) => {
+          console.warn(`Nowcast for ${s.stationID} failed:`, e.message);
+          return { rainfall: null, windSpeed: null };
+        })
+      )
+    );
+    batch.forEach((station, idx) => {
+      const { rainfall, windSpeed } = results[idx];
+      // Never overwrite a value servicesResponses already gave us.
+      if (station.rainfall === null && rainfall !== null) { station.rainfall = rainfall; filled++; }
+      if (station.windSpeed === null && windSpeed !== null) station.windSpeed = windSpeed;
+    });
+    if (i + NOWCAST_BATCH_SIZE < targets.length) await sleep(NOWCAST_BATCH_PAUSE_MS);
+  }
+
+  console.log(`🌧️ Nowcast fallback: filled rainfall for ${filled}/${targets.length} stations`);
+  return filled;
+}
+
 // Fetch all stations from HubService API (your main API)
 async function fetchAllStationsFromHubService(env) {
   try {
@@ -525,6 +632,16 @@ async function fetchAllStationsFromHubService(env) {
 
     if (allStations.length === 0) {
       throw new Error('No stations retrieved from HubService API');
+    }
+
+    // Misol stations carry no weather in servicesResponses — top them up from the
+    // nowcast route before anything downstream reads .rainfall/.windSpeed.
+    try {
+      await applyNowcastFallback(env, allStations);
+    } catch (e) {
+      // A rate-limited or failing nowcast must not sink the whole sync; the
+      // affected stations simply keep the nulls they already had.
+      console.warn('Nowcast fallback failed:', e.message);
     }
 
     console.log(`✅ Fetched ${allStations.length} stations from HubService`);
