@@ -157,11 +157,12 @@ export function useStations() {
     }, [fetchStations]);
 
     useEffect(() => {
-        // Paint from cache first so the table appears at once, then re-fetch live
-        // data in the background and update in place. HubService throttles
-        // Cloudflare egress (6-60s to the Worker, ~80ms to a laptop), so awaiting
-        // a forced fetch on mount left the dashboard blank for that whole time.
-        fetchStations(false).then(() => fetchStations(true));
+        // ONE fetch on mount, unforced. Each call already makes four API requests
+        // (dashboard-stats, storage-stats, stations-with-uptime, uptime-percentages);
+        // paint-then-refresh doubled that to eight per page load for no good
+        // reason. Forced writes now land on the canonical cache key, so the 30
+        // minute poll and the Refresh button keep this path warm and current.
+        fetchStations(false);
         // Forced, matching the production HTML dashboard. An unforced poll is
         // answered from the Worker's 5-minute cache, which stacks on top of the
         // 5-minute poll — so the view could sit ~10 minutes behind a sync that

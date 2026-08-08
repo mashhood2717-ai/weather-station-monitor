@@ -118,10 +118,31 @@ function getCachedResponse(cacheKey) {
 // cache for all of them. The in-memory map stays as a first-level lookup since
 // it avoids even the edge round-trip.
 // ============================================================
+// Cache keys ignore the `t` cache-buster.
+//
+// The dashboards append ?t=<now> when they want live data. If that param stayed
+// in the key, every forced request would write to a key nothing ever reads, the
+// canonical entry would keep expiring, and the fast "paint from cache" path
+// would be a miss every single time — which is exactly what it was doing.
+//
+// Reading still respects the buster: presence of `t` skips the lookup entirely.
+// Writing always lands on the canonical key, so a background refresh warms the
+// cache for the next page load.
+function canonicalUrl(url) {
+  const u = new URL(url.toString());
+  u.searchParams.delete('t');
+  return u;
+}
+
+function canonicalCacheKey(request, url) {
+  const u = canonicalUrl(url);
+  return request.method + ':' + u.pathname + u.search;
+}
+
 function edgeCacheKey(url) {
   // Cache API keys on the URL. Only GETs are cached — POST bodies are not part
   // of the key, so a shared entry would serve the wrong payload.
-  return new Request(url.toString(), { method: 'GET' });
+  return new Request(canonicalUrl(url).toString(), { method: 'GET' });
 }
 
 async function getEdgeCached(request, url) {
@@ -1165,9 +1186,12 @@ export default {
 
       // ---- Cacheable API Routes (check in-memory cache first) ----
       const cacheTTL = API_CACHE_TTL[path];
-      if (cacheTTL) {
-        // Include query params in cache key, and method to separate GET/POST
-        const cacheKey = request.method + ':' + url.pathname + url.search;
+      // `?t=` means the caller explicitly wants live data, so skip the lookup.
+      // The result is still WRITTEN to the canonical key below, which is what
+      // keeps the fast paint path warm for the next page load.
+      const forceFresh = url.searchParams.has('t');
+      const cacheKey = canonicalCacheKey(request, url);
+      if (cacheTTL && !forceFresh) {
         // L1: this isolate's memory — cheapest, but only helps if we land on the
         // same isolate again, which is roughly half the time.
         const cached = getCachedResponse(cacheKey);
@@ -1188,7 +1212,7 @@ export default {
 
       // API Routes
       // Build cache key matching early lookup: method:path+search
-      const routeCacheKey = request.method + ':' + url.pathname + url.search;
+      const routeCacheKey = cacheKey; // canonical: ignores the ?t= buster
 
       // ---- Admin guard ----
       // These routes had no authentication and no method check, on a Worker URL
