@@ -1,6 +1,56 @@
 // Cloudflare Worker for Weatherwalay/HubService Station Monitoring
 
 // ============================================================
+// ADMIN-ONLY ROUTES
+// Maintenance, debug and destructive endpoints. Everything here either mutates
+// or deletes data, spends money (email), or exposes HubService credentials by
+// proxy. None of them is called by any dashboard.
+//
+// Fails CLOSED: with ADMIN_TOKEN unset these routes are unreachable rather than
+// open, so a missing secret degrades to "maintenance unavailable" instead of
+// "anyone can wipe the database".
+// ============================================================
+// NOT gated, and deliberately so: these are driven by an external cron-job.org
+// schedule (Cloudflare's own cron is disabled — `crons = []` in wrangler.toml),
+// and that scheduler cannot send an auth header. Gating /api/sync stopped the
+// data pipeline dead for ~50 minutes on 2026-08-08; status_logs simply stopped
+// growing. They are all INSERT/UPSERT-only, so the exposure is resource use
+// rather than data loss:
+//   /api/sync                    /api/ingest-station-samples
+//   /api/send-daily-report       /api/backfill-downtime
+//   /api/backfill-station-samples
+// If those move to authenticated calls later, add them back here.
+//
+// What stays gated is only what cannot be undone or what leaks credentials:
+// the two DELETE routes, the DDL route, and the debug/proxy routes.
+const ADMIN_ROUTES = new Set([
+  '/api/remove-404-stations',
+  '/api/cleanup',
+  '/api/drop-redundant-indexes',
+  '/api/auth-status',
+  '/api/test-hubservice',
+  '/api/test-fetch',
+  '/api/test-hub-endpoint',
+]);
+
+// Length-independent comparison. Returns false on any length mismatch first,
+// which is fine — the length of a token is not the secret.
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function isAdminRequest(request, url, env) {
+  const expected = env.ADMIN_TOKEN;
+  if (!expected) return false;
+  const provided =
+    request.headers.get('X-Admin-Token') || url.searchParams.get('admin_token') || '';
+  return safeEqual(provided, expected);
+}
+
+// ============================================================
 // AUTHENTICATION HELPERS
 // ============================================================
 
@@ -11,6 +61,10 @@ const tokenCache = new Map();
 // This avoids duplicate fetches when multiple endpoints need the same data
 let hubStationCache = { data: null, fetchedAt: 0 };
 const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
+// Last COMPLETE station list, kept without expiry as a fallback for when a fetch
+// comes back partial (HubService rate limiting). Never overwritten by a partial
+// result — that is the whole point of keeping it separate from hubStationCache.
+let hubStationLastGood = { data: null, fetchedAt: 0 };
 
 // ============================================================
 // API RESPONSE CACHE - Prevents repeated D1 queries for same data
@@ -18,6 +72,10 @@ const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
 // This alone reduces D1 reads by ~90% under high request volume.
 // ============================================================
 const apiResponseCache = new Map();
+// Entries are whole API responses and the station payload is ~90 KB, so the cap
+// is deliberately modest — the working set is a handful of routes.
+const API_CACHE_MAX_ENTRIES = 100;
+const API_CACHE_EVICT_BATCH = 20;
 const API_CACHE_TTL = {
   '/api/dashboard-stats': 600_000,       // 10 min
   '/api/stations-with-uptime': 600_000,  // 10 min
@@ -43,10 +101,29 @@ function getCachedResponse(cacheKey) {
 
 async function cacheAndReturn(cacheKey, ttl, responsePromise) {
   const response = await responsePromise;
+  // Never cache a degraded result. It is a 200, but it carries fallback data
+  // rather than live data, and caching it turns a momentary upstream blip into
+  // ten minutes of blank dashboards.
+  if (response.headers.get('X-Degraded') === '1') {
+    console.warn(`⚠️ Not caching degraded response for ${cacheKey}`);
+    return response;
+  }
   // Only cache successful responses
   if (response.status === 200) {
     const body = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
+    // Bound the map. The key includes the full query string, so any caller
+    // sending unique params (a crawler, a cache-busting loop) mints a new entry
+    // that lives for the whole TTL — unbounded growth in a 128 MB isolate, with
+    // multi-megabyte station payloads as the entries. Evict oldest-first.
+    if (apiResponseCache.size >= API_CACHE_MAX_ENTRIES) {
+      let evicted = 0;
+      for (const key of apiResponseCache.keys()) {
+        apiResponseCache.delete(key); // Map preserves insertion order
+        if (++evicted >= API_CACHE_EVICT_BATCH) break;
+      }
+      console.warn(`🧹 Response cache full — evicted ${evicted} oldest entries`);
+    }
     apiResponseCache.set(cacheKey, {
       body,
       status: 200,
@@ -69,6 +146,9 @@ async function cacheAndReturn(cacheKey, ttl, responsePromise) {
 //   - hubFetch() invalidates + re-logins + replays once when HubService 401s
 // ============================================================
 const TOKEN_CACHE_KEY = 'hubservice_jwt';
+// Floor between forced re-logins, so a burst of 401s cannot become a login storm.
+let lastForcedRefreshAt = 0;
+const FORCED_REFRESH_COOLDOWN_MS = 10_000;
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;  // renew this long before `exp`
 const TOKEN_FALLBACK_TTL_MS = 15 * 60 * 1000;  // only when `exp` is unreadable
 
@@ -155,6 +235,19 @@ const SESSION_COOKIE_NAME = 'hub_access_token';
 // because the '#' makes it hostile to .dev.vars — wrangler's dotenv parser truncates
 // at '#' even inside quotes, silently yielding "we@therwalay_dev" and a 401.
 const HUB_APP_BASIC_PASSWORD = 'we@therwalay_dev#7780';
+
+// Ceiling on any single HubService call. Their throttling stalls connections
+// instead of rejecting them, and Workers' fetch never times out on its own, so
+// this is the only thing bounding a request that would otherwise hang forever.
+// Sized for the real payload, not for a ping. The station pages request
+// socketLastUpdate.servicesResponses, which is ~1.5 MB per page — about 9 MB
+// across the 6 pages — and takes ~500ms/page from a healthy connection. 8s was
+// too tight the moment HubService slowed down, and every request then failed
+// with TimeoutError and fell through to the Unknown/offline fallback.
+const HUB_FETCH_TIMEOUT_MS = 20000;
+// The whole station-list fetch (login + 6 pages + retries) must fit in this, so
+// a degraded HubService costs one slow response rather than a dead endpoint.
+const HUB_TOTAL_BUDGET_MS = 55000;
 
 // Imported RSA public key, cached per isolate (importKey is not free).
 let hubPublicKeyPromise = null;
@@ -276,6 +369,9 @@ async function hubLogin(env, credentialString) {
   console.log('🔐 Requesting new session from HubService (encrypted envelope)...');
   const response = await fetch(`${HUB_BASE_URL}/ww-Hub/login`, {
     method: 'POST',
+    // Same reasoning as hubFetch: a throttled login stalls rather than failing,
+    // and every request funnels through here.
+    signal: AbortSignal.timeout(HUB_FETCH_TIMEOUT_MS),
     headers: {
       'Authorization': await buildEncryptedBasicAuth(env),
       'Content-Type': 'application/json'
@@ -334,7 +430,22 @@ async function getHubServiceToken(env) {
 // forceRefresh bypasses the cache and is used after HubService rejects a token.
 async function getValidToken(env, { forceRefresh = false } = {}) {
   if (forceRefresh) {
-    invalidateToken('forced refresh');
+    // Throttle forced re-logins. When HubService rejects or stalls requests,
+    // every in-flight call lands here and mints another login — which is more
+    // load on the thing already refusing us, and turns a brief upstream wobble
+    // into a self-sustaining one. Within the cooldown, reuse whatever is cached
+    // and let the caller surface the failure instead.
+    const sinceLast = Date.now() - lastForcedRefreshAt;
+    if (sinceLast < FORCED_REFRESH_COOLDOWN_MS) {
+      const cached = getCachedToken();
+      if (cached) {
+        console.warn(`⏳ Forced refresh suppressed (${sinceLast}ms since last) — reusing cached session`);
+        return cached;
+      }
+    } else {
+      lastForcedRefreshAt = Date.now();
+      invalidateToken('forced refresh');
+    }
   } else {
     const cached = getCachedToken();
     if (cached) return cached;
@@ -387,6 +498,13 @@ async function hubFetch(env, url, init = {}) {
 
   const send = async (jwt) => fetch(url, {
     ...init,
+    // HARD TIMEOUT — do not remove.
+    // When HubService throttles us it does NOT reply 429 on these routes; nginx
+    // holds the connection open. Workers' fetch has no default timeout, so an
+    // untimed call waits indefinitely and takes the whole request with it. That
+    // is exactly how /api/stations-with-uptime went from 1s to hanging past 90s
+    // while HubService was answering other callers in 60ms.
+    signal: init.signal || AbortSignal.timeout(HUB_FETCH_TIMEOUT_MS),
     headers: {
       ...(init.headers || {}),
       // Rebuilt per attempt: the envelope embeds a rotating timestamp.
@@ -465,6 +583,8 @@ const NOWCAST_BATCH_PAUSE_MS = 300;
 // every servicesResponse from turning one sync into 294 subrequests (Workers caps
 // subrequests per invocation, and we already spend 6 on the station pages).
 const NOWCAST_MAX_STATIONS = 30;
+// Wall-clock ceiling for the whole fallback.
+const NOWCAST_BUDGET_MS = 6000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -480,12 +600,12 @@ async function fetchNowcastFor(env, stationID) {
     // 429 is expected under burst; the window is ~1s, so one honoured retry clears it.
     if (response.status === 429 && attempt === 0) {
       const retryAfter = parseFloat(response.headers.get('retry-after'));
-      await sleep(Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 5000) : 1000);
+      await sleep(Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 1500) : 800);
       continue;
     }
     if (!response.ok) {
       console.warn(`Nowcast for ${stationID}: HTTP ${response.status}`);
-      return { rainfall: null, windSpeed: null };
+      return { rainfall: null, windSpeed: null, rateLimited: response.status === 429 };
     }
 
     const data = await response.json().catch(() => null);
@@ -518,7 +638,14 @@ async function applyNowcastFallback(env, stations) {
   }
 
   let filled = 0;
+  // This is a nice-to-have on a latency-critical path: rainfall for a handful of
+  // Misol stations must never be the reason the whole station list is late.
+  const deadline = Date.now() + NOWCAST_BUDGET_MS;
   for (let i = 0; i < targets.length; i += NOWCAST_BATCH_SIZE) {
+    if (Date.now() > deadline) {
+      console.warn('⏱️ Nowcast budget exhausted — remaining stations keep their nulls');
+      break;
+    }
     const batch = targets.slice(i, i + NOWCAST_BATCH_SIZE);
     const results = await Promise.all(
       batch.map((s) =>
@@ -534,6 +661,16 @@ async function applyNowcastFallback(env, stations) {
       if (station.rainfall === null && rainfall !== null) { station.rainfall = rainfall; filled++; }
       if (station.windSpeed === null && windSpeed !== null) station.windSpeed = windSpeed;
     });
+
+    // Circuit breaker. If a whole batch came back rate limited, the window is
+    // saturated and grinding through the rest just burns seconds for nothing —
+    // and that added latency is what widens the window in which concurrent
+    // station-list fetches collide and get truncated. Bail and keep the nulls.
+    if (results.every((r) => r.rateLimited)) {
+      console.warn('⏭️ Nowcast rate limited across a full batch — skipping the rest this cycle');
+      break;
+    }
+
     if (i + NOWCAST_BATCH_SIZE < targets.length) await sleep(NOWCAST_BATCH_PAUSE_MS);
   }
 
@@ -541,107 +678,266 @@ async function applyNowcastFallback(env, stations) {
   return filled;
 }
 
+// Station-page fetch with 429 handling.
+//
+// /wms/stations is rate limited to ~10 requests per short window, counted per
+// route. One dashboard load spends 6 of those, so two concurrent cache misses
+// are already enough to start getting 429s on the later pages. Without this
+// retry the caller silently dropped 50 stations per rejected page.
+const HUB_PAGE_ATTEMPTS = 3;
+async function hubPageFetch(env, url, page) {
+  let response;
+  for (let attempt = 1; attempt <= HUB_PAGE_ATTEMPTS; attempt++) {
+    try {
+      response = await hubFetch(env, url);
+    } catch (e) {
+      // AbortSignal.timeout rejects — a stalled page must not kill the whole
+      // fetch, so surface it as a failed page and let the caller decide.
+      console.warn(`HubService page ${page} attempt ${attempt} failed: ${e.name || e.message}`);
+      if (attempt === HUB_PAGE_ATTEMPTS) return new Response(null, { status: 504 });
+      await sleep(500 * attempt);
+      continue;
+    }
+    if (response.status !== 429) return response;
+
+    if (attempt < HUB_PAGE_ATTEMPTS) {
+      const retryAfter = parseFloat(response.headers.get('retry-after'));
+      // Back off a little further each attempt, and add jitter so concurrent
+      // isolates don't retry in lockstep and collide again on the same window.
+      const base = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 3000) : 1000;
+      await sleep(base * attempt + Math.random() * 250);
+      console.warn(`↻ Retrying HubService page ${page} after 429 (attempt ${attempt + 1}/${HUB_PAGE_ATTEMPTS})`);
+    }
+  }
+  return response;
+}
+
+// ============================================================
+// TWO-TIER STATION FETCH
+//
+// The station list used to be requested with `socketLastUpdate: 1`, which drags
+// in socketLastUpdate.servicesResponses — the raw upstream payload per station.
+// That is ~1.5 MB per page, ~9 MB for the six pages, and it is 99% of the bytes.
+// Everything the dashboard actually shows except rainfall and wind comes from a
+// handful of scalar fields.
+//
+// Measured against the live API:
+//     socketLastUpdate.temp only          12 KB/page,   68 ms
+//     ...plus servicesResponses         1569 KB/page,  545 ms
+//
+// So the identity/status/temperature fetch is now LIGHT, and the rain/wind data
+// is fetched separately on a slower cycle. The point is not just speed: when
+// HubService slows down, a 9 MB read is the first thing to time out, and that
+// was taking the whole endpoint with it — every station came back Unknown and
+// offline because one oversized request missed its deadline.
+//
+// HubService supports dotted sub-field projection; verified 2026-08-08.
+// ============================================================
+const HUB_LIGHT_FIELDS = JSON.stringify({
+  // Verified 2026-07-28: HubService returns `long`, not `lng`. Both are requested
+  // so a rename upstream cannot silently drop coordinates; readers use `lng ?? long`.
+  stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
+  status: 1, apiSource: 1, apiType: 1, ownedBy: 1, 'socketLastUpdate.temp': 1,
+});
+const HUB_RAINWIND_FIELDS = JSON.stringify({
+  stationID: 1, 'socketLastUpdate.servicesResponses': 1,
+});
+
+// stationID -> { rainfall, windSpeed }. Refreshed on its own schedule and kept
+// across failures: stale rain totals are far better than a dead station list.
+let hubRainWind = { map: new Map(), fetchedAt: 0, nextAttemptAt: 0 };
+const RAINWIND_TTL_MS = 10 * 60 * 1000;
+// After a failure, wait before paying the cost again rather than making every
+// request re-attempt an expensive read that is currently failing.
+const RAINWIND_FAIL_BACKOFF_MS = 5 * 60 * 1000;
+
+// Paginated station fetch shared by both tiers.
+async function fetchStationPages(env, fields, label, budgetMs) {
+  const records = [];
+  let failedPages = 0;
+  const deadline = Date.now() + budgetMs;
+
+  for (let page = 1; page <= 6; page++) {
+    // Stop rather than pile more retries onto an already-slow HubService.
+    if (Date.now() > deadline) {
+      console.warn(`⏱️ ${label} fetch budget exhausted at page ${page}`);
+      failedPages += (7 - page);
+      break;
+    }
+    const response = await hubPageFetch(
+      env,
+      `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(fields)}&globalSearch=`,
+      page
+    );
+    if (!response.ok) {
+      console.warn(`HubService ${label} page ${page} error: ${response.status}`);
+      failedPages++;
+      continue;
+    }
+    const data = await response.json();
+    if (data.record && Array.isArray(data.record)) records.push(...data.record);
+  }
+  return { records, failedPages };
+}
+
+// Pull rainfall + wind out of one station's servicesResponses. Unchanged logic,
+// lifted out so both the heavy refresh and any future caller share it.
+function parseRainWind(station) {
+  let rainfall = null;
+  let windSpeed = null;
+  const responses = station.socketLastUpdate?.servicesResponses;
+  if (!Array.isArray(responses) || responses.length === 0) return { rainfall, windSpeed };
+
+  // Walk backwards: the last entry is the most recent reading.
+  for (let i = responses.length - 1; i >= 0 && (rainfall === null || windSpeed === null); i--) {
+    const svcResp = responses[i];
+
+    // Davis: response is an array of readings.
+    if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
+      const reading = svcResp.response[0];
+      if (rainfall === null && reading.rainfall_daily_mm !== undefined && reading.rainfall_daily_mm !== null) {
+        rainfall = reading.rainfall_daily_mm;
+      }
+      // Highest gust in the last 10 min, mph -> km/h.
+      if (windSpeed === null && reading.wind_speed_hi_last_10_min !== undefined && reading.wind_speed_hi_last_10_min !== null) {
+        windSpeed = parseFloat((reading.wind_speed_hi_last_10_min * 1.60934).toFixed(1));
+      }
+    }
+
+    // WU: response.observations[0].imperial.
+    if ((rainfall === null || windSpeed === null) && svcResp.response && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
+      const obs = svcResp.response.observations[0];
+      if (obs.imperial) {
+        if (rainfall === null && obs.imperial.precipTotal !== undefined && obs.imperial.precipTotal !== null) {
+          rainfall = parseFloat((obs.imperial.precipTotal * 25.4).toFixed(1)); // in -> mm
+        }
+        if (windSpeed === null && obs.imperial.windGust !== undefined && obs.imperial.windGust !== null) {
+          windSpeed = parseFloat((obs.imperial.windGust * 1.60934).toFixed(1)); // mph -> km/h
+        }
+      }
+    }
+  }
+  return { rainfall, windSpeed };
+}
+
+// Refresh the rain/wind map. Never throws: on failure the previous map is kept
+// and retried after a backoff, so a slow HubService costs freshness, not uptime.
+async function refreshRainWindIfStale(env) {
+  const now = Date.now();
+  if (now < hubRainWind.nextAttemptAt) return;
+  if (hubRainWind.map.size > 0 && now - hubRainWind.fetchedAt < RAINWIND_TTL_MS) return;
+
+  try {
+    const { records, failedPages } = await fetchStationPages(env, HUB_RAINWIND_FIELDS, 'rain/wind', HUB_TOTAL_BUDGET_MS);
+    if (failedPages > 0 || records.length === 0) {
+      throw new Error(`incomplete rain/wind fetch (${failedPages} pages failed, ${records.length} records)`);
+    }
+    const map = new Map();
+    for (const rec of records) map.set(String(rec.stationID), parseRainWind(rec));
+    hubRainWind = { map, fetchedAt: Date.now(), nextAttemptAt: 0 };
+    console.log(`🌧️ Rain/wind map refreshed for ${map.size} stations`);
+  } catch (e) {
+    hubRainWind.nextAttemptAt = Date.now() + RAINWIND_FAIL_BACKOFF_MS;
+    const ageMin = hubRainWind.fetchedAt ? Math.floor((Date.now() - hubRainWind.fetchedAt) / 60000) : null;
+    console.warn(
+      `⚠️ Rain/wind refresh failed (${e.message}); ` +
+      (ageMin === null ? 'no previous data' : `keeping ${ageMin}m-old values`) +
+      `, retrying in ${RAINWIND_FAIL_BACKOFF_MS / 60000}m`
+    );
+    // The map lives in isolate memory, so a cold isolate that also fails this
+    // fetch has NO rainfall at all and every Rain cell renders "-". D1 already
+    // holds what the last successful cycle recorded, so seed from there.
+    if (hubRainWind.map.size === 0) await seedRainWindFromD1(env);
+  }
+}
+
+// Last-resort rain/wind source: the most recent status_logs row per station.
+// Deliberately does NOT stamp fetchedAt — this is a stopgap, so the next
+// opportunity still goes to HubService for live values.
+async function seedRainWindFromD1(env) {
+  try {
+    const res = await env.DB.prepare(`
+      SELECT station_id, rainfall, wind_speed FROM (
+        SELECT station_id, rainfall, wind_speed,
+               ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY timestamp DESC) AS rn
+        FROM status_logs
+        WHERE timestamp >= datetime('now', '-6 hours') AND rainfall IS NOT NULL
+      ) WHERE rn = 1
+    `).all();
+
+    const map = new Map();
+    for (const row of res.results || []) {
+      map.set(String(row.station_id), {
+        rainfall: row.rainfall ?? null,
+        windSpeed: row.wind_speed ?? null,
+      });
+    }
+    if (map.size > 0) {
+      hubRainWind.map = map;
+      console.log(`🗄️ Rain/wind seeded from D1 for ${map.size} stations`);
+    }
+  } catch (e) {
+    console.warn('D1 rain/wind seed failed:', e.message);
+  }
+}
+
 // Fetch all stations from HubService API (your main API)
 async function fetchAllStationsFromHubService(env) {
   try {
-    const allStations = [];
+    const { records, failedPages } = await fetchStationPages(env, HUB_LIGHT_FIELDS, 'stations', HUB_TOTAL_BUDGET_MS);
 
-    // Fetch all pages from your API with only the fields we need (reduces payload ~10x vs fields={}).
-    // Verified against the live API 2026-07-28: HubService returns `long` for longitude and
-    // has NO `lng` field at all (fields={} lists lat, long). We still request BOTH so we don't
-    // lose coordinates if HubService ever flips names; all downstream reads use
-    // `s.lng ?? s.long`, which resolves correctly today via the `long` branch.
-    const neededFields = JSON.stringify({
-      stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
-      status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
-    });
-    for (let page = 1; page <= 6; page++) {
-      const response = await hubFetch(
-        env,
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`
-      );
-
-      if (!response.ok) {
-        console.warn(`HubService API page ${page} error: ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
-      if (data.record && Array.isArray(data.record)) {
-        // Extract temperature and rainfall from socketLastUpdate
-        const processedRecords = data.record.map(station => {
-          let temperature = null;
-          let rainfall = null;
-          let windSpeed = null;
-
-          // Get temp from socketLastUpdate (already in Celsius)
-          if (station.socketLastUpdate && station.socketLastUpdate.temp !== undefined && station.socketLastUpdate.temp !== null && station.socketLastUpdate.temp !== 'N/A') {
-            temperature = parseFloat(station.socketLastUpdate.temp);
-            if (isNaN(temperature)) temperature = null;
-          }
-
-          // Try to get rainfall and wind speed from socketLastUpdate.servicesResponses if available
-          if (station.socketLastUpdate && station.socketLastUpdate.servicesResponses && Array.isArray(station.socketLastUpdate.servicesResponses) && station.socketLastUpdate.servicesResponses.length > 0) {
-            // Check last entry first (most recent data)
-            for (let i = station.socketLastUpdate.servicesResponses.length - 1; i >= 0 && (rainfall === null || windSpeed === null); i--) {
-              const svcResp = station.socketLastUpdate.servicesResponses[i];
-
-              // Davis format: response is an array with rainfall_daily_mm and wind_speed_hi_last_10_min
-              if (svcResp.response && Array.isArray(svcResp.response) && svcResp.response.length > 0) {
-                const reading = svcResp.response[0];
-                if (rainfall === null && reading.rainfall_daily_mm !== undefined && reading.rainfall_daily_mm !== null) {
-                  rainfall = reading.rainfall_daily_mm;
-                }
-                // Davis wind speed: wind_speed_hi_last_10_min (highest gust in last 10 min, in mph - convert to km/h)
-                if (windSpeed === null && reading.wind_speed_hi_last_10_min !== undefined && reading.wind_speed_hi_last_10_min !== null) {
-                  windSpeed = parseFloat((reading.wind_speed_hi_last_10_min * 1.60934).toFixed(1)); // mph to km/h
-                }
-              }
-
-              // WU format: response.observations[0].imperial.precipTotal and windGust
-              if ((rainfall === null || windSpeed === null) && svcResp.response && svcResp.response.observations && Array.isArray(svcResp.response.observations) && svcResp.response.observations.length > 0) {
-                const obs = svcResp.response.observations[0];
-                if (obs.imperial) {
-                  // Rainfall: convert inches to mm
-                  if (rainfall === null && obs.imperial.precipTotal !== undefined && obs.imperial.precipTotal !== null) {
-                    rainfall = parseFloat((obs.imperial.precipTotal * 25.4).toFixed(1));
-                  }
-                  // Wind gust: convert mph to km/h
-                  if (windSpeed === null && obs.imperial.windGust !== undefined && obs.imperial.windGust !== null) {
-                    windSpeed = parseFloat((obs.imperial.windGust * 1.60934).toFixed(1));
-                  }
-                }
-              }
-            }
-          }
-
-          // Normalize apiSource: fix missing/incorrect values (e.g. API keys, nulls)
-          const normalizedSource = normalizeApiSource(station);
-
-          return {
-            ...station,
-            apiSource: normalizedSource,
-            temperature,
-            rainfall,
-            windSpeed
-          };
-        });
-        allStations.push(...processedRecords);
-      }
-    }
-
-    if (allStations.length === 0) {
+    if (records.length === 0) {
       throw new Error('No stations retrieved from HubService API');
     }
 
-    // Misol stations carry no weather in servicesResponses — top them up from the
-    // nowcast route before anything downstream reads .rainfall/.windSpeed.
-    try {
-      await applyNowcastFallback(env, allStations);
-    } catch (e) {
-      // A rate-limited or failing nowcast must not sink the whole sync; the
-      // affected stations simply keep the nulls they already had.
-      console.warn('Nowcast fallback failed:', e.message);
+    // A partial page set is NOT a success. This used to `continue` past a failed
+    // page and return whatever it had, so a rate-limited fetch produced 100 or 150
+    // stations instead of 294 — reported as success, cached for 10 minutes, and
+    // served to every dashboard as if the missing stations did not exist.
+    // Throwing here hands control to the cached wrapper, which serves the last
+    // known-good list rather than a silently truncated one.
+    if (failedPages > 0) {
+      throw new Error(
+        `Incomplete station list: ${failedPages} of 6 pages failed, got only ${records.length} stations`
+      );
+    }
+
+    // Rain/wind rides its own cache and must never break the station list.
+    await refreshRainWindIfStale(env);
+    const rainWindFresh = hubRainWind.map.size > 0;
+
+    const allStations = records.map((station) => {
+      let temperature = null;
+      const rawTemp = station.socketLastUpdate?.temp;
+      if (rawTemp !== undefined && rawTemp !== null && rawTemp !== 'N/A') {
+        const parsed = parseFloat(rawTemp);
+        if (!isNaN(parsed)) temperature = parsed;
+      }
+
+      const rw = hubRainWind.map.get(String(station.stationID)) || { rainfall: null, windSpeed: null };
+
+      return {
+        ...station,
+        apiSource: normalizeApiSource(station),
+        temperature,
+        rainfall: rw.rainfall,
+        windSpeed: rw.windSpeed,
+      };
+    });
+
+    // Misol stations carry no weather in servicesResponses, so they need the
+    // nowcast route. Only run it when the rain/wind map is populated: if that
+    // fetch failed, EVERY station reads null and this would fan out across the
+    // whole network instead of the ~13 Misol ones, hammering a rate-limited
+    // route for nothing.
+    if (rainWindFresh) {
+      try {
+        await applyNowcastFallback(env, allStations);
+      } catch (e) {
+        console.warn('Nowcast fallback failed:', e.message);
+      }
+    } else {
+      console.warn('⏭️ Skipping nowcast fallback — no rain/wind baseline this cycle');
     }
 
     console.log(`✅ Fetched ${allStations.length} stations from HubService`);
@@ -659,9 +955,24 @@ async function fetchAllStationsFromHubServiceCached(env) {
     console.log(`📦 Using cached HubService data (age: ${Math.floor((now - hubStationCache.fetchedAt) / 1000)}s, ${hubStationCache.data.length} stations)`);
     return hubStationCache.data;
   }
-  const data = await fetchAllStationsFromHubService(env);
-  hubStationCache = { data: data, fetchedAt: Date.now() };
-  return data;
+  try {
+    const data = await fetchAllStationsFromHubService(env);
+    hubStationCache = { data, fetchedAt: Date.now() };
+    hubStationLastGood = { data, fetchedAt: Date.now() };
+    return data;
+  } catch (error) {
+    // A complete-but-stale list beats a fresh truncated one. Station metadata
+    // barely moves, so the worst case here is slightly old temperature/rain
+    // readings — versus whole regions vanishing from the dashboard.
+    if (hubStationLastGood.data) {
+      const ageMin = Math.floor((Date.now() - hubStationLastGood.fetchedAt) / 60000);
+      console.warn(
+        `⚠️ Serving last-good station list (${hubStationLastGood.data.length} stations, ${ageMin}m old): ${error.message}`
+      );
+      return hubStationLastGood.data;
+    }
+    throw error;
+  }
 }
 
 
@@ -776,6 +1087,24 @@ export default {
       // API Routes
       // Build cache key matching early lookup: method:path+search
       const routeCacheKey = request.method + ':' + url.pathname + url.search;
+
+      // ---- Admin guard ----
+      // These routes had no authentication and no method check, on a Worker URL
+      // that ships in the public dashboard JavaScript. A plain GET was enough to
+      // DELETE FROM status_logs / station_samples / downtime_records
+      // (/api/cleanup), delete station rows (/api/remove-404-stations), drop D1
+      // indexes (/api/drop-redundant-indexes), send the report to the whole
+      // mailing list (/api/send-daily-report), or proxy arbitrary HubService
+      // paths using the Worker's own credentials (/api/test-hub-endpoint).
+      //
+      // No dashboard calls any of them, so gating them changes nothing for users.
+      if (ADMIN_ROUTES.has(path) && !isAdminRequest(request, url, env)) {
+        // 404, not 401 — an unauthenticated caller should not learn these exist.
+        return new Response(JSON.stringify({ success: false, error: 'Not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       // ---- Login proxy ----
       // The browser cannot log in to HubService directly: HubService only returns
@@ -968,6 +1297,15 @@ export default {
         // Debug: proxy any HubService endpoint with auth to discover API surface
         const ep = url.searchParams.get('ep') || '/wms/livedata';
         const sid = url.searchParams.get('sid') || 'C14';
+        // Defence in depth behind the admin guard: keep this pointed at
+        // HubService. Without the check a value like "//evil.example.com/x" or
+        // one containing "@" re-targets the URL, and the Worker would send its
+        // encrypted credentials to whatever host was named.
+        if (!/^\/[A-Za-z0-9\-._~/]*$/.test(ep) || ep.startsWith('//') || ep.includes('..')) {
+          return new Response(JSON.stringify({ error: 'Invalid ep: must be a plain HubService path' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         // /ww-Hub/ routes take only the encrypted Basic envelope (no session cookie);
         // everything else goes through hubFetch, which adds the cookie too.
         const isBasicRoute = ep.startsWith('/ww-Hub/');
@@ -1124,8 +1462,9 @@ export default {
         // Get uptime trend chart data with configurable range (24h, 7d, 30d, 1y)
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleUptimeTrendChart(env, url, corsHeaders));
       } else if (path === '/api/send-daily-report') {
-        // Manually trigger sending daily email report
-        return await handleSendDailyReport(env, corsHeaders);
+        // Send the daily email report. Guarded to once per PKT day; append
+        // ?force=1 to send regardless.
+        return await handleSendDailyReport(env, corsHeaders, url);
 
       // ---- Issue Tracking & Call Log Routes ----
       } else if (path === '/api/issues' && request.method === 'GET') {
@@ -1376,17 +1715,16 @@ export default {
     const now = new Date();
     console.log('Cron triggered:', now.toISOString());
 
-    // Check if it's time for daily report (8 AM PKT = 3:00 UTC)
-    const utcHour = now.getUTCHours();
-    const utcMinute = now.getUTCMinutes();
-    if (utcHour === 3 && utcMinute < 30) {
-      console.log('Sending daily email report...');
-      try {
-        await sendDailyEmailReport(env);
-        console.log('Daily email report sent successfully');
-      } catch (e) {
-        console.error('Failed to send daily email report:', e.message);
-      }
+    // Daily report. Timing and the once-per-day guard both live in
+    // maybeSendDailyReport, so this path and the HTTP one cannot drift apart —
+    // the old hard-coded 03:00-03:30 UTC window here was a second, different
+    // schedule that also happened to be wide enough to fire twice.
+    try {
+      const outcome = await maybeSendDailyReport(env);
+      if (outcome.skipped) console.log(`Daily report skipped: ${outcome.reason}`);
+      else if (outcome.success) console.log(`Daily report sent at ${outcome.sentAt}`);
+    } catch (e) {
+      console.error('Failed to send daily email report:', e.message);
     }
 
     // Sync stations (now uses D1 batch for ~10x fewer DB round-trips)
@@ -1937,17 +2275,95 @@ async function handleDailyReportExcel(env, corsHeaders) {
   }
 }
 
-async function handleSendDailyReport(env, corsHeaders) {
+// Once-per-day guard for the daily report.
+//
+// This endpoint had no guard at all: every hit sent an email immediately. The
+// scheduled() handler checks for the 03:00-03:30 UTC window before sending, but
+// Cloudflare cron is disabled here, so the report is driven by an external
+// scheduler hitting this URL — and it emailed the whole recipient list on every
+// single fire. Whatever interval that scheduler runs at was the interval the
+// mailing list received reports at.
+//
+// The date key is Asia/Karachi, matching what the report itself covers, so
+// "today" means the same thing to the guard as it does in the email.
+async function alreadySentToday(env, dateKey) {
+  await env.DB.prepare(
+    'CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT)'
+  ).run();
+  const row = await env.DB.prepare(
+    "SELECT value FROM app_state WHERE key = 'last_daily_report'"
+  ).first();
+  return row?.value === dateKey;
+}
+
+async function markSentToday(env, dateKey) {
+  await env.DB.prepare(
+    `INSERT INTO app_state (key, value) VALUES ('last_daily_report', ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).bind(dateKey).run();
+}
+
+// Local time in Asia/Karachi. Built from formatToParts rather than string
+// parsing so it is not at the mercy of locale formatting, and because some ICU
+// builds report midnight as hour 24.
+function pktNow(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+      .formatToParts(date)
+      .filter((p) => p.type !== 'literal')
+      .map((p) => [p.type, p.value])
+  );
+  let hour = parseInt(parts.hour, 10);
+  if (hour === 24) hour = 0;
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`, // YYYY-MM-DD, sorts cleanly
+    hour,
+    minute: parseInt(parts.minute, 10),
+  };
+}
+
+// The daily report goes out at 10:00 PKT, once per day.
+//
+// The external scheduler fires on its own interval and knows nothing about
+// this, so the timing has to be enforced here: hold until 10:00 local, send on
+// the first fire at or after it, then suppress the rest of the day. There is no
+// upper bound on purpose — if the scheduler is down at 10 and only comes back
+// at 14:00, a late report beats no report.
+const DAILY_REPORT_HOUR_PKT = 10;
+
+async function maybeSendDailyReport(env, { force = false } = {}) {
+  const { dateKey, hour, minute } = pktNow();
+  const clock = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} PKT`;
+
+  if (!force) {
+    if (hour < DAILY_REPORT_HOUR_PKT) {
+      return { success: true, skipped: true, reason: `Before ${DAILY_REPORT_HOUR_PKT}:00 PKT (now ${clock})`, date: dateKey };
+    }
+    if (await alreadySentToday(env, dateKey)) {
+      return { success: true, skipped: true, reason: `Already sent for ${dateKey}`, date: dateKey };
+    }
+  }
+
+  const result = await sendDailyEmailReport(env);
+  // Only record a success, so a failed send is retried on the next fire.
+  if (result?.success) await markSentToday(env, dateKey);
+  return { ...result, date: dateKey, sentAt: clock, forced: force || undefined };
+}
+
+async function handleSendDailyReport(env, corsHeaders, url) {
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
   try {
-    const result = await sendDailyEmailReport(env);
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // 200 even when skipped: a scheduler firing more often than daily is the
+    // expected case and should see a calm no-op, not a failure.
+    return json(await maybeSendDailyReport(env, { force: url?.searchParams.get('force') === '1' }));
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return json({ error: error.message }, 500);
   }
 }
 
@@ -2309,6 +2725,10 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
     // Simplified query - just fetch from HubService and add basic uptime from a single query
     let stations = [];
 
+    // True when we fell back to the local DB, which knows station names and
+    // coordinates but nothing live — every row comes back Unknown/offline.
+    let degraded = false;
+
     // Fetch live data from HubService
     try {
       const hubStations = await fetchAllStationsFromHubServiceCached(env);
@@ -2330,6 +2750,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       }));
     } catch (e) {
       console.warn('Failed to fetch HubService:', e.message);
+      degraded = true;
       // Fallback to local DB
       const res = await env.DB.prepare(`SELECT * FROM stations ORDER BY station_name`).all();
       stations = (res.results || []).map(r => ({
@@ -2386,8 +2807,16 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       };
     });
 
-    return new Response(JSON.stringify({ success: true, total: stations.length, stations }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    return new Response(JSON.stringify({ success: true, total: stations.length, stations, degraded }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        // Tells cacheAndReturn NOT to store this. Without it, one transient
+        // HubService failure got frozen into the 10-minute response cache and
+        // every dashboard showed all 294 stations as Unknown/offline with no
+        // readings for the next 10 minutes — long after HubService recovered.
+        ...(degraded ? { 'X-Degraded': '1' } : {}),
+      }
     });
   } catch (err) {
     console.error('Error in stations-with-uptime:', err);
