@@ -8430,7 +8430,8 @@
             // Set network filter dropdown
             document.getElementById('networkFilter').value = currentNetworkFilter;
 
-            await loadData();
+            // Forced: a page load must read live data, not the Worker cache.
+            await loadData(true);
             loadIssueTrackerData();
             setupEventListeners();
             setupUptimeRangeToggles();

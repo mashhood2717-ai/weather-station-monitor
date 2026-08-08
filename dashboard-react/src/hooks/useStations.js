@@ -157,7 +157,10 @@ export function useStations() {
     }, [fetchStations]);
 
     useEffect(() => {
-        fetchStations();
+        // Forced on mount. A page load is the user explicitly asking for the
+        // current picture, so it must not be answered from the Worker cache —
+        // that is what made a reload show data older than the page already had.
+        fetchStations(true);
         // Forced, matching the production HTML dashboard. An unforced poll is
         // answered from the Worker's 5-minute cache, which stacks on top of the
         // 5-minute poll — so the view could sit ~10 minutes behind a sync that
