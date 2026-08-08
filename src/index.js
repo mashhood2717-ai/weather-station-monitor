@@ -47,6 +47,13 @@ function getCachedResponse(cacheKey) {
 
 async function cacheAndReturn(cacheKey, ttl, responsePromise) {
   const response = await responsePromise;
+  // Never cache a degraded result. It is a 200, but it carries fallback data
+  // rather than live data, and caching it turns a momentary upstream blip into
+  // ten minutes of blank dashboards.
+  if (response.headers.get('X-Degraded') === '1') {
+    console.warn(`⚠️ Not caching degraded response for ${cacheKey}`);
+    return response;
+  }
   // Only cache successful responses
   if (response.status === 200) {
     const body = await response.text();
@@ -2422,6 +2429,10 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
     // Simplified query - just fetch from HubService and add basic uptime from a single query
     let stations = [];
 
+    // True when we fell back to the local DB, which knows station names and
+    // coordinates but nothing live — every row comes back Unknown/offline.
+    let degraded = false;
+
     // Fetch live data from HubService
     try {
       const hubStations = await fetchAllStationsFromHubServiceCached(env);
@@ -2443,6 +2454,7 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       }));
     } catch (e) {
       console.warn('Failed to fetch HubService:', e.message);
+      degraded = true;
       // Fallback to local DB
       const res = await env.DB.prepare(`SELECT * FROM stations ORDER BY station_name`).all();
       stations = (res.results || []).map(r => ({
@@ -2499,8 +2511,16 @@ async function handleStationsWithUptimeRequest(env, corsHeaders = {}) {
       };
     });
 
-    return new Response(JSON.stringify({ success: true, total: stations.length, stations }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    return new Response(JSON.stringify({ success: true, total: stations.length, stations, degraded }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        // Tells cacheAndReturn NOT to store this. Without it, one transient
+        // HubService failure got frozen into the 10-minute response cache and
+        // every dashboard showed all 294 stations as Unknown/offline with no
+        // readings for the next 10 minutes — long after HubService recovered.
+        ...(degraded ? { 'X-Degraded': '1' } : {}),
+      }
     });
   } catch (err) {
     console.error('Error in stations-with-uptime:', err);
