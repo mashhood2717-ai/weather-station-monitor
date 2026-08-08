@@ -67,6 +67,11 @@ function mapUpstreamDevice(d) {
     name,
     type,
     status: String(d.status || '').toLowerCase() === 'online' ? 'online' : 'offline',
+    // Map coordinates. Note the upstream field is `lng`, not `long` — the
+    // stations side of this repo uses `long`, so don't copy that name here.
+    // All 148 devices carry valid values today.
+    lat: coordOrNull(d.lat, 90),
+    lng: coordOrNull(d.lng, 180),
     // Rain-gauge totals (null for WS — upstream omits them)
     rain_24h:       numOrNull(d['24h']),
     rain_daily:     numOrNull(d.daily),
@@ -140,6 +145,15 @@ function numOrNull(v) {
   if (v === null || v === undefined) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+// Coordinate passthrough, range-checked. Out-of-range values become null rather
+// than being forwarded: a consumer can skip a null, but a bad number silently
+// drops a marker in the ocean with nothing to signal it's wrong. `limit` is 90
+// for latitude, 180 for longitude.
+function coordOrNull(v, limit) {
+  const n = numOrNull(v);
+  return n === null || Math.abs(n) > limit ? null : n;
 }
 
 // MSLP (Mean Sea Level Pressure) offset per WS device, in hPa. GarajCloud
