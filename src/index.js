@@ -11,6 +11,10 @@ const tokenCache = new Map();
 // This avoids duplicate fetches when multiple endpoints need the same data
 let hubStationCache = { data: null, fetchedAt: 0 };
 const HUB_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL
+// Last COMPLETE station list, kept without expiry as a fallback for when a fetch
+// comes back partial (HubService rate limiting). Never overwritten by a partial
+// result — that is the whole point of keeping it separate from hubStationCache.
+let hubStationLastGood = { data: null, fetchedAt: 0 };
 
 // ============================================================
 // API RESPONSE CACHE - Prevents repeated D1 queries for same data
@@ -480,12 +484,12 @@ async function fetchNowcastFor(env, stationID) {
     // 429 is expected under burst; the window is ~1s, so one honoured retry clears it.
     if (response.status === 429 && attempt === 0) {
       const retryAfter = parseFloat(response.headers.get('retry-after'));
-      await sleep(Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 5000) : 1000);
+      await sleep(Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 1500) : 800);
       continue;
     }
     if (!response.ok) {
       console.warn(`Nowcast for ${stationID}: HTTP ${response.status}`);
-      return { rainfall: null, windSpeed: null };
+      return { rainfall: null, windSpeed: null, rateLimited: response.status === 429 };
     }
 
     const data = await response.json().catch(() => null);
@@ -534,11 +538,46 @@ async function applyNowcastFallback(env, stations) {
       if (station.rainfall === null && rainfall !== null) { station.rainfall = rainfall; filled++; }
       if (station.windSpeed === null && windSpeed !== null) station.windSpeed = windSpeed;
     });
+
+    // Circuit breaker. If a whole batch came back rate limited, the window is
+    // saturated and grinding through the rest just burns seconds for nothing —
+    // and that added latency is what widens the window in which concurrent
+    // station-list fetches collide and get truncated. Bail and keep the nulls.
+    if (results.every((r) => r.rateLimited)) {
+      console.warn('⏭️ Nowcast rate limited across a full batch — skipping the rest this cycle');
+      break;
+    }
+
     if (i + NOWCAST_BATCH_SIZE < targets.length) await sleep(NOWCAST_BATCH_PAUSE_MS);
   }
 
   console.log(`🌧️ Nowcast fallback: filled rainfall for ${filled}/${targets.length} stations`);
   return filled;
+}
+
+// Station-page fetch with 429 handling.
+//
+// /wms/stations is rate limited to ~10 requests per short window, counted per
+// route. One dashboard load spends 6 of those, so two concurrent cache misses
+// are already enough to start getting 429s on the later pages. Without this
+// retry the caller silently dropped 50 stations per rejected page.
+const HUB_PAGE_ATTEMPTS = 3;
+async function hubPageFetch(env, url, page) {
+  let response;
+  for (let attempt = 1; attempt <= HUB_PAGE_ATTEMPTS; attempt++) {
+    response = await hubFetch(env, url);
+    if (response.status !== 429) return response;
+
+    if (attempt < HUB_PAGE_ATTEMPTS) {
+      const retryAfter = parseFloat(response.headers.get('retry-after'));
+      // Back off a little further each attempt, and add jitter so concurrent
+      // isolates don't retry in lockstep and collide again on the same window.
+      const base = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 3000) : 1000;
+      await sleep(base * attempt + Math.random() * 250);
+      console.warn(`↻ Retrying HubService page ${page} after 429 (attempt ${attempt + 1}/${HUB_PAGE_ATTEMPTS})`);
+    }
+  }
+  return response;
 }
 
 // Fetch all stations from HubService API (your main API)
@@ -555,14 +594,17 @@ async function fetchAllStationsFromHubService(env) {
       stationID: 1, stationName: 1, poi: 1, lat: 1, lng: 1, long: 1,
       status: 1, apiSource: 1, apiType: 1, ownedBy: 1, socketLastUpdate: 1
     });
+    let failedPages = 0;
     for (let page = 1; page <= 6; page++) {
-      const response = await hubFetch(
+      const response = await hubPageFetch(
         env,
-        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`
+        `https://hubservice.weatherwalay.com/wms/stations?page=${page}&limit=50&filter={}&search={}&fields=${encodeURIComponent(neededFields)}&globalSearch=`,
+        page
       );
 
       if (!response.ok) {
         console.warn(`HubService API page ${page} error: ${response.status}`);
+        failedPages++;
         continue;
       }
 
@@ -634,6 +676,18 @@ async function fetchAllStationsFromHubService(env) {
       throw new Error('No stations retrieved from HubService API');
     }
 
+    // A partial page set is NOT a success. This used to `continue` past a failed
+    // page and return whatever it had, so a rate-limited fetch produced 100 or 150
+    // stations instead of 294 — reported as success, cached for 10 minutes, and
+    // served to every dashboard as if the missing stations did not exist.
+    // Throwing here hands control to the cached wrapper, which serves the last
+    // known-good list rather than a silently truncated one.
+    if (failedPages > 0) {
+      throw new Error(
+        `Incomplete station list: ${failedPages} of 6 pages failed, got only ${allStations.length} stations`
+      );
+    }
+
     // Misol stations carry no weather in servicesResponses — top them up from the
     // nowcast route before anything downstream reads .rainfall/.windSpeed.
     try {
@@ -659,9 +713,24 @@ async function fetchAllStationsFromHubServiceCached(env) {
     console.log(`📦 Using cached HubService data (age: ${Math.floor((now - hubStationCache.fetchedAt) / 1000)}s, ${hubStationCache.data.length} stations)`);
     return hubStationCache.data;
   }
-  const data = await fetchAllStationsFromHubService(env);
-  hubStationCache = { data: data, fetchedAt: Date.now() };
-  return data;
+  try {
+    const data = await fetchAllStationsFromHubService(env);
+    hubStationCache = { data, fetchedAt: Date.now() };
+    hubStationLastGood = { data, fetchedAt: Date.now() };
+    return data;
+  } catch (error) {
+    // A complete-but-stale list beats a fresh truncated one. Station metadata
+    // barely moves, so the worst case here is slightly old temperature/rain
+    // readings — versus whole regions vanishing from the dashboard.
+    if (hubStationLastGood.data) {
+      const ageMin = Math.floor((Date.now() - hubStationLastGood.fetchedAt) / 60000);
+      console.warn(
+        `⚠️ Serving last-good station list (${hubStationLastGood.data.length} stations, ${ageMin}m old): ${error.message}`
+      );
+      return hubStationLastGood.data;
+    }
+    throw error;
+  }
 }
 
 
