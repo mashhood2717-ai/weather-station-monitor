@@ -28,13 +28,19 @@ export function useStations() {
     const [dashboardStats, setDashboardStats] = useState(null);
     const intervalRef = useRef(null);
 
-    const fetchStations = useCallback(async () => {
+    // `force` is set by the Refresh button. The Worker caches these routes for
+    // several minutes and that cache is shared across isolates, so a plain
+    // re-fetch can return exactly what the page already has — the refresh
+    // appears to do nothing. A timestamp param makes the Worker skip its cached
+    // copy and re-read D1 and HubService.
+    const fetchStations = useCallback(async (force = false) => {
         setError(null);
+        const bust = force ? `?t=${Date.now()}` : '';
 
         // Fetch D1-backed dashboard stats independently (avg uptime, daily extremes since midnight PKT)
         // This runs even if the stations API is down so tiles still render
         try {
-            const dsResp = await axios.get(`${API_BASE}/api/dashboard-stats`);
+            const dsResp = await axios.get(`${API_BASE}/api/dashboard-stats${bust}`);
             if (dsResp.data && dsResp.data.success) {
                 setDashboardStats(dsResp.data);
             }
@@ -44,7 +50,7 @@ export function useStations() {
 
         // Fetch last API sync time from storage stats
         try {
-            const syncResp = await axios.get(`${API_BASE}/api/storage-stats`);
+            const syncResp = await axios.get(`${API_BASE}/api/storage-stats${bust}`);
             if (syncResp.data && syncResp.data.success && syncResp.data.date_range && syncResp.data.date_range.newest) {
                 const syncDate = new Date(`${syncResp.data.date_range.newest}Z`);
                 if (!Number.isNaN(syncDate.getTime())) {
@@ -57,7 +63,7 @@ export function useStations() {
 
         // Fetch live station data from HubService + D1
         try {
-            const resp = await axios.get(`${API_BASE}/api/stations-with-uptime`);
+            const resp = await axios.get(`${API_BASE}/api/stations-with-uptime${bust}`);
             const payload = resp.data;
 
             if (!payload || !payload.stations) {
@@ -142,7 +148,8 @@ export function useStations() {
     }, []);
 
     const refresh = useCallback(() => {
-        fetchStations();
+        // Explicit user action: always bypass the cache.
+        fetchStations(true);
     }, [fetchStations]);
 
     useEffect(() => {

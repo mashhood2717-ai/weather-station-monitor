@@ -130,7 +130,15 @@ async function getEdgeCached(request, url) {
     const hit = await caches.default.match(edgeCacheKey(url));
     if (!hit) return null;
     const body = await hit.text();
-    return { body, headers: Object.fromEntries(hit.headers.entries()) };
+    const headers = Object.fromEntries(hit.headers.entries());
+    // The stored entry carries `Cache-Control: public, max-age=N` — that exists
+    // purely so the Cache API expires it. Forwarding it to the browser would add
+    // a THIRD cache we don't control: the page would keep serving its own copy
+    // for N seconds, so even a reload could miss new data. The Worker decides
+    // freshness here, not the browser.
+    delete headers['cache-control'];
+    delete headers['Cache-Control'];
+    return { body, headers };
   } catch {
     return null; // cache trouble must never break the request
   }
@@ -1131,6 +1139,10 @@ export default {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
+      // Browsers must not hold their own copy. Freshness is decided here — the
+      // Worker already runs a two-tier cache — and a browser-side copy on top of
+      // that means a reload can serve stale data with no way to force past it.
+      'Cache-Control': 'no-store',
     };
 
     if (request.method === 'OPTIONS') {
