@@ -1941,9 +1941,11 @@
             <div class="station-list">
                 <div class="list-header">
                     <h2 class="list-title" style="margin: 0;">All Stations:</h2>
+                    <span id="stationsLastUpdated" style="font-size:11px; color:var(--text-secondary); margin-left:8px;"></span>
 
                     <!-- Controls Row -->
                     <div class="controls" style="gap: 8px;">
+                        <button class="filter-btn" onclick="loadData(true)" title="Fetch the latest data now (bypasses the 5-minute server cache)">🔄 Refresh</button>
                         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..."
                             style="width: 120px;">
                         <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)"
@@ -6146,10 +6148,15 @@
         }
 
         // Load data from API
-        async function loadData() {
+        // `force` is set by the Refresh button. The Worker caches this route for
+        // 5 minutes and that cache is shared across isolates, so without a
+        // cache-busting param a manual refresh can return the same response the
+        // page already has — which reads as "refresh does nothing".
+        async function loadData(force = false) {
             try {
                 // Fetch stations + 24h uptime from Worker in a single request
-                const resp = await fetch(`${WORKER_API}/api/stations-with-uptime`);
+                const url = `${WORKER_API}/api/stations-with-uptime` + (force ? `?t=${Date.now()}` : '');
+                const resp = await fetch(url);
                 if (!resp.ok) throw new Error('Failed to fetch stations from Worker');
                 const payload = await resp.json();
                 if (!payload || !payload.stations) throw new Error('Invalid stations payload');
@@ -6192,6 +6199,10 @@
                 updateMapMarkers();
                 renderTable();
                 updateLastUpdate();
+                const stampEl = document.getElementById('stationsLastUpdated');
+                if (stampEl) {
+                    stampEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Karachi', hour12: false }) + ' PKT';
+                }
 
                 // Update recent offline stations panel - only show Inactive stations, not Disabled
                 // Disabled stations are intentionally turned off and shouldn't be in the "needs attention" list
@@ -8420,8 +8431,9 @@
             setupEventListeners();
             setupUptimeRangeToggles();
 
-            // Auto-refresh every 30 minutes
-            setInterval(loadData, 30 * 60 * 1000);
+            // Auto-refresh every 5 minutes, matching the ~5-minute sync cadence and
+            // the Worker's 5-minute response cache.
+            setInterval(() => loadData(true), 5 * 60 * 1000);
         }
 
         // Start when page loads

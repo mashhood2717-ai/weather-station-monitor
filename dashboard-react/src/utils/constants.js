@@ -9,7 +9,7 @@ export const API_BASE = 'https://weatherlink-monitor.mashhood2717.workers.dev';
 export const RAIN_GAUGES_API_BASE = 'https://weatherwalay-rain-gauges.weatherwalayofficial.workers.dev';
 
 // Auto-refresh interval (30 minutes — matches the production HTML dashboard's setInterval)
-export const REFRESH_INTERVAL = 30 * 60 * 1000;
+export const REFRESH_INTERVAL = 5 * 60 * 1000;
 
 // Display total: pad online count with phantom stations so totals match the
 // HTML dashboard's published "350 stations" headline (see dashboard/index.html
