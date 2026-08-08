@@ -5935,11 +5935,15 @@
             }, 3000);
         }
 
-        // Load uptime data from Worker API
-        async function loadUptimePercentages() {
+        // Load uptime data from Worker API.
+        // `force` must be threaded through from loadData: this response overwrites
+        // status, temperature, last_update and uptime on every station, so a cached
+        // copy here silently replaces the fresh values loadData just fetched — the
+        // page then shows OLDER data after a refresh, not newer.
+        async function loadUptimePercentages(force = false) {
             try {
                 // POST with empty body to get ALL stations - no need to send IDs
-                const response = await fetch(`${WORKER_API}/api/uptime-percentages`, {
+                const response = await fetch(`${WORKER_API}/api/uptime-percentages` + (force ? `?t=${Date.now()}` : ``), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -6225,7 +6229,7 @@
                 initUptimeTrendLineChart(currentUptimeRange);
 
                 // Load uptime percentages from Worker
-                await loadUptimePercentages();
+                await loadUptimePercentages(force);
 
                 // If user has selected a time range other than 24h, re-fetch that range
                 // so the auto-refresh doesn't reset their selected period

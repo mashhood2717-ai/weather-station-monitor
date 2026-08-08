@@ -100,7 +100,11 @@ export function useStations() {
 
             // Load real-time uptime percentages
             try {
-                const uptimeResp = await axios.post(`${API_BASE}/api/uptime-percentages`, {});
+                // MUST carry the same cache-buster. This response overwrites status,
+                // temperature, last_update and uptime on every station, so a cached
+                // copy here silently replaces the fresh values fetched above — the
+                // page then shows OLDER data after a refresh, not newer.
+                const uptimeResp = await axios.post(`${API_BASE}/api/uptime-percentages${bust}`, {});
                 if (uptimeResp.data && uptimeResp.data.uptime_data) {
                     const uptimeMap = {};
                     uptimeResp.data.uptime_data.forEach((item) => {
