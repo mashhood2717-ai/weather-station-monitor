@@ -1,6 +1,48 @@
 // Cloudflare Worker for Weatherwalay/HubService Station Monitoring
 
 // ============================================================
+// ADMIN-ONLY ROUTES
+// Maintenance, debug and destructive endpoints. Everything here either mutates
+// or deletes data, spends money (email), or exposes HubService credentials by
+// proxy. None of them is called by any dashboard.
+//
+// Fails CLOSED: with ADMIN_TOKEN unset these routes are unreachable rather than
+// open, so a missing secret degrades to "maintenance unavailable" instead of
+// "anyone can wipe the database".
+// ============================================================
+const ADMIN_ROUTES = new Set([
+  '/api/sync',
+  '/api/ingest-station-samples',
+  '/api/backfill-station-samples',
+  '/api/backfill-downtime',
+  '/api/remove-404-stations',
+  '/api/cleanup',
+  '/api/drop-redundant-indexes',
+  '/api/send-daily-report',
+  '/api/auth-status',
+  '/api/test-hubservice',
+  '/api/test-fetch',
+  '/api/test-hub-endpoint',
+]);
+
+// Length-independent comparison. Returns false on any length mismatch first,
+// which is fine — the length of a token is not the secret.
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function isAdminRequest(request, url, env) {
+  const expected = env.ADMIN_TOKEN;
+  if (!expected) return false;
+  const provided =
+    request.headers.get('X-Admin-Token') || url.searchParams.get('admin_token') || '';
+  return safeEqual(provided, expected);
+}
+
+// ============================================================
 // AUTHENTICATION HELPERS
 // ============================================================
 
@@ -22,6 +64,10 @@ let hubStationLastGood = { data: null, fetchedAt: 0 };
 // This alone reduces D1 reads by ~90% under high request volume.
 // ============================================================
 const apiResponseCache = new Map();
+// Entries are whole API responses and the station payload is ~90 KB, so the cap
+// is deliberately modest — the working set is a handful of routes.
+const API_CACHE_MAX_ENTRIES = 100;
+const API_CACHE_EVICT_BATCH = 20;
 const API_CACHE_TTL = {
   '/api/dashboard-stats': 600_000,       // 10 min
   '/api/stations-with-uptime': 600_000,  // 10 min
@@ -58,6 +104,18 @@ async function cacheAndReturn(cacheKey, ttl, responsePromise) {
   if (response.status === 200) {
     const body = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
+    // Bound the map. The key includes the full query string, so any caller
+    // sending unique params (a crawler, a cache-busting loop) mints a new entry
+    // that lives for the whole TTL — unbounded growth in a 128 MB isolate, with
+    // multi-megabyte station payloads as the entries. Evict oldest-first.
+    if (apiResponseCache.size >= API_CACHE_MAX_ENTRIES) {
+      let evicted = 0;
+      for (const key of apiResponseCache.keys()) {
+        apiResponseCache.delete(key); // Map preserves insertion order
+        if (++evicted >= API_CACHE_EVICT_BATCH) break;
+      }
+      console.warn(`🧹 Response cache full — evicted ${evicted} oldest entries`);
+    }
     apiResponseCache.set(cacheKey, {
       body,
       status: 200,
@@ -80,6 +138,9 @@ async function cacheAndReturn(cacheKey, ttl, responsePromise) {
 //   - hubFetch() invalidates + re-logins + replays once when HubService 401s
 // ============================================================
 const TOKEN_CACHE_KEY = 'hubservice_jwt';
+// Floor between forced re-logins, so a burst of 401s cannot become a login storm.
+let lastForcedRefreshAt = 0;
+const FORCED_REFRESH_COOLDOWN_MS = 10_000;
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;  // renew this long before `exp`
 const TOKEN_FALLBACK_TTL_MS = 15 * 60 * 1000;  // only when `exp` is unreadable
 
@@ -170,10 +231,15 @@ const HUB_APP_BASIC_PASSWORD = 'we@therwalay_dev#7780';
 // Ceiling on any single HubService call. Their throttling stalls connections
 // instead of rejecting them, and Workers' fetch never times out on its own, so
 // this is the only thing bounding a request that would otherwise hang forever.
-const HUB_FETCH_TIMEOUT_MS = 8000;
+// Sized for the real payload, not for a ping. The station pages request
+// socketLastUpdate.servicesResponses, which is ~1.5 MB per page — about 9 MB
+// across the 6 pages — and takes ~500ms/page from a healthy connection. 8s was
+// too tight the moment HubService slowed down, and every request then failed
+// with TimeoutError and fell through to the Unknown/offline fallback.
+const HUB_FETCH_TIMEOUT_MS = 20000;
 // The whole station-list fetch (login + 6 pages + retries) must fit in this, so
 // a degraded HubService costs one slow response rather than a dead endpoint.
-const HUB_TOTAL_BUDGET_MS = 25000;
+const HUB_TOTAL_BUDGET_MS = 55000;
 
 // Imported RSA public key, cached per isolate (importKey is not free).
 let hubPublicKeyPromise = null;
@@ -356,7 +422,22 @@ async function getHubServiceToken(env) {
 // forceRefresh bypasses the cache and is used after HubService rejects a token.
 async function getValidToken(env, { forceRefresh = false } = {}) {
   if (forceRefresh) {
-    invalidateToken('forced refresh');
+    // Throttle forced re-logins. When HubService rejects or stalls requests,
+    // every in-flight call lands here and mints another login — which is more
+    // load on the thing already refusing us, and turns a brief upstream wobble
+    // into a self-sustaining one. Within the cooldown, reuse whatever is cached
+    // and let the caller surface the failure instead.
+    const sinceLast = Date.now() - lastForcedRefreshAt;
+    if (sinceLast < FORCED_REFRESH_COOLDOWN_MS) {
+      const cached = getCachedToken();
+      if (cached) {
+        console.warn(`⏳ Forced refresh suppressed (${sinceLast}ms since last) — reusing cached session`);
+        return cached;
+      }
+    } else {
+      lastForcedRefreshAt = Date.now();
+      invalidateToken('forced refresh');
+    }
   } else {
     const cached = getCachedToken();
     if (cached) return cached;
@@ -897,6 +978,24 @@ export default {
       // Build cache key matching early lookup: method:path+search
       const routeCacheKey = request.method + ':' + url.pathname + url.search;
 
+      // ---- Admin guard ----
+      // These routes had no authentication and no method check, on a Worker URL
+      // that ships in the public dashboard JavaScript. A plain GET was enough to
+      // DELETE FROM status_logs / station_samples / downtime_records
+      // (/api/cleanup), delete station rows (/api/remove-404-stations), drop D1
+      // indexes (/api/drop-redundant-indexes), send the report to the whole
+      // mailing list (/api/send-daily-report), or proxy arbitrary HubService
+      // paths using the Worker's own credentials (/api/test-hub-endpoint).
+      //
+      // No dashboard calls any of them, so gating them changes nothing for users.
+      if (ADMIN_ROUTES.has(path) && !isAdminRequest(request, url, env)) {
+        // 404, not 401 — an unauthenticated caller should not learn these exist.
+        return new Response(JSON.stringify({ success: false, error: 'Not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // ---- Login proxy ----
       // The browser cannot log in to HubService directly: HubService only returns
       // Access-Control-Allow-Origin for its own allowlisted origin (wwhub), and the
@@ -1088,6 +1187,15 @@ export default {
         // Debug: proxy any HubService endpoint with auth to discover API surface
         const ep = url.searchParams.get('ep') || '/wms/livedata';
         const sid = url.searchParams.get('sid') || 'C14';
+        // Defence in depth behind the admin guard: keep this pointed at
+        // HubService. Without the check a value like "//evil.example.com/x" or
+        // one containing "@" re-targets the URL, and the Worker would send its
+        // encrypted credentials to whatever host was named.
+        if (!/^\/[A-Za-z0-9\-._~/]*$/.test(ep) || ep.startsWith('//') || ep.includes('..')) {
+          return new Response(JSON.stringify({ error: 'Invalid ep: must be a plain HubService path' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         // /ww-Hub/ routes take only the encrypted Basic envelope (no session cookie);
         // everything else goes through hubFetch, which adds the cookie too.
         const isBasicRoute = ep.startsWith('/ww-Hub/');
