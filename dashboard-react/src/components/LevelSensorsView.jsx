@@ -52,31 +52,14 @@ export default function LevelSensorsView({ isDark, onCount }) {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Uptime shares rain_gauge_logs with the gauges — the online/offline
-            // sync is device-type agnostic, so LS history is already there.
-            const [lsResp, uptimeResp] = await Promise.allSettled([
-                axios.get(`${RAIN_GAUGES_API_BASE}/api/level-sensors`),
-                axios.get(`${RAIN_GAUGES_API_BASE}/api/rain-gauges-uptime?range=24h`),
-            ]);
+            // Live readings only. These sensors are not uptime-tracked in the UI —
+            // what matters is the level and battery they currently report.
+            const resp = await axios.get(`${RAIN_GAUGES_API_BASE}/api/level-sensors`);
+            if (!resp.data?.success) throw new Error('Failed to load level sensors');
 
-            if (lsResp.status !== 'fulfilled' || !lsResp.value.data?.success) {
-                throw new Error(lsResp.reason?.message || 'Failed to load level sensors');
-            }
-
-            const uptimeMap = {};
-            if (uptimeResp.status === 'fulfilled' && uptimeResp.value.data?.success) {
-                (uptimeResp.value.data.gauges || []).forEach((u) => { uptimeMap[u.gauge_id] = u; });
-            }
-
-            const rows = (lsResp.value.data.sensors || []).map((s) => ({
-                ...s,
-                uptime_24h: uptimeMap[s.id]?.uptime_24h ?? null,
-                checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
-                last_online: uptimeMap[s.id]?.last_online ?? null,
-            }));
-
+            const rows = resp.data.sensors || [];
             setSensors(rows);
-            setLastUpdated(lsResp.value.data.last_updated || null);
+            setLastUpdated(resp.data.last_updated || null);
             if (onCount) onCount(rows.length);
         } catch (e) {
             console.error('LevelSensorsView fetch error:', e);
@@ -168,16 +151,6 @@ export default function LevelSensorsView({ isDark, onCount }) {
             )),
         },
         {
-            title: 'Uptime (24h)',
-            dataIndex: 'uptime_24h',
-            key: 'uptime_24h',
-            align: 'right',
-            sorter: (a, b) => (a.uptime_24h ?? -Infinity) - (b.uptime_24h ?? -Infinity),
-            render: (v, r) => (v === null || v === undefined || !r.checks_24h
-                ? <Text type="secondary">—</Text>
-                : <span style={{ color: v >= 90 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444', fontWeight: 600 }}>{Number(v).toFixed(1)}%</span>),
-        },
-        {
             title: 'Last Seen',
             dataIndex: 'last_seen',
             key: 'last_seen',
@@ -221,8 +194,7 @@ export default function LevelSensorsView({ isDark, onCount }) {
                       <b>Status:</b> <span style="color:${s.status === 'online' ? '#52c41a' : '#ff4d4f'}">${s.status}</span><br/>
                       <b>Water level:</b> ${num(s.water_level_ft, 2, ' ft')} (${num((s.water_level_ft ?? 0) * FT_TO_M, 2, ' m')})<br/>
                       <b>Battery:</b> <span style="color:${batteryColor(s.battery_level)}">${s.battery_level ?? '—'}%</span><br/>
-                      <b>Last seen:</b> ${timeAgo(s.last_seen)}<br/>
-                      ${s.uptime_24h != null ? `<b>Uptime 24h:</b> ${Number(s.uptime_24h).toFixed(1)}%` : ''}
+                      <b>Last seen:</b> ${timeAgo(s.last_seen)}
                     </div>
                 `}
             />

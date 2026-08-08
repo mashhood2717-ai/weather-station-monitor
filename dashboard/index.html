@@ -2431,12 +2431,11 @@
                                     <th style="text-align:right;">Water Level (ft)</th>
                                     <th style="text-align:right;">Level (m)</th>
                                     <th style="text-align:right;">Battery</th>
-                                    <th style="text-align:right;">Uptime (24h)</th>
                                     <th>Last Seen</th>
                                 </tr>
                             </thead>
                             <tbody id="lsTable">
-                                <tr><td colspan="7" style="text-align: center; padding: 20px;">Loading level sensors...</td></tr>
+                                <tr><td colspan="6" style="text-align: center; padding: 20px;">Loading level sensors...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -7174,11 +7173,11 @@
         // until the Worker learned to classify them: the old build filed them as
         // rain gauges, so they sat in the RG table with null rainfall.
         //
-        // Only online/offline history is stored for them — the sync writes
-        // readings rows for weather stations only, so there is no water-level
-        // history to chart yet. Uptime therefore works; level trends do not.
+        // Uptime is deliberately not surfaced for these: what matters
+        // operationally is the level and battery they currently report. Values are
+        // shown exactly as the upstream sends them, with no plausibility filtering.
 
-        let lsData = [];   // [{id, name, status, lat, lng, water_level_ft, battery_level, position, last_seen, uptime_24h, checks_24h}, …]
+        let lsData = [];   // [{id, name, status, lat, lng, water_level_ft, battery_level, position, last_seen}, …]
 
         const LS_FT_TO_M = 0.3048;
 
@@ -7213,34 +7212,21 @@
 
         async function loadLevelSensors() {
             const tbody = document.getElementById('lsTable');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading level sensors...</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;"><div class="loading-spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div>Loading level sensors...</td></tr>';
             try {
-                // Uptime shares rain_gauge_logs with the gauges — the online/offline
-                // sync is device-type agnostic, so LS history is already recorded.
-                const [lsResp, uptimeResp] = await Promise.allSettled([
-                    fetch(RAIN_GAUGES_WORKER + '/api/level-sensors').then(r => r.json()),
-                    fetch(RAIN_GAUGES_WORKER + '/api/rain-gauges-uptime?range=24h').then(r => r.json()),
-                ]);
-
-                if (lsResp.status !== 'fulfilled' || !lsResp.value?.success) {
-                    throw new Error(lsResp.value?.error || lsResp.reason?.message || 'Failed to fetch level sensors');
+                // Live readings only. These sensors are not uptime-tracked in the UI —
+                // what matters is the level and battery they currently report.
+                const resp = await fetch(RAIN_GAUGES_WORKER + '/api/level-sensors').then(r => r.json());
+                if (!resp || !resp.success) {
+                    throw new Error(resp?.error || 'Failed to fetch level sensors');
                 }
 
-                const uptimeMap = {};
-                if (uptimeResp.status === 'fulfilled' && uptimeResp.value?.success) {
-                    (uptimeResp.value.gauges || []).forEach(u => { uptimeMap[u.gauge_id] = u; });
-                }
-
-                lsData = (lsResp.value.sensors || []).map(s => ({
-                    ...s,
-                    uptime_24h: uptimeMap[s.id]?.uptime_24h ?? null,
-                    checks_24h: uptimeMap[s.id]?.checks_24h ?? 0,
-                }));
+                lsData = resp.sensors || [];
 
                 const lu = document.getElementById('lsLastUpdated');
                 if (lu) {
-                    lu.textContent = lsResp.value.last_updated
-                        ? 'Last updated: ' + new Date(lsResp.value.last_updated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
+                    lu.textContent = resp.last_updated
+                        ? 'Last updated: ' + new Date(resp.last_updated).toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })
                         : '';
                 }
 
@@ -7249,7 +7235,7 @@
                 renderLevelSensorsTable();
             } catch (e) {
                 console.error('Error in loadLevelSensors:', e);
-                if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--danger); padding:20px;">Error: ' + e.message + '</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:20px;">Error: ' + e.message + '</td></tr>';
             }
         }
 
@@ -7295,7 +7281,7 @@
             if (!tbody) return;
 
             if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-secondary);">No level sensors match the current filters</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-secondary);">No level sensors match the current filters</td></tr>';
                 return;
             }
 
@@ -7310,17 +7296,12 @@
                 const battHtml = batt === null
                     ? '<span style="color:var(--text-secondary);">—</span>'
                     : '<span style="color:' + lsBatteryColor(batt) + '; font-weight:600;">' + batt + '%</span>';
-                const uptimeHtml = (s.uptime_24h !== null && s.uptime_24h !== undefined && s.checks_24h > 0)
-                    ? '<span style="color:' + (Number(s.uptime_24h) >= 90 ? '#10b981' : Number(s.uptime_24h) >= 50 ? '#f59e0b' : '#ef4444') + '; font-weight:600;">' + Number(s.uptime_24h).toFixed(1) + '%</span>'
-                    : '<span style="color:var(--text-secondary);">—</span>';
-
                 tr.innerHTML =
                     '<td><strong>' + (s.name || 'Unknown') + '</strong><br><small style="color:var(--text-secondary)">' + s.id + '</small></td>' +
                     '<td style="text-align:center;">' + statusHtml + '</td>' +
                     '<td style="text-align:right; font-weight:600;">' + lsNum(s.water_level_ft, 2) + '</td>' +
                     '<td style="text-align:right;">' + lsNum(s.water_level_ft === null || s.water_level_ft === undefined ? null : Number(s.water_level_ft) * LS_FT_TO_M, 2) + '</td>' +
                     '<td style="text-align:right;">' + battHtml + '</td>' +
-                    '<td style="text-align:right;">' + uptimeHtml + '</td>' +
                     '<td style="color:var(--text-secondary); font-size:12px;">' + lsTimeAgo(s.last_seen) + '</td>';
                 frag.appendChild(tr);
             });
@@ -7341,8 +7322,6 @@
                         '<div class="popup-info">🌊 Level: ' + lsNum(s.water_level_ft, 2, ' ft') + ' (' + lsNum(s.water_level_ft === null || s.water_level_ft === undefined ? null : Number(s.water_level_ft) * LS_FT_TO_M, 2, ' m') + ')</div>' +
                         '<div class="popup-info">🔋 Battery: <span style="color:' + lsBatteryColor(s.battery_level) + '">' + (s.battery_level ?? '—') + '%</span></div>' +
                         '<div class="popup-info">🕒 Last seen: ' + lsTimeAgo(s.last_seen) + '</div>' +
-                        (s.uptime_24h !== null && s.uptime_24h !== undefined
-                            ? '<div class="popup-info">📈 Uptime 24h: ' + Number(s.uptime_24h).toFixed(1) + '%</div>' : '') +
                         '<div class="popup-status ' + (s.status === 'online' ? 'online' : 'offline') + '">' +
                         (s.status === 'online' ? '● Online' : '○ Offline') + '</div>' +
                         '</div>',
