@@ -27,13 +27,9 @@
     var lightningMap = L.map('map', { zoomControl: true, attributionControl: true })
       .setView(hasLoc ? [qLat, qLon] : [30.3753, 69.3451], hasLoc ? 9 : 5);
 
-    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
-    }).addTo(lightningMap); // light/white default
-    var darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
-    });
-    L.control.layers({ 'Light': lightBase, 'Dark': darkBase }, null, { position: 'topleft' }).addTo(lightningMap);
+    var streetsBase = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19,
+    }).addTo(lightningMap); // streets only — keyless, matches the dashboards
 
     if (window.attachWWLightning) {
       window.attachWWLightning(lightningMap, {

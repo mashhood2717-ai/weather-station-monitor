@@ -64,13 +64,6 @@
     var streetsBase = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap', maxZoom: 19,
     }).addTo(lightningMap); // streets default (matches /pk portal)
-    var darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
-    });
-    var lightBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18,
-    });
-    L.control.layers({ 'Streets': streetsBase, 'Dark': darkBase, 'Light': lightBase }, null, { position: 'topleft' }).addTo(lightningMap);
 
     if (window.attachWWLightning) {
       window.attachWWLightning(lightningMap, {

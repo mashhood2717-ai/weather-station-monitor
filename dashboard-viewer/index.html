@@ -3348,7 +3348,6 @@
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             updateThemeIcon(newTheme);
-            updateMapTiles(); // Update map tiles for new theme
             // Redraw bar chart so percentage label color updates
             if (typeof categoryUptimeChart !== 'undefined' && categoryUptimeChart) {
                 if (chartGroupMode === 'source') initSourceUptimeChart();
@@ -3374,13 +3373,9 @@
         let markers = [];
         let tileLayer = null;
 
-        // Get tile URL based on theme
+        // Keep the basemap consistent across light and dark dashboard themes.
         function getTileUrl() {
-            const theme = document.documentElement.getAttribute('data-theme');
-            if (theme === 'light') {
-                return 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-            }
-            return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+            return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
         }
 
         // Initialize map
@@ -3391,7 +3386,7 @@
             }).setView([30.3753, 69.3451], 6);
 
             tileLayer = L.tileLayer(getTileUrl(), {
-                attribution: '© OpenStreetMap, © CartoDB',
+                attribution: '&copy; OpenStreetMap',
                 maxZoom: 18
             }).addTo(map);
 
@@ -3401,27 +3396,6 @@
                 showCoverageOnHover: false
             });
             map.addLayer(markerClusterGroup);
-        }
-
-        // Update map tiles when theme changes
-        function updateMapTiles() {
-            if (tileLayer && map) {
-                map.removeLayer(tileLayer);
-                tileLayer = L.tileLayer(getTileUrl(), {
-                    attribution: '© OpenStreetMap, © CartoDB',
-                    maxZoom: 18
-                }).addTo(map);
-            }
-            // The RG/WS maps use the same themed basemap, so they have to be
-            // retiled alongside the stations map or they stay on the old theme.
-            if (rgMapTiles && rgMap) {
-                rgMap.removeLayer(rgMapTiles);
-                rgMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(rgMap);
-            }
-            if (wsMapTiles && wsMap) {
-                wsMap.removeLayer(wsMapTiles);
-                wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(wsMap);
-            }
         }
 
         // ============================================================
@@ -3451,7 +3425,7 @@
             if (rgMap) return rgMap;
             if (!document.getElementById('rgMap')) return null;
             rgMap = L.map('rgMap', { zoomControl: true, scrollWheelZoom: true }).setView([30.3753, 69.3451], 6);
-            rgMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(rgMap);
+            rgMapTiles = L.tileLayer(getTileUrl(), { attribution: '&copy; OpenStreetMap', maxZoom: 18 }).addTo(rgMap);
             rgMapCluster = L.markerClusterGroup({ maxClusterRadius: 45, spiderfyOnMaxZoom: true, showCoverageOnHover: false });
             rgMap.addLayer(rgMapCluster);
             return rgMap;
@@ -3461,7 +3435,7 @@
             if (wsMap) return wsMap;
             if (!document.getElementById('wsMap')) return null;
             wsMap = L.map('wsMap', { zoomControl: true, scrollWheelZoom: true }).setView([30.3753, 69.3451], 6);
-            wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }).addTo(wsMap);
+            wsMapTiles = L.tileLayer(getTileUrl(), { attribution: '&copy; OpenStreetMap', maxZoom: 18 }).addTo(wsMap);
             // Only a handful of stations — clustering would hide them behind a
             // single bubble at the default zoom for no benefit.
             wsMapLayer = L.layerGroup().addTo(wsMap);
