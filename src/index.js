@@ -1559,10 +1559,10 @@ export default {
         return await cacheAndReturn(routeCacheKey, API_CACHE_TTL[path], handleStorageStats(env, corsHeaders), edgeCtx);
       } else if (path === '/api/daily-report') {
         // Generate daily report JSON
-        return await handleDailyReportRequest(env, corsHeaders);
+        return await handleDailyReportRequest(env, request, corsHeaders);
       } else if (path === '/api/daily-report/excel') {
         // Download daily report as Excel/CSV
-        return await handleDailyReportExcel(env, corsHeaders);
+        return await handleDailyReportExcel(env, request, corsHeaders);
       } else if (path === '/api/backfill-downtime') {
         // Backfill historical downtime records from status_logs (batched to avoid rate limits)
         try {
@@ -2170,21 +2170,84 @@ const STATION_CATEGORIES = {
   '232283': 'reference'
 };
 
-async function generateDailyReportData(env) {
+// ---- Time window resolution for range-aware endpoints -------------------
+//
+// Turns ?range= / ?start= / ?end= into a SQL condition over a timestamp column.
+//
+// Two things this exists to get right:
+//   * <input type="date"> sends a bare YYYY-MM-DD. Rows are stored as
+//     'YYYY-MM-DD HH:MM:SS', and as a string compare
+//     '2026-08-05 03:45:51' <= '2026-08-05' is FALSE — so a bare end date
+//     silently dropped the whole final day (measured: 18.6% of a 5-day
+//     range). A bare end is widened to 23:59:59, a bare start pinned to
+//     00:00:00.
+//   * These values arrive from a public URL, so they are BOUND, never
+//     interpolated into SQL text.
+const TIME_RANGE_PRESETS = {
+  '24h':   { sql: "datetime('now', '-24 hours')", label: 'Last 24h' },
+  'daily': { sql: "date('now', 'start of day')",  label: 'Today' },
+  '7d':    { sql: "datetime('now', '-7 days')",   label: 'Last 7 Days' },
+  '30d':   { sql: "datetime('now', '-30 days')",  label: 'Last 30 Days' },
+  '1y':    { sql: "datetime('now', '-1 year')",   label: 'Last 1 Year' },
+};
+
+const DEFAULT_TIME_WINDOW = {
+  where: `timestamp >= ${TIME_RANGE_PRESETS['24h'].sql}`,
+  params: [],
+  label: TIME_RANGE_PRESETS['24h'].label,
+};
+
+// Accepts 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM[:SS]' and the 'T'-separated forms.
+// Anything else returns null, so the caller falls back to a preset rather than
+// running an unbounded query on a malformed date.
+function normalizeTimeBound(value, endOfDay) {
+  if (!value) return null;
+  const v = String(value).trim().replace('T', ' ');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return endOfDay ? `${v} 23:59:59` : `${v} 00:00:00`;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v)) return `${v}:00`;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v)) return v;
+  return null;
+}
+
+function resolveTimeWindow(url, column = 'timestamp') {
+  const range = url.searchParams.get('range') || '24h';
+  if (range === 'all') return { where: '1=1', params: [], label: 'All Time' };
+  if (range === 'custom') {
+    const start = normalizeTimeBound(url.searchParams.get('start'), false);
+    const end   = normalizeTimeBound(url.searchParams.get('end'), true);
+    if (start && end) {
+      return {
+        where: `${column} >= ? AND ${column} <= ?`, params: [start, end],
+        label: `${start.slice(0, 10)} to ${end.slice(0, 10)}`,
+      };
+    }
+    if (start) return { where: `${column} >= ?`, params: [start], label: `Since ${start.slice(0, 10)}` };
+    if (end)   return { where: `${column} <= ?`, params: [end],   label: `Up to ${end.slice(0, 10)}` };
+    // 'custom' with no usable dates falls through to the 24h preset below.
+  }
+  const preset = TIME_RANGE_PRESETS[range] || TIME_RANGE_PRESETS['24h'];
+  return { where: `${column} >= ${preset.sql}`, params: [], label: preset.label };
+}
+
+async function generateDailyReportData(env, window = null) {
   // Fetch all stations with current status
   const hubStations = await fetchAllStationsFromHubServiceCached(env);
 
-  // Get 24h uptime data from database
-  const uptimeQuery = await env.DB.prepare(`
+  // Uptime across the requested window (defaults to the last 24h).
+  const win = window || DEFAULT_TIME_WINDOW;
+  const uptimeStmt = env.DB.prepare(`
     SELECT 
       station_id,
       COUNT(*) as total_checks,
       SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
       AVG(temperature) as avg_temp
     FROM status_logs 
-    WHERE timestamp > datetime('now', '-24 hours')
+    WHERE ${win.where}
     GROUP BY station_id
-  `).all();
+  `);
+  const uptimeQuery = win.params.length
+    ? await uptimeStmt.bind(...win.params).all()
+    : await uptimeStmt.all();
 
   const uptimeMap = {};
   (uptimeQuery.results || []).forEach(row => {
@@ -2300,6 +2363,7 @@ async function generateDailyReportData(env) {
 
   return {
     report_date: reportDate,
+    range_label: win.label,
     generated_at: now.toISOString(),
     summary: {
       total_stations: total,
@@ -2318,9 +2382,9 @@ async function generateDailyReportData(env) {
   };
 }
 
-async function handleDailyReportRequest(env, corsHeaders) {
+async function handleDailyReportRequest(env, request, corsHeaders) {
   try {
-    const report = await generateDailyReportData(env);
+    const report = await generateDailyReportData(env, resolveTimeWindow(new URL(request.url)));
     return new Response(JSON.stringify(report, null, 2), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
@@ -2332,9 +2396,9 @@ async function handleDailyReportRequest(env, corsHeaders) {
   }
 }
 
-async function handleDailyReportExcel(env, corsHeaders) {
+async function handleDailyReportExcel(env, request, corsHeaders) {
   try {
-    const report = await generateDailyReportData(env);
+    const report = await generateDailyReportData(env, resolveTimeWindow(new URL(request.url)));
 
     // Category colors for styling
     const categoryColors = {
@@ -2398,6 +2462,7 @@ async function handleDailyReportExcel(env, corsHeaders) {
   <table>
     <tr><td class="title" colspan="9">🌤️ Weather Station Daily Report</td></tr>
     <tr><td class="subtitle" colspan="9">Generated: ${report.report_date} PKT</td></tr>
+    <tr><td class="subtitle" colspan="9">Reporting period: ${report.range_label}</td></tr>
     <tr><td colspan="9" style="border:none; height:20px;"></td></tr>
   </table>
   
@@ -2472,7 +2537,7 @@ async function handleDailyReportExcel(env, corsHeaders) {
       <th>Category</th>
       <th style="text-align:center;">Temp (°C)</th>
       <th style="text-align:center;">Rain (mm)</th>
-      <th style="text-align:center;">Uptime 24h</th>
+      <th style="text-align:center;">Uptime (${report.range_label})</th>
       <th>Last Seen</th>
     </tr>
     ${report.all_stations.map((s, idx) => `
@@ -3539,25 +3604,11 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
   try {
     let stationIds = [];
 
-    // Get time range from query parameter
+    // Time window from ?range= / ?start= / ?end=. resolveTimeWindow binds the
+    // custom dates and widens a bare end date to end-of-day, which the old
+    // string compare against 'YYYY-MM-DD' silently dropped.
     const url = new URL(request.url);
-    const range = url.searchParams.get('range') || '24h';
-    const startDate = url.searchParams.get('start'); // For custom range
-    const endDate = url.searchParams.get('end'); // For custom range
-
-    // Calculate time filter based on range
-    let timeFilter = "datetime('now', '-24 hours')";
-    if (range === 'daily') {
-      timeFilter = "date('now', 'start of day')";
-    } else if (range === '7d') {
-      timeFilter = "datetime('now', '-7 days')";
-    } else if (range === '30d') {
-      timeFilter = "datetime('now', '-30 days')";
-    } else if (range === '1y') {
-      timeFilter = "datetime('now', '-1 year')";
-    } else if (range === 'custom' && startDate && endDate) {
-      timeFilter = `'${startDate}'`;
-    }
+    const win = resolveTimeWindow(url);
 
     // Check if this is a POST request with station IDs
     if (request.method === 'POST') {
@@ -3601,7 +3652,7 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
       // dashboard can offer a snappy "last hour" view without an extra query —
       // the WHERE clause already pulls all rows in the broader window, and the
       // 1h subset is just two more CASE evaluations per row.
-      let uptimeSQL = `
+      const uptimeSQL = `
         SELECT
           station_id,
           COUNT(*) as total_checks,
@@ -3610,27 +3661,14 @@ async function handleUptimePercentagesRequest(env, request, corsHeaders) {
           SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') AND is_online = 1 THEN 1 ELSE 0 END) as online_1h,
           MIN(timestamp) as first_check
         FROM status_logs
-        WHERE timestamp >= ${timeFilter}
+        WHERE ${win.where}
         GROUP BY station_id
       `;
 
-      // For custom range, add end date filter
-      if (range === 'custom' && startDate && endDate) {
-        uptimeSQL = `
-          SELECT
-            station_id,
-            COUNT(*) as total_checks,
-            SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online_checks,
-            SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as checks_1h,
-            SUM(CASE WHEN timestamp >= datetime('now', '-1 hour') AND is_online = 1 THEN 1 ELSE 0 END) as online_1h,
-            MIN(timestamp) as first_check
-          FROM status_logs
-          WHERE timestamp >= '${startDate}' AND timestamp <= '${endDate}'
-          GROUP BY station_id
-        `;
-      }
-
-      const uptimeQuery = await env.DB.prepare(uptimeSQL).all();
+      const uptimeStmt = env.DB.prepare(uptimeSQL);
+      const uptimeQuery = win.params.length
+        ? await uptimeStmt.bind(...win.params).all()
+        : await uptimeStmt.all();
 
       const uptimeMap = {};
       for (const row of (uptimeQuery.results || [])) {

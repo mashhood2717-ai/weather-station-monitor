@@ -5852,8 +5852,23 @@
             try {
                 showNotification('Generating report...', 'info');
 
+                // Send the range the dashboard is actually showing. Without
+                // this the report was always the last 24h no matter what the
+                // user picked, because the endpoint got no date parameters.
+                const params = new URLSearchParams({ range: currentTimeRange || '24h', t: Date.now() });
+                if (currentTimeRange === 'custom') {
+                    const cs = document.getElementById('startDate')?.value;
+                    const ce = document.getElementById('endDate')?.value;
+                    if (!cs || !ce) {
+                        showNotification('Pick both a start and end date first', 'error');
+                        return;
+                    }
+                    params.set('start', cs);
+                    params.set('end', ce);
+                }
+
                 // Fetch the Excel/CSV report from the API (with cache-buster)
-                const response = await fetch(`${WORKER_API}/api/daily-report/excel?t=${Date.now()}`, {
+                const response = await fetch(`${WORKER_API}/api/daily-report/excel?${params}`, {
                     cache: 'no-store'
                 });
 
@@ -5868,7 +5883,12 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 const now = new Date();
-                const filename = `weather_report_${now.toISOString().split('T')[0]}.xls`;
+                // Tag the file with its period — two downloads for different
+                // ranges used to land with identical names.
+                const rangeTag = currentTimeRange === 'custom'
+                    ? `${params.get('start')}_to_${params.get('end')}`
+                    : (currentTimeRange || '24h');
+                const filename = `weather_report_${rangeTag}_${now.toISOString().split('T')[0]}.xls`;
 
                 link.setAttribute('href', url);
                 link.setAttribute('download', filename);
