@@ -10,11 +10,13 @@ function determineProvince(stationId, location) {
     const loc = location.toLowerCase();
     if (loc.includes('islamabad') || loc.includes('banigala') || loc.includes('nust')) return 'Islamabad';
     if (loc.includes('lahore') || loc.includes('rawalpindi') || loc.includes('multan') || loc.includes('faisalabad') || loc.includes('murree')) return 'Punjab';
-    if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat')) return 'KPK';
+    if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat') ||
+        loc.includes('nowshera') || loc.includes('tarnab') || loc.includes('sardaryab') ||
+        loc.includes('manki sharif') || loc.includes('pashtun garhi') || loc.includes('shedu')) return 'KPK';
     if (loc.includes('karachi') || loc.includes('hyderabad') || loc.includes('sukkur')) return 'Sindh';
     if (loc.includes('quetta') || loc.includes('gwadar') || loc.includes('turbat')) return 'Balochistan';
     if (loc.includes('muzaffarabad') || loc.includes('mirpur') || loc.includes('rawalakot')) return 'AJK';
-    if (loc.includes('gilgit') || loc.includes('skardu') || loc.includes('hunza')) return 'GB';
+    if (loc.includes('gilgit') || loc.includes('skardu') || loc.includes('hunza') || loc.includes('chilas')) return 'GB';
     return '';
 }
 

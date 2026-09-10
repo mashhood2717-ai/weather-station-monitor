@@ -828,6 +828,7 @@
 
         .controls {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
         }
 
@@ -1955,6 +1956,18 @@
                             <option value="wow">🛣️ WOW</option>
                             <option value="krews">🔬 KREWS</option>
                             <option value="wu">🌐 External</option>
+                        </select>
+                        <select id="provinceFilter" class="source-filter" onchange="filterByProvince(this.value)"
+                            style="min-width: 130px;">
+                            <option value="all">🗺️ All Provinces</option>
+                            <option value="Islamabad">Islamabad</option>
+                            <option value="Punjab">Punjab</option>
+                            <option value="AJK">AJK</option>
+                            <option value="Balochistan">Balochistan</option>
+                            <option value="GB">Gilgit-Baltistan</option>
+                            <option value="KPK">KPK</option>
+                            <option value="Sindh">Sindh</option>
+                            <option value="unassigned">❓ Unassigned</option>
                         </select>
                         <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
                             <option value="all">All Sources</option>
@@ -3308,7 +3321,7 @@
         // Station Categories Mapping (from Excel)
         const STATION_CATEGORIES = {
             '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',
-            '169631': 'corporate', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
+            '169631': 'community', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
             '169682': 'corporate', '169694': 'corporate', 'C13': 'community', '165897': 'community',
             '176678': 'community', '176749': 'community', '169767': 'corporate', 'C14': 'reference',
             '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
@@ -3329,7 +3342,7 @@
             '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
             '177740': 'community', '177802': 'community', '170462': 'community', '170469': 'community',
             '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
-            '170556': 'corporate', '162416': 'community', '162474': 'community', 'C23': 'community',
+            '170556': 'community', '162416': 'community', '162474': 'community', 'C23': 'community',
             '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
             '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
             '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
@@ -3344,7 +3357,7 @@
             'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
             'C26': 'community', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
             '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
-            '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
+            '165326': 'community', '160873': 'community', '163264': 'reference', 'C25': 'community',
             '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
             '160951': 'community', '169497': 'corporate',
             '169500': 'corporate', '174130': 'community', '163360': 'community', '163347': 'community',
@@ -3366,10 +3379,10 @@
             '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
             '183871': 'community', '144841': 'krews', '131374': 'community', '147435': 'community',
             '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
-            '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
+            '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'community',
             '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
             '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
-            '201736': 'community', '129498': 'corporate', '134268': 'community', '134297': 'community',
+            '201736': 'community', '129498': 'community', '134268': 'community', '134297': 'community',
             'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
             'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
             'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
@@ -3384,7 +3397,12 @@
             '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
             '232282': 'krews', '236172': 'krews',
             // Reference
-            '232283': 'reference'
+            '232283': 'reference', '146301': 'reference',
+            // Corporate
+            '232286': 'corporate', '218269': 'corporate',
+            // Confirmed community, not merely defaulted to it
+            '228881': 'community', '244338': 'community', '244356': 'community',
+            '146299': 'community', '234197': 'community'
         };
 
         // Category display names and colors
@@ -3469,6 +3487,7 @@
         let currentFilter = 'all';
         let currentSourceFilter = 'all';
         let currentNetworkFilter = 'all';
+        let currentProvinceFilter = 'all';
         let sortColumn = 'name';
         let sortDirection = 'asc';
         let map = null;
@@ -3928,6 +3947,8 @@
                 filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
             }
 
+            filteredStations = applyProvinceFilter(filteredStations);
+
             // Calculate uptime for each category - prefer real 24h uptime when available
             const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
             const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'External'];
@@ -4074,6 +4095,8 @@
             } else if (currentNetworkFilter === 'wu') {
                 filteredStations = allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu');
             }
+
+            filteredStations = applyProvinceFilter(filteredStations);
 
             // Calculate uptime for each source type
             const sources = ['Davis', 'Misol', 'WU'];
@@ -4419,7 +4442,7 @@
                 document.getElementById('categoryChartTitle').textContent = `${catConfig.name} Stations Uptime`;
 
                 // Show single category stats
-                const catStations = allStations.filter(s => s.category === currentCategory);
+                const catStations = applyProvinceFilter(allStations.filter(s => s.category === currentCategory));
                 const total = catStations.length;
                 const active = catStations.filter(s => s.status === 'Active').length;
                 const inactive = catStations.filter(s => s.status === 'Inactive').length;
@@ -4852,6 +4875,16 @@
             document.getElementById('countAll').textContent = count;
         }
 
+        // Filter by province dropdown
+        function filterByProvince(province) {
+            currentProvinceFilter = province;
+            localStorage.setItem('provinceFilter', province);
+            renderTable();
+            updateMapMarkers();
+            updateCategoryChart();
+            renderOfflinePanel();
+        }
+
         function filterByNetwork(network) {
             currentNetworkFilter = network;
             localStorage.setItem('networkFilter', network);
@@ -4976,6 +5009,23 @@
             }
         }
 
+        // Display name for a province filter value. GB is the only province the
+        // data abbreviates, so it is the only one that needs spelling out.
+        function provinceLabel(value) {
+            if (value === 'all') return 'All Provinces';
+            if (value === 'unassigned') return 'Unassigned';
+            if (value === 'GB') return 'Gilgit-Baltistan';
+            return value;
+        }
+
+        // Narrow a station list to the province picked in the dropdown.
+        // 'unassigned' catches the stations determineProvince() could not place.
+        function applyProvinceFilter(stations) {
+            if (currentProvinceFilter === 'all') return stations;
+            if (currentProvinceFilter === 'unassigned') return stations.filter(s => !s.province);
+            return stations.filter(s => s.province === currentProvinceFilter);
+        }
+
         // Get filtered stations based on current filters (shared by table, PDF, CSV)
         function getFilteredStations() {
             let stations = [...allStations];
@@ -4999,6 +5049,9 @@
             if (currentSourceFilter !== 'all') {
                 stations = stations.filter(s => s.api_source === currentSourceFilter);
             }
+
+            // Filter by province
+            stations = applyProvinceFilter(stations);
 
             // Filter by network (WW, WU)
             if (currentNetworkFilter !== 'all') {
@@ -5029,6 +5082,7 @@
             if (currentCategory !== 'all') filters.push(`Category: ${currentCategory}`);
             if (currentFilter !== 'all') filters.push(`Status: ${currentFilter}`);
             if (currentSourceFilter !== 'all') filters.push(`Source: ${currentSourceFilter}`);
+            if (currentProvinceFilter !== 'all') filters.push(`Province: ${provinceLabel(currentProvinceFilter)}`);
             if (currentNetworkFilter !== 'all') filters.push(`Network: ${currentNetworkFilter.toUpperCase()}`);
             const searchTerm = document.getElementById('searchBox').value;
             if (searchTerm) filters.push(`Search: "${searchTerm}"`);
@@ -5580,10 +5634,22 @@
                 alertsList = alertsList.filter(a => a.api_source === currentOfflineSourceFilter);
             }
 
+            // Apply province filter. Alerts carry no province of their own, so
+            // resolve it from the station id the same way the table does.
+            if (currentProvinceFilter !== 'all') {
+                alertsList = alertsList.filter(a => {
+                    const prov = determineProvince(a.station_id, a.location || a.station_name || '');
+                    return currentProvinceFilter === 'unassigned' ? !prov : prov === currentProvinceFilter;
+                });
+            }
+
             if (!alertsList || alertsList.length === 0) {
-                const msg = currentOfflineSourceFilter === 'all'
+                const narrowed = [];
+                if (currentOfflineSourceFilter !== 'all') narrowed.push(currentOfflineSourceFilter);
+                if (currentProvinceFilter !== 'all') narrowed.push(provinceLabel(currentProvinceFilter));
+                const msg = narrowed.length === 0
                     ? 'All stations online!'
-                    : `No ${currentOfflineSourceFilter} stations offline!`;
+                    : `No ${narrowed.join(' / ')} stations offline!`;
                 panel.innerHTML = `
                     <div class="no-offline">
                         <div class="no-offline-icon">✓</div>
@@ -6060,6 +6126,7 @@
             '177389': 'KPK', '172577': 'KPK', '177408': 'KPK', '163333': 'KPK', '188822': 'KPK', '188834': 'KPK',
             '128168': 'KPK', 'IKMILPUR2': 'KPK', 'IKHYBERP3': 'KPK', 'IKHYBE2': 'KPK', '183871': 'KPK',
             '144841': 'KPK', '131374': 'KPK', '131643': 'KPK', '134031': 'KPK', '134038': 'KPK', '137991': 'KPK',
+            '236172': 'KPK', '232277': 'KPK', '232279': 'KPK', '232281': 'KPK', '232282': 'KPK',
             // Sindh
             '188154': 'Sindh', '188166': 'Sindh', '192287': 'Sindh', '164176': 'Sindh', '170332': 'Sindh',
             '170382': 'Sindh', '170426': 'Sindh', '170433': 'Sindh', '175318': 'Sindh', '175407': 'Sindh',
@@ -6080,7 +6147,7 @@
             '198090': 'AJK', '177683': 'AJK', '177740': 'AJK', '177802': 'AJK', '174057': 'AJK',
             '162588': 'AJK', '130231': 'AJK',
             // Gilgit-Baltistan
-            '146260': 'GB'
+            '146260': 'GB', '146299': 'GB'
         };
 
         // Determine province from station ID or location name
@@ -6111,7 +6178,9 @@
             if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat') ||
                 loc.includes('kohat') || loc.includes('bannu') || loc.includes('d.i khan') || loc.includes('dera ismail') ||
                 loc.includes('charsadda') || loc.includes('nowshera') || loc.includes('swabi') || loc.includes('haripur') ||
-                loc.includes('mansehra') || loc.includes('nathiagali') || loc.includes('waziristan')) return 'KPK';
+                loc.includes('mansehra') || loc.includes('nathiagali') || loc.includes('waziristan') ||
+                loc.includes('tarnab') || loc.includes('sardaryab') || loc.includes('manki sharif') ||
+                loc.includes('pashtun garhi') || loc.includes('shedu')) return 'KPK';
 
             // Sindh
             if (loc.includes('karachi') || loc.includes('hyderabad') || loc.includes('sukkur') || loc.includes('larkana') ||
@@ -6130,7 +6199,7 @@
 
             // GB
             if (loc.includes('gilgit') || loc.includes('skardu') || loc.includes('hunza') || loc.includes('baltistan') ||
-                loc.includes('shimshal')) return 'GB';
+                loc.includes('shimshal') || loc.includes('chilas')) return 'GB';
 
             return '';
         }
@@ -8376,6 +8445,7 @@
             chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
             categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
             currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
+            currentProvinceFilter = localStorage.getItem('provinceFilter') || 'all';
             currentUptimeRange = localStorage.getItem('uptimeRange') || '24h';
 
             // Set active uptime range button based on saved preference
@@ -8408,6 +8478,10 @@
 
             // Set network filter dropdown
             document.getElementById('networkFilter').value = currentNetworkFilter;
+
+            // Set province filter dropdown
+            const provinceFilterEl = document.getElementById('provinceFilter');
+            if (provinceFilterEl) provinceFilterEl.value = currentProvinceFilter;
 
             await loadData();
             loadIssueTrackerData();

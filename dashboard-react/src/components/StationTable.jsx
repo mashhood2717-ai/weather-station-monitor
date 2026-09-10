@@ -18,6 +18,19 @@ const CATEGORY_OPTIONS = [
     ...Object.entries(CATEGORY_CONFIG).map(([k, v]) => ({ value: k, label: `${v.icon} ${v.name}` })),
 ];
 
+// Same order the Province availability chart plots them in.
+const PROVINCE_OPTIONS = [
+    { value: 'all', label: '🗺️ All Provinces' },
+    { value: 'Islamabad', label: 'Islamabad' },
+    { value: 'Punjab', label: 'Punjab' },
+    { value: 'AJK', label: 'AJK' },
+    { value: 'Balochistan', label: 'Balochistan' },
+    { value: 'GB', label: 'Gilgit-Baltistan' },
+    { value: 'KPK', label: 'KPK' },
+    { value: 'Sindh', label: 'Sindh' },
+    { value: 'unassigned', label: '❓ Unassigned' },
+];
+
 const SOURCE_OPTIONS = [
     { value: 'all', label: 'All Sources' },
     { value: 'Davis', label: 'Davis' },
@@ -49,6 +62,7 @@ function getUptimeValue(station, rangeUptimes) {
 export default function StationTable({ stations, statusFilter, categoryFilter, onFilterChange, onCategoryChange, onStationClick }) {
     const [search, setSearch] = useState('');
     const [sourceFilter, setSourceFilter] = useState('all');
+    const [provinceFilter, setProvinceFilter] = useState('all');
     const [range, setRange] = useState('24h');
     const [rangeUptimes, setRangeUptimes] = useState(null);
     const [rangeLoading, setRangeLoading] = useState(false);
@@ -82,6 +96,12 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
         else if (statusFilter === 'offline') result = result.filter(s => s.status === 'Inactive');
         else if (statusFilter === 'disabled') result = result.filter(s => s.status === 'Disabled');
         if (categoryFilter !== 'all') result = result.filter(s => s.category === categoryFilter);
+        if (provinceFilter !== 'all') {
+            // 'unassigned' catches stations determineProvince() could not place.
+            result = provinceFilter === 'unassigned'
+                ? result.filter(s => !s.province)
+                : result.filter(s => s.province === provinceFilter);
+        }
         if (sourceFilter !== 'all') {
             result = result.filter(s => {
                 if (sourceFilter === 'WU') return s.category === 'wu';
@@ -97,7 +117,7 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
             );
         }
         return result;
-    }, [stations, statusFilter, categoryFilter, sourceFilter, search]);
+    }, [stations, statusFilter, categoryFilter, provinceFilter, sourceFilter, search]);
 
     function handleExport(format) {
         if (format === 'csv') {
@@ -209,6 +229,7 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
                     style={{ width: 220 }}
                 />
                 <Select size="small" value={categoryFilter} onChange={onCategoryChange} options={CATEGORY_OPTIONS} style={{ width: 160 }} />
+                <Select size="small" value={provinceFilter} onChange={setProvinceFilter} options={PROVINCE_OPTIONS} style={{ width: 150 }} />
                 <Select size="small" value={sourceFilter} onChange={setSourceFilter} options={SOURCE_OPTIONS} style={{ width: 120 }} />
                 <Select size="small" value={statusFilter} onChange={onFilterChange} options={STATUS_OPTIONS} style={{ width: 130 }} />
                 <Select size="small" value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 90 }} />

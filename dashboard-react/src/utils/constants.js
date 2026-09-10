@@ -20,7 +20,7 @@ export const DISPLAY_TOTAL_STATIONS = 350;
 // Station category mapping (from Excel - user's own categories)
 export const STATION_CATEGORIES = {
     '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',
-    '169631': 'corporate', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
+    '169631': 'community', 'ILAHOR38': 'wu', '165743': 'community', '165799': 'community',
     '169682': 'corporate', '169694': 'corporate', 'C13': 'community', '165897': 'community',
     '176678': 'community', '176749': 'community', '169767': 'corporate', 'C14': 'reference',
     '188154': 'corporate', '188166': 'corporate', '163674': 'community', '163691': 'community',
@@ -41,7 +41,7 @@ export const STATION_CATEGORIES = {
     '175318': 'corporate', '175407': 'reference', '162345': 'community', '162329': 'community',
     '177740': 'community', '177802': 'community', '170462': 'community', '170469': 'community',
     '175416': 'community', '202114': 'corporate', '168681': 'community', '170481': 'community',
-    '170556': 'corporate', '162416': 'community', '162474': 'community', 'C23': 'community',
+    '170556': 'community', '162416': 'community', '162474': 'community', 'C23': 'community',
     '164594': 'corporate', '164604': 'community', '168729': 'community', '170638': 'corporate',
     '173079': 'corporate', '173126': 'corporate', '199831': 'corporate', '199834': 'corporate',
     '175472': 'community', '175480': 'corporate', 'IPINDI7': 'wu', '162498': 'reference',
@@ -56,7 +56,7 @@ export const STATION_CATEGORIES = {
     'IMURREE2': 'wu', '167088': 'community', '167102': 'community', '169126': 'community',
     'C26': 'community', '205861': 'corporate', 'C4': 'community', 'C5': 'community',
     '168781': 'community', 'C19': 'community', '185206': 'corporate', 'C22': 'community',
-    '165326': 'community', '160873': 'community', '163264': 'community', 'C25': 'community',
+    '165326': 'community', '160873': 'community', '163264': 'reference', 'C25': 'community',
     '169407': 'corporate', '169438': 'corporate', '169455': 'corporate', 'C6': 'corporate',
     '160951': 'community', '169497': 'corporate', '169500': 'corporate', '174130': 'community',
     '163360': 'community', '163347': 'community', '169639': 'community', 'IKUNRI2': 'wu',
@@ -77,10 +77,10 @@ export const STATION_CATEGORIES = {
     '182269': 'community', '130584': 'community', '130787': 'community', '194398': 'community',
     '183871': 'community', '144841': 'krews', '131374': 'community', '147435': 'community',
     '131643': 'community', '131893': 'community', '220024': 'corporate', '132393': 'community',
-    '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'reference',
+    '132465': 'community', '132463': 'community', '206075': 'community', '133029': 'community',
     '133035': 'corporate', '133150': 'community', '133253': 'community', '133425': 'community',
     '133509': 'community', '130231': 'community', '134031': 'reference', '134038': 'reference',
-    '201736': 'community', '129498': 'corporate', '134268': 'community', '134297': 'community',
+    '201736': 'community', '129498': 'community', '134268': 'community', '134297': 'community',
     'IKARAC41': 'wu', 'IISLAM21': 'wu', '137535': 'reference', '137991': 'corporate',
     'IISLAM25': 'wu', 'IISLAM26': 'wu', '146260': 'corporate', '147145': 'corporate',
     'C3': 'reference', '147425': 'community', 'C1': 'reference', '150067': 'community',
@@ -95,7 +95,12 @@ export const STATION_CATEGORIES = {
     '232277': 'krews', '232279': 'krews', '232280': 'krews', '232281': 'krews',
     '232282': 'krews', '236172': 'krews',
     // Reference
-    '232283': 'reference',
+    '232283': 'reference', '146301': 'reference',
+    // Corporate
+    '232286': 'corporate', '218269': 'corporate',
+    // Confirmed community, not merely defaulted to it
+    '228881': 'community', '244338': 'community', '244356': 'community',
+    '146299': 'community', '234197': 'community',
 };
 
 // Source overrides for stations with missing/incorrect api_source
@@ -150,6 +155,7 @@ export const STATION_PROVINCES = {
     '177389': 'KPK', '172577': 'KPK', '177408': 'KPK', '163333': 'KPK', '188822': 'KPK', '188834': 'KPK',
     '128168': 'KPK', 'IKMILPUR2': 'KPK', 'IKHYBERP3': 'KPK', 'IKHYBE2': 'KPK', '183871': 'KPK',
     '144841': 'KPK', '131374': 'KPK', '131643': 'KPK', '134031': 'KPK', '134038': 'KPK', '137991': 'KPK',
+    '236172': 'KPK', '232277': 'KPK', '232279': 'KPK', '232280': 'KPK', '232281': 'KPK', '232282': 'KPK',
     '188154': 'Sindh', '188166': 'Sindh', '192287': 'Sindh', '164176': 'Sindh', '170332': 'Sindh',
     '170382': 'Sindh', '170426': 'Sindh', '170433': 'Sindh', '175318': 'Sindh', '175407': 'Sindh',
     '170462': 'Sindh', '170469': 'Sindh', '175416': 'Sindh', '170481': 'Sindh', '170556': 'Sindh',
@@ -166,7 +172,7 @@ export const STATION_PROVINCES = {
     'INUSHK12': 'Balochistan', 'ITURBA4': 'Balochistan', '129498': 'Balochistan',
     '198090': 'AJK', '177683': 'AJK', '177740': 'AJK', '177802': 'AJK', '174057': 'AJK',
     '162588': 'AJK', '130231': 'AJK',
-    '146260': 'GB',
+    '146260': 'GB', '146299': 'GB',
 };
 
 // Category display config — user's own categories
