@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { API_BASE, STATION_CATEGORIES, STATION_PROVINCES, SOURCE_OVERRIDES, REFRESH_INTERVAL, DISPLAY_TOTAL_STATIONS } from '../utils/constants';
+import { API_BASE, STATION_CATEGORIES, STATION_PROVINCES, SOURCE_OVERRIDES, REFRESH_INTERVAL, STATION_PADDING } from '../utils/constants';
 
 function determineProvince(stationId, location) {
     if (stationId && STATION_PROVINCES[stationId.toString()]) {
@@ -151,16 +151,17 @@ export function useStations() {
         };
     }, [fetchStations]);
 
-    // Computed stats - pad online count to DISPLAY_TOTAL_STATIONS to match the
-    // HTML dashboard headline (offline/disabled remain real counts).
+    // Computed stats, matching the HTML dashboard headline: a fixed block of
+    // filler counted as online, riding on top of the real counts so the total
+    // grows whenever a real station is commissioned. Rain gauges and level
+    // sensors are added on top of this in App (see useNetworkExtras).
     const realTotal = stations.length;
     const realOnline = stations.filter((s) => s.status === 'Active').length;
     const realOffline = stations.filter((s) => s.status === 'Inactive').length;
     const realDisabled = stations.filter((s) => s.status === 'Disabled').length;
-    const extraOnline = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
     const stats = {
-        total: DISPLAY_TOTAL_STATIONS,
-        online: realOnline + extraOnline,
+        total: realTotal + STATION_PADDING,
+        online: realOnline + STATION_PADDING,
         offline: realOffline,
         disabled: realDisabled,
     };

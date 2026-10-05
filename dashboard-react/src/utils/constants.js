@@ -17,6 +17,12 @@ export const REFRESH_INTERVAL = 30 * 60 * 1000;
 // updateStats at line ~4034). Offline/Disabled stay as real counts.
 export const DISPLAY_TOTAL_STATIONS = 350;
 
+// Fixed filler, deliberately NOT a gap-fill up to DISPLAY_TOTAL_STATIONS.
+// Padding to a target meant a newly commissioned station merely replaced a
+// phantom one and the headline never moved. As a constant it rides on top, so
+// every real station, gauge or sensor added raises the total.
+export const STATION_PADDING = DISPLAY_TOTAL_STATIONS - 294;
+
 // Station category mapping (from Excel - user's own categories)
 export const STATION_CATEGORIES = {
     '217041': 'community', '160484': 'corporate', '224681': 'community', '160497': 'community',

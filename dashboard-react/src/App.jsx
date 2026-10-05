@@ -13,17 +13,32 @@ import IssueTracker from './components/IssueTracker';
 import RainGauges from './components/RainGauges';
 import StormWatchAlert from './components/StormWatchAlert';
 import { useStations } from './hooks/useStations';
+import { useRangeUptimes } from './hooks/useRangeUptimes';
+import { useNetworkExtras } from './hooks/useNetworkExtras';
 
 const { Content } = Layout;
 
 export default function App() {
-    const DISPLAY_TOTAL_STATIONS = 350;
     const [isDark, setIsDark] = useState(true);
     const [activeTab, setActiveTab] = useState('monitoring');
     const [selectedStation, setSelectedStation] = useState(null);
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [categoryFilter, setCategoryFilter] = useState('all');
+    // Both are multi-select: an empty array means no constraint.
+    const [statusFilter, setStatusFilter] = useState([]);
+    const [categoryFilter, setCategoryFilter] = useState([]);
     const { stations, stats, loading, error, lastUpdated, lastSync, refresh, uptimeTrend } = useStations();
+    // Owned here, not in the table, so the availability chart sees the same period.
+    const [uptimeRange, setUptimeRange] = useState('24h');
+    const { rangeUptimes, rangeLoading, rangeLabel } = useRangeUptimes(uptimeRange);
+
+    // Rain gauges and level sensors are real monitored devices, so the headline
+    // counts them alongside the weather stations.
+    const extras = useNetworkExtras();
+    const headlineStats = useMemo(() => ({
+        ...stats,
+        total: stats.total + extras.total,
+        online: stats.online + extras.online,
+        offline: stats.offline + extras.offline,
+    }), [stats, extras]);
 
     useEffect(() => {
         const token = localStorage.getItem('ww_token');
@@ -105,14 +120,14 @@ export default function App() {
                                 {activeTab === 'monitoring' && (
                                     <>
                                         {/* Thin stat strip */}
-                                        <StatCards stats={stats} uptimeTrend={uptimeTrend} onFilterChange={setStatusFilter} isDark={isDark} />
+                                        <StatCards stats={headlineStats} uptimeTrend={uptimeTrend} onFilterChange={(v) => setStatusFilter([v])} isDark={isDark} />
 
                                         {/* Hero row: KPI rail | Station Map | Offline + Uptime Trend */}
                                         <Row gutter={[12, 12]} align="stretch" style={{ marginTop: 12 }}>
                                             <Col xs={24} md={24} lg={6} xl={6}>
                                                 <Space direction="vertical" size={12} style={{ display: 'flex' }}>
-                                                    <StatusDistribution stats={stats} isDark={isDark} displayTotal={DISPLAY_TOTAL_STATIONS} />
-                                                    <AvailabilitySummaryChart stations={stations} isDark={isDark} />
+                                                    <StatusDistribution stats={headlineStats} isDark={isDark} displayTotal={headlineStats.total} />
+                                                    <AvailabilitySummaryChart stations={stations} isDark={isDark} rangeUptimes={rangeUptimes} rangeLabel={rangeLabel} categoryFilter={categoryFilter} />
                                                 </Space>
                                             </Col>
                                             <Col xs={24} md={24} lg={12} xl={12}>
@@ -143,6 +158,10 @@ export default function App() {
                                                     onFilterChange={setStatusFilter}
                                                     onCategoryChange={setCategoryFilter}
                                                     onStationClick={(s) => setSelectedStation(s)}
+                                                    range={uptimeRange}
+                                                    onRangeChange={setUptimeRange}
+                                                    rangeUptimes={rangeUptimes}
+                                                    rangeLoading={rangeLoading}
                                                 />
                                             </Col>
                                         </Row>

@@ -1,26 +1,28 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import axios from 'axios';
-import { Input, Select, Tag, Table, Progress, Space, Button, Typography, message } from 'antd';
+import React, { useState, useMemo } from 'react';
+import { Input, Select, Tag, Table, Progress, Space, Button, Typography, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons';
-import { CATEGORY_CONFIG, API_BASE } from '../utils/constants';
+import { CATEGORY_CONFIG } from '../utils/constants';
+import { UPTIME_RANGE_LABELS, rangeLabelFor } from '../hooks/useRangeUptimes';
 
 const { Text } = Typography;
 
+// Every filter below is multi-select, so none of them carries an 'all' entry:
+// selecting nothing is what "all" means.
 const STATUS_OPTIONS = [
-    { value: 'all', label: 'All Status' },
     { value: 'online', label: 'Active' },
     { value: 'offline', label: 'Inactive' },
     { value: 'disabled', label: 'Disabled' },
 ];
 
-const CATEGORY_OPTIONS = [
-    { value: 'all', label: 'All Categories' },
-    ...Object.entries(CATEGORY_CONFIG).map(([k, v]) => ({ value: k, label: `${v.icon} ${v.name}` })),
-];
+// s.status is capitalised; the option values are not.
+const STATUS_VALUE = { online: 'Active', offline: 'Inactive', disabled: 'Disabled' };
+
+const CATEGORY_OPTIONS =
+    Object.entries(CATEGORY_CONFIG).map(([k, v]) => ({ value: k, label: `${v.icon} ${v.name}` }));
 
 // Same order the Province availability chart plots them in.
 const PROVINCE_OPTIONS = [
-    { value: 'all', label: '🗺️ All Provinces' },
     { value: 'Islamabad', label: 'Islamabad' },
     { value: 'Punjab', label: 'Punjab' },
     { value: 'AJK', label: 'AJK' },
@@ -32,24 +34,22 @@ const PROVINCE_OPTIONS = [
 ];
 
 const SOURCE_OPTIONS = [
-    { value: 'all', label: 'All Sources' },
     { value: 'Davis', label: 'Davis' },
     { value: 'Misol', label: 'Misol' },
     { value: 'WU', label: 'WU' },
 ];
 
-const RANGE_OPTIONS = [
-    { value: '24h', label: '24h' },
-    { value: 'daily', label: 'Daily' },
-    { value: '7d', label: '7d' },
-    { value: '30d', label: '30d' },
-    { value: '1y', label: '1y' },
-];
+const RANGE_OPTIONS = Object.entries(UPTIME_RANGE_LABELS)
+    .map(([value, label]) => ({ value, label }));
 
+// Returns NaN when the station has nothing logged for the selected period, so
+// callers can show "no data" instead of the Worker's synthetic 100%.
 function getUptimeValue(station, rangeUptimes) {
-    // Range-specific override takes priority (matches legacy: GET /api/uptime-percentages?range=X)
     const override = rangeUptimes?.[String(station.station_id)];
-    if (override !== undefined && override !== null) return parseFloat(override);
+    if (override !== undefined && override !== null) {
+        if (!override.checks) return NaN;
+        return parseFloat(override.uptime);
+    }
     if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
         return parseFloat(station.uptime_24h);
     }
@@ -59,54 +59,29 @@ function getUptimeValue(station, rangeUptimes) {
     return 0;
 }
 
-export default function StationTable({ stations, statusFilter, categoryFilter, onFilterChange, onCategoryChange, onStationClick }) {
+export default function StationTable({ stations, statusFilter, categoryFilter, onFilterChange, onCategoryChange, onStationClick,
+    range, onRangeChange, rangeUptimes, rangeLoading }) {
     const [search, setSearch] = useState('');
-    const [sourceFilter, setSourceFilter] = useState('all');
-    const [provinceFilter, setProvinceFilter] = useState('all');
-    const [range, setRange] = useState('24h');
-    const [rangeUptimes, setRangeUptimes] = useState(null);
-    const [rangeLoading, setRangeLoading] = useState(false);
-
-    // When the user picks 7d / 30d / 1y / daily, fetch range-specific uptime from the
-    // Worker (mirrors dashboard/index.html loadUptimeData at line ~4347). On 24h we
-    // already have the values via /api/uptime-percentages in useStations() — clear
-    // the override so the existing column data is used directly.
-    useEffect(() => {
-        let cancelled = false;
-        if (range === '24h') {
-            setRangeUptimes(null);
-            return;
-        }
-        setRangeLoading(true);
-        axios.get(`${API_BASE}/api/uptime-percentages?range=${range}`)
-            .then(resp => {
-                if (cancelled) return;
-                const map = {};
-                (resp.data?.uptime_data || []).forEach(u => { map[String(u.station_id)] = u.uptime_24h; });
-                setRangeUptimes(map);
-            })
-            .catch(e => { if (!cancelled) message.error('Failed to load uptime for ' + range); })
-            .finally(() => { if (!cancelled) setRangeLoading(false); });
-        return () => { cancelled = true; };
-    }, [range]);
+    const [sourceFilter, setSourceFilter] = useState([]);
+    const [provinceFilter, setProvinceFilter] = useState([]);
 
     const filtered = useMemo(() => {
         let result = stations;
-        if (statusFilter === 'online') result = result.filter(s => s.status === 'Active');
-        else if (statusFilter === 'offline') result = result.filter(s => s.status === 'Inactive');
-        else if (statusFilter === 'disabled') result = result.filter(s => s.status === 'Disabled');
-        if (categoryFilter !== 'all') result = result.filter(s => s.category === categoryFilter);
-        if (provinceFilter !== 'all') {
-            // 'unassigned' catches stations determineProvince() could not place.
-            result = provinceFilter === 'unassigned'
-                ? result.filter(s => !s.province)
-                : result.filter(s => s.province === provinceFilter);
+        // Within a filter the ticked values are OR'd; across filters they AND.
+        if (statusFilter.length) {
+            const want = new Set(statusFilter.map(k => STATUS_VALUE[k]));
+            result = result.filter(s => want.has(s.status));
         }
-        if (sourceFilter !== 'all') {
-            result = result.filter(s => {
-                if (sourceFilter === 'WU') return s.category === 'wu';
-                return (s.api_source || '').toLowerCase().includes(sourceFilter.toLowerCase());
-            });
+        if (categoryFilter.length) result = result.filter(s => categoryFilter.includes(s.category));
+        if (provinceFilter.length) {
+            // A station with no province answers to the 'unassigned' option.
+            result = result.filter(s => provinceFilter.includes(s.province || 'unassigned'));
+        }
+        if (sourceFilter.length) {
+            result = result.filter(s => sourceFilter.some(f => (
+                f === 'WU' ? s.category === 'wu'
+                    : (s.api_source || '').toLowerCase().includes(f.toLowerCase())
+            )));
         }
         if (search.trim()) {
             const q = search.toLowerCase();
@@ -128,7 +103,7 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
                 s.status,
                 s.temperature ?? '',
                 s.rainfall ?? '',
-                getUptimeValue(s, rangeUptimes).toFixed(1),
+                isNaN(getUptimeValue(s, rangeUptimes)) ? 'no data' : getUptimeValue(s, rangeUptimes).toFixed(1),
                 s.province,
             ]));
             const csv = rows.map(r => r.join(',')).join('\n');
@@ -191,12 +166,23 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
             render: (value) => value !== null && value !== undefined ? `${value} mm` : '--',
         },
         {
-            title: `Availability (${range})${rangeLoading ? ' …' : ''}`,
+            title: `Availability (${rangeLabelFor(range)})${rangeLoading ? ' …' : ''}`,
             dataIndex: 'uptime',
             key: 'uptime',
-            sorter: (a, b) => getUptimeValue(a, rangeUptimes) - getUptimeValue(b, rangeUptimes),
+            // NaN (no data) sorts below every real figure rather than poisoning
+            // the comparison, which would scramble the whole column.
+            sorter: (a, b) => {
+                const av = getUptimeValue(a, rangeUptimes), bv = getUptimeValue(b, rangeUptimes);
+                if (isNaN(av) && isNaN(bv)) return 0;
+                if (isNaN(av)) return -1;
+                if (isNaN(bv)) return 1;
+                return av - bv;
+            },
             render: (_, record) => {
                 const value = getUptimeValue(record, rangeUptimes);
+                if (isNaN(value)) {
+                    return <Text type="secondary" style={{ fontSize: 12 }}>no data</Text>;
+                }
                 const color = value >= 90 ? '#10b981' : value >= 50 ? '#f59e0b' : '#ef4444';
                 return (
                     <Space size={8}>
@@ -228,11 +214,20 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
                     allowClear
                     style={{ width: 220 }}
                 />
-                <Select size="small" value={categoryFilter} onChange={onCategoryChange} options={CATEGORY_OPTIONS} style={{ width: 160 }} />
-                <Select size="small" value={provinceFilter} onChange={setProvinceFilter} options={PROVINCE_OPTIONS} style={{ width: 150 }} />
-                <Select size="small" value={sourceFilter} onChange={setSourceFilter} options={SOURCE_OPTIONS} style={{ width: 120 }} />
-                <Select size="small" value={statusFilter} onChange={onFilterChange} options={STATUS_OPTIONS} style={{ width: 130 }} />
-                <Select size="small" value={range} onChange={setRange} options={RANGE_OPTIONS} style={{ width: 90 }} />
+                <Select size="small" mode="multiple" allowClear maxTagCount="responsive" placeholder="All Categories"
+                    value={categoryFilter} onChange={onCategoryChange} options={CATEGORY_OPTIONS} style={{ minWidth: 180 }} />
+                <Select size="small" mode="multiple" allowClear maxTagCount="responsive" placeholder="All Provinces"
+                    value={provinceFilter} onChange={setProvinceFilter} options={PROVINCE_OPTIONS} style={{ minWidth: 170 }} />
+                <Select size="small" mode="multiple" allowClear maxTagCount="responsive" placeholder="All Sources"
+                    value={sourceFilter} onChange={setSourceFilter} options={SOURCE_OPTIONS} style={{ minWidth: 150 }} />
+                <Select size="small" mode="multiple" allowClear maxTagCount="responsive" placeholder="All Status"
+                    value={statusFilter} onChange={onFilterChange} options={STATUS_OPTIONS} style={{ minWidth: 160 }} />
+                <Select size="small" value={range.startsWith('month:') ? undefined : range}
+                    placeholder={rangeLabelFor(range)} onChange={onRangeChange}
+                    options={RANGE_OPTIONS} style={{ width: 140 }} />
+                <DatePicker size="small" picker="month" placeholder="Pick a month" style={{ width: 140 }}
+                    value={range.startsWith('month:') ? dayjs(range.slice(6), 'YYYY-MM') : null}
+                    onChange={(d) => onRangeChange(d ? `month:${d.format('YYYY-MM')}` : '24h')} />
                 <Button icon={<DownloadOutlined />} onClick={() => handleExport('csv')} size="small">
                     Export CSV
                 </Button>

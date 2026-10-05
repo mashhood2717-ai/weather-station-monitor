@@ -5,11 +5,20 @@ import { CATEGORY_CONFIG, CATEGORY_LIST, PROVINCE_CONFIG, PROVINCE_LIST } from '
 const SOURCE_LIST = ['Davis', 'Misol', 'WU'];
 const SOURCE_COLORS = { Davis: '#3b82f6', Misol: '#10b981', WU: '#f59e0b' };
 
-function getUptimeValue(station, windowKey) {
+const nullableFixed = (v) => (v === null ? null : Number(v.toFixed(1)));
+
+function getUptimeValue(station, windowKey, rangeUptimes) {
     // windowKey is '24h' (default) or '1h'
     if (windowKey === '1h') {
         if (station.uptime_1h !== undefined && station.uptime_1h !== null) return parseFloat(station.uptime_1h);
         return NaN;
+    }
+    // A selected period (This Month, Last Year, ...) overrides the 24h figure.
+    // The 1h window above is a different field entirely, so it is left alone.
+    // No checks in the window means no data — NOT the Worker's synthetic 100%.
+    const override = rangeUptimes?.[String(station.station_id)];
+    if (override !== undefined && override !== null) {
+        return override.checks ? parseFloat(override.uptime) : NaN;
     }
     if (station.uptime_24h !== undefined && station.uptime_24h !== null) {
         return parseFloat(station.uptime_24h);
@@ -25,7 +34,7 @@ function getChecksValue(station, windowKey) {
     return station.checks_24h || 0;
 }
 
-export default function AvailabilitySummaryChart({ stations, isDark }) {
+export default function AvailabilitySummaryChart({ stations, isDark, rangeUptimes, rangeLabel, categoryFilter }) {
     const [groupBy, setGroupBy] = useState('category');
     const [chartType, setChartType] = useState('bar');
     const [networkFilter, setNetworkFilter] = useState('all');
@@ -45,16 +54,27 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
     // Only average stations that actually had checks in the selected window.
     // For 24h: at least 1 poll in last 24h. For 1h: at least 1 poll in last hour.
     const avgUptimeFor = (list) => {
+        const override = (s) => rangeUptimes?.[String(s.station_id)];
         const uptimes = list
-            .filter(s => getChecksValue(s, windowKey) > 0)
-            .map(s => getUptimeValue(s, windowKey))
+            // With a period selected, that window's own check count decides
+            // whether the station has data; the live 24h count is irrelevant.
+            .filter(s => (windowKey === '24h' && override(s) !== undefined)
+                ? override(s).checks > 0
+                : getChecksValue(s, windowKey) > 0)
+            .map(s => getUptimeValue(s, windowKey, rangeUptimes))
             .filter(v => !isNaN(v));
-        return uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : 0;
+        // null, not 0: nothing logged is not the same as a total outage.
+        return uptimes.length ? uptimes.reduce((a, b) => a + b, 0) / uptimes.length : null;
     };
 
     const data = useMemo(() => {
         if (groupBy === 'category') {
-            return CATEGORY_LIST.map(cat => {
+            // Ticking categories in the table narrows these bars to those, so one
+            // category's uptime for the period can be read straight off the chart.
+            const shown = categoryFilter && categoryFilter.length
+                ? CATEGORY_LIST.filter(c => categoryFilter.includes(c))
+                : CATEGORY_LIST;
+            return (shown.length ? shown : CATEGORY_LIST).map(cat => {
                 const config = CATEGORY_CONFIG[cat];
                 const list = filteredStations.filter(s => s.category === cat);
                 return {
@@ -63,7 +83,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                     color: config.color,
                     total: list.length,
                     active: list.filter(s => s.status === 'Active').length,
-                    avgUptime: Number(avgUptimeFor(list).toFixed(1)),
+                    avgUptime: nullableFixed(avgUptimeFor(list)),
                 };
             });
         }
@@ -77,7 +97,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                     color: PROVINCE_CONFIG[prov]?.color || '#8c8c8c',
                     total: list.length,
                     active: list.filter(s => s.status === 'Active').length,
-                    avgUptime: Number(avgUptimeFor(list).toFixed(1)),
+                    avgUptime: nullableFixed(avgUptimeFor(list)),
                 };
             });
         }
@@ -93,10 +113,10 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
                 color: SOURCE_COLORS[src] || '#8c8c8c',
                 total: list.length,
                 active: list.filter(s => s.status === 'Active').length,
-                avgUptime: Number(avgUptimeFor(list).toFixed(1)),
+                avgUptime: nullableFixed(avgUptimeFor(list)),
             };
         });
-    }, [filteredStations, groupBy, windowKey]);
+    }, [filteredStations, groupBy, windowKey, rangeUptimes, categoryFilter]);
 
     useEffect(() => {
         drawChart();
@@ -144,6 +164,17 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
             const gap = plotW / n;
             data.forEach((d, i) => {
                 const x = pad.left + gap * i + gap / 2 - barW / 2;
+                // Nothing logged for this group in the window: name it, draw no bar.
+                if (d.avgUptime === null) {
+                    ctx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+                    ctx.font = '10px Inter, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('no data', x + barW / 2, pad.top + plotH - 6);
+                    ctx.fillStyle = isDark ? '#cbd5e1' : '#64748b';
+                    ctx.fillText(d.name, x + barW / 2, H - pad.bottom + 16);
+                    ctx.fillText(`(${d.active}/${d.total})`, x + barW / 2, H - pad.bottom + 28);
+                    return;
+                }
                 const barH = (d.avgUptime / 100) * plotH;
                 const y = pad.top + plotH - barH;
                 ctx.fillStyle = d.color + 'cc';
@@ -173,16 +204,25 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
         ctx.beginPath();
         ctx.strokeStyle = '#10b981';
         ctx.lineWidth = 2;
+        let started = false;
         data.forEach((d, i) => {
+            if (d.avgUptime === null) { started = false; return; }
             const x = pad.left + gap * i;
             const y = pad.top + plotH - (d.avgUptime / 100) * plotH;
-            if (i === 0) ctx.moveTo(x, y);
+            if (!started) { ctx.moveTo(x, y); started = true; }
             else ctx.lineTo(x, y);
         });
         ctx.stroke();
 
         data.forEach((d, i) => {
             const x = pad.left + gap * i;
+            if (d.avgUptime === null) {
+                ctx.fillStyle = isDark ? '#cbd5e1' : '#64748b';
+                ctx.font = '10px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(d.name, x, H - pad.bottom + 16);
+                return;
+            }
             const y = pad.top + plotH - (d.avgUptime / 100) * plotH;
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -203,7 +243,7 @@ export default function AvailabilitySummaryChart({ stations, isDark }) {
 
     return (
         <Card
-            title={<span>Availability Summary <span style={{ fontSize: 11, fontWeight: 400, color: isDark ? '#94a3b8' : '#64748b', marginLeft: 6 }}>— {windowKey === '1h' ? 'last hour' : '24h average'}</span></span>}
+            title={<span>Availability Summary <span style={{ fontSize: 11, fontWeight: 400, color: isDark ? '#94a3b8' : '#64748b', marginLeft: 6 }}>— {windowKey === '1h' ? 'last hour' : (rangeLabel || '24h')}</span></span>}
             size="small"
             styles={{ body: { padding: 16 } }}
             extra={(

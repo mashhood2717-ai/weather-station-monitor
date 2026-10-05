@@ -849,6 +849,102 @@
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
 
+        /* Multi-select filter: a styled checkbox dropdown. A native
+           <select multiple> renders as a list box, which this toolbar cannot
+           accommodate. */
+        .ms {
+            position: relative;
+            display: inline-block;
+        }
+
+        .ms-toggle {
+            width: 100%;
+            padding: 10px 16px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .ms-toggle:hover,
+        .ms.open .ms-toggle {
+            border-color: var(--primary);
+        }
+
+        .ms.active .ms-toggle {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+
+        .ms-caret {
+            opacity: 0.55;
+            font-size: 11px;
+        }
+
+        .ms-panel {
+            position: absolute;
+            z-index: 1200;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 100%;
+            max-height: 288px;
+            overflow-y: auto;
+            padding: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .ms-opt {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .ms-opt:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .ms-opt input {
+            accent-color: var(--primary);
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .ms-clear {
+            width: 100%;
+            margin-top: 4px;
+            padding: 7px 10px;
+            background: transparent;
+            border: none;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .ms-clear:hover {
+            color: var(--primary);
+        }
+
         .source-filter {
             padding: 10px 16px;
             background: rgba(0, 0, 0, 0.5);
@@ -1949,42 +2045,51 @@
                         <button class="filter-btn" onclick="loadData(true)" title="Fetch the latest data now (bypasses the server cache)">🔄 Refresh</button>
                         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..."
                             style="width: 120px;">
-                        <select id="categoryFilter" class="category-dropdown" onchange="filterByCategory(this.value)"
-                            style="min-width: 120px;">
-                            <option value="all">📊 All Categories</option>
-                            <option value="corporate">🏢 Corporate</option>
-                            <option value="community">👥 Community</option>
-                            <option value="reference">📍 Reference</option>
-                            <option value="wow">🛣️ WOW</option>
-                            <option value="krews">🔬 KREWS</option>
-                            <option value="wfp">🌾 WFP</option>
-                            <option value="wu">🌐 External</option>
-                        </select>
-                        <select id="provinceFilter" class="source-filter" onchange="filterByProvince(this.value)"
-                            style="min-width: 130px;">
-                            <option value="all">🗺️ All Provinces</option>
-                            <option value="Islamabad">Islamabad</option>
-                            <option value="Punjab">Punjab</option>
-                            <option value="AJK">AJK</option>
-                            <option value="Balochistan">Balochistan</option>
-                            <option value="GB">Gilgit-Baltistan</option>
-                            <option value="KPK">KPK</option>
-                            <option value="Sindh">Sindh</option>
-                            <option value="unassigned">❓ Unassigned</option>
-                        </select>
-                        <select id="sourceFilter" class="source-filter" style="min-width: 100px;">
-                            <option value="all">All Sources</option>
-                            <option value="Davis">Davis</option>
-                            <option value="Misol">Misol</option>
-                            <option value="WU">WU</option>
-                        </select>
-                        <select id="statusFilter" class="source-filter" onchange="filterByStatus(this.value)"
-                            style="min-width: 110px;">
-                            <option value="all">🔘 All Status</option>
-                            <option value="active">🟢 Active</option>
-                            <option value="inactive">🔴 Inactive</option>
-                            <option value="disabled">⚫ Disabled</option>
-                        </select>
+                        <div class="ms" id="ms-category" style="min-width: 150px;">
+                            <button type="button" class="ms-toggle"><span class="ms-label">📊 All Categories</span><span class="ms-caret">▾</span></button>
+                            <div class="ms-panel" hidden>
+                                <label class="ms-opt"><input type="checkbox" value="corporate">🏢 Corporate</label>
+                                <label class="ms-opt"><input type="checkbox" value="community">👥 Community</label>
+                                <label class="ms-opt"><input type="checkbox" value="reference">📍 Reference</label>
+                                <label class="ms-opt"><input type="checkbox" value="wow">🛣️ WOW</label>
+                                <label class="ms-opt"><input type="checkbox" value="krews">🔬 KREWS</label>
+                                <label class="ms-opt"><input type="checkbox" value="wfp">🌾 WFP</label>
+                                <label class="ms-opt"><input type="checkbox" value="wu">🌐 External</label>
+                                <button type="button" class="ms-clear">Clear</button>
+                            </div>
+                        </div>
+                        <div class="ms" id="ms-province" style="min-width: 150px;">
+                            <button type="button" class="ms-toggle"><span class="ms-label">🗺️ All Provinces</span><span class="ms-caret">▾</span></button>
+                            <div class="ms-panel" hidden>
+                                <label class="ms-opt"><input type="checkbox" value="Islamabad">Islamabad</label>
+                                <label class="ms-opt"><input type="checkbox" value="Punjab">Punjab</label>
+                                <label class="ms-opt"><input type="checkbox" value="AJK">AJK</label>
+                                <label class="ms-opt"><input type="checkbox" value="Balochistan">Balochistan</label>
+                                <label class="ms-opt"><input type="checkbox" value="GB">Gilgit-Baltistan</label>
+                                <label class="ms-opt"><input type="checkbox" value="KPK">KPK</label>
+                                <label class="ms-opt"><input type="checkbox" value="Sindh">Sindh</label>
+                                <label class="ms-opt"><input type="checkbox" value="unassigned">❓ Unassigned</label>
+                                <button type="button" class="ms-clear">Clear</button>
+                            </div>
+                        </div>
+                        <div class="ms" id="ms-source" style="min-width: 125px;">
+                            <button type="button" class="ms-toggle"><span class="ms-label">All Sources</span><span class="ms-caret">▾</span></button>
+                            <div class="ms-panel" hidden>
+                                <label class="ms-opt"><input type="checkbox" value="Davis">Davis</label>
+                                <label class="ms-opt"><input type="checkbox" value="Misol">Misol</label>
+                                <label class="ms-opt"><input type="checkbox" value="WU">WU</label>
+                                <button type="button" class="ms-clear">Clear</button>
+                            </div>
+                        </div>
+                        <div class="ms" id="ms-status" style="min-width: 130px;">
+                            <button type="button" class="ms-toggle"><span class="ms-label">🔘 All Status</span><span class="ms-caret">▾</span></button>
+                            <div class="ms-panel" hidden>
+                                <label class="ms-opt"><input type="checkbox" value="active">🟢 Active</label>
+                                <label class="ms-opt"><input type="checkbox" value="inactive">🔴 Inactive</label>
+                                <label class="ms-opt"><input type="checkbox" value="disabled">⚫ Disabled</label>
+                                <button type="button" class="ms-clear">Clear</button>
+                            </div>
+                        </div>
                         <select id="exportDropdown" class="source-filter" onchange="handleExport(this.value)"
                             style="min-width: 100px;">
                             <option value="">📤 Export</option>
@@ -1999,10 +2104,21 @@
                             <option value="7d">⏱️ 7D</option>
                             <option value="30d">⏱️ 30D</option>
                             <option value="1y">⏱️ 1Y</option>
+                            <option value="month">📅 This Month</option>
+                            <option value="lastmonth">📅 Last Month</option>
+                            <option value="year">📅 This Year</option>
+                            <option value="lastyear">📅 Last Year</option>
+                            <option value="pickmonth">📅 Pick a Month…</option>
                             <option value="custom">⏱️ Custom</option>
                         </select>
                     </div>
 
+                    <div id="monthPickRow"
+                        style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                        <span style="color: var(--text-secondary); font-size: 13px;">Month:</span>
+                        <input type="month" id="monthPicker" class="date-input" title="Pick a month">
+                        <button class="apply-btn" onclick="applyMonthPick()">Apply</button>
+                    </div>
                     <!-- Custom Date Range Row (hidden by default) -->
                     <div id="customDateRange"
                         style="display: none; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
@@ -3446,8 +3562,6 @@
             return 'Davis';
         }
 
-        // Current category filter
-        let currentCategory = 'all';
 
         // Check authentication
         const token = localStorage.getItem('ww_token');
@@ -3494,10 +3608,24 @@
 
         // Global data
         let allStations = [];
-        let currentFilter = 'all';
-        let currentSourceFilter = 'all';
         let currentNetworkFilter = 'all';
-        let currentProvinceFilter = 'all';
+
+        // Multi-select filters. Each holds a Set of checked values; an empty Set
+        // means the filter is unconstrained, which is what 'all' used to mean.
+        const selectedCategories = new Set();
+        const selectedProvinces = new Set();
+        const selectedSources = new Set();
+        const selectedStatuses = new Set();
+
+        // s.status is capitalised; the checkbox values are not.
+        const STATUS_KEY = { Active: 'active', Inactive: 'inactive', Disabled: 'disabled' };
+
+        const MULTI_SELECTS = {
+            category: { set: selectedCategories, allLabel: '📊 All Categories', noun: 'categories', storageKey: 'filterCategories' },
+            province: { set: selectedProvinces, allLabel: '🗺️ All Provinces', noun: 'provinces', storageKey: 'filterProvinces' },
+            source: { set: selectedSources, allLabel: 'All Sources', noun: 'sources', storageKey: 'filterSources' },
+            status: { set: selectedStatuses, allLabel: '🔘 All Status', noun: 'statuses', storageKey: 'filterStatuses' }
+        };
         let sortColumn = 'name';
         let sortDirection = 'asc';
         let map = null;
@@ -3830,7 +3958,7 @@
                                 padding: 12,
                                 callbacks: {
                                     label: function (context) {
-                                        return `Uptime: ${context.parsed.y.toFixed(1)}%`;
+                                        return (context.parsed.y === null || context.parsed.y === undefined ? 'No data for this period' : `Uptime: ${context.parsed.y.toFixed(1)}%`);
                                     }
                                 }
                             }
@@ -3883,6 +4011,16 @@
 
         // Pick the right uptime / checks field per station based on the selected window.
         // Falls back to 24h if 1h fields aren't populated yet (e.g. cached old Worker response).
+        // Keep only the series whose key is ticked in the matching filter, so the
+        // bars answer "how did THIS category do" rather than always showing all
+        // of them. Nothing ticked (or nothing matching) means keep every series.
+        function pickSeries(keys, names, colors, selected) {
+            if (!selected || !selected.size) return [keys, names, colors];
+            const idx = keys.map((k, i) => i).filter(i => selected.has(keys[i]));
+            if (!idx.length) return [keys, names, colors];
+            return [idx.map(i => keys[i]), idx.map(i => names[i]), idx.map(i => colors[i])];
+        }
+
         function stationUptimeForWindow(s) {
             if (chartWindow === '1h') {
                 const checks = (s.checks_1h !== undefined && s.checks_1h !== null) ? s.checks_1h : 0;
@@ -3896,13 +4034,25 @@
             return { checks, uptime: val !== undefined && val !== null ? parseFloat(val) : NaN };
         }
 
-        // Update the "— 24h average" / "— last hour" subtitle on the chart card.
+        const UPTIME_RANGE_LABELS = {
+            '24h': '24h', 'daily': 'Today', '7d': '7 Days', '30d': '30 Days', '1y': '1 Year',
+            'month': 'This Month', 'lastmonth': 'Last Month', 'year': 'This Year', 'lastyear': 'Last Year',
+            'custom': 'Custom', 'pickmonth': 'Pick a Month'
+        };
+
+        // What the bars are currently averaging over. Custom ranges carry their
+        // own dates, so they are stored as a label rather than a key.
+        let currentRangeLabel = UPTIME_RANGE_LABELS['24h'];
+
+        // Subtitle on the chart card. The 1h toggle reads a different field
+        // entirely, so it wins; otherwise the bars show whichever period was
+        // last loaded into uptime_24h.
         function updateChartWindowSubtitle() {
             const title = document.getElementById('categoryChartTitle');
             if (!title) return;
             const next = title.nextElementSibling;
             if (next && next.tagName === 'SPAN') {
-                next.textContent = chartWindow === '1h' ? '— last hour' : '— 24h average';
+                next.textContent = chartWindow === '1h' ? '— last hour' : `— ${currentRangeLabel}`;
             }
         }
 
@@ -3960,9 +4110,11 @@
             filteredStations = applyProvinceFilter(filteredStations);
 
             // Calculate uptime for each category - prefer real 24h uptime when available
-            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'];
+            const [categories, categoryNames, categoryColors] = pickSeries(
+                ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'],
+                ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'],
+                ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'],
+                selectedCategories);
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -3979,16 +4131,17 @@
                     .filter(o => o.checks > 0 && !isNaN(o.uptime))
                     .map(o => o.uptime);
 
-                let avgUptime = 0;
+                let avgUptime = null;
                 if (uptimes.length > 0) {
                     const sum = uptimes.reduce((a, b) => a + b, 0);
                     avgUptime = sum / uptimes.length;
                 } else {
-                    // No recorded checks for this category — show 0 rather than deriving from current state
-                    avgUptime = 0;
+                    // Nothing logged for this category in the window — not the same
+                    // as 0% uptime, so plot no bar at all.
+                    avgUptime = null;
                 }
 
-                uptimeData.push(Number(avgUptime.toFixed(1)));
+                uptimeData.push(avgUptime === null ? null : Number(avgUptime.toFixed(1)));
                 activeData.push(active);
                 totalData.push(total);
             });
@@ -4031,7 +4184,7 @@
                                     label: function (context) {
                                         const idx = context.dataIndex;
                                         return [
-                                            `Uptime: ${context.parsed.y.toFixed(1)}%`,
+                                            (context.parsed.y === null || context.parsed.y === undefined ? 'No data for this period' : `Uptime: ${context.parsed.y.toFixed(1)}%`),
                                             `Active: ${activeData[idx]} / ${totalData[idx]}`
                                         ];
                                     }
@@ -4076,7 +4229,7 @@
                                 callbacks: {
                                     label: function (context) {
                                         const idx = context.dataIndex;
-                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`, `Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                        return [(context.parsed.y === null || context.parsed.y === undefined ? 'No data for this period' : `Uptime: ${context.parsed.y.toFixed(1)}%`), `Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
@@ -4109,9 +4262,11 @@
             filteredStations = applyProvinceFilter(filteredStations);
 
             // Calculate uptime for each source type
-            const sources = ['Davis', 'Misol', 'WU'];
-            const sourceNames = ['Davis', 'Misol', 'Weather Underground'];
-            const sourceColors = ['#3b82f6', '#10b981', '#f59e0b'];
+            const [sources, sourceNames, sourceColors] = pickSeries(
+                ['Davis', 'Misol', 'WU'],
+                ['Davis', 'Misol', 'Weather Underground'],
+                ['#3b82f6', '#10b981', '#f59e0b'],
+                selectedSources);
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4126,13 +4281,13 @@
                     .filter(o => o.checks > 0 && !isNaN(o.uptime))
                     .map(o => o.uptime);
 
-                let avgUptime = 0;
+                let avgUptime = null;
                 if (uptimes.length > 0) {
                     const sum = uptimes.reduce((a, b) => a + b, 0);
                     avgUptime = sum / uptimes.length;
                 }
 
-                uptimeData.push(Number(avgUptime.toFixed(1)));
+                uptimeData.push(avgUptime === null ? null : Number(avgUptime.toFixed(1)));
                 activeData.push(active);
                 totalData.push(total);
             });
@@ -4251,9 +4406,11 @@
             }
 
             // Calculate uptime for each province
-            const provinces = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
-            const provinceNames = ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'];
-            const provinceColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
+            const [provinces, provinceNames, provinceColors] = pickSeries(
+                ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'],
+                ['Islamabad', 'Punjab', 'AJK', 'Balochistan', 'GB', 'KPK', 'Sindh'],
+                ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'],
+                selectedProvinces);
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4270,17 +4427,14 @@
                     .filter(o => o.checks > 0 && !isNaN(o.uptime))
                     .map(o => o.uptime);
 
-                let avgUptime = 0;
+                let avgUptime = null;
                 if (uptimes.length > 0) {
                     const sum = uptimes.reduce((a, b) => a + b, 0);
                     avgUptime = sum / uptimes.length;
                 } else {
-                    // No recorded checks for this province — fall back to current status
-                    if (total > 0) {
-                        avgUptime = (active / total) * 100;
-                    } else {
-                        avgUptime = 0;
-                    }
+                    // Nothing logged for this province in the window. Deriving it from
+                    // current status would invent history, so plot no bar.
+                    avgUptime = null;
                 }
 
                 uptimeData.push(Number(avgUptime.toFixed(1)));
@@ -4326,7 +4480,7 @@
                                     label: function (context) {
                                         const idx = context.dataIndex;
                                         return [
-                                            `Uptime: ${context.parsed.y.toFixed(1)}%`,
+                                            (context.parsed.y === null || context.parsed.y === undefined ? 'No data for this period' : `Uptime: ${context.parsed.y.toFixed(1)}%`),
                                             `Active: ${activeData[idx]} / ${totalData[idx]}`
                                         ];
                                     }
@@ -4371,7 +4525,7 @@
                                 callbacks: {
                                     label: function (context) {
                                         const idx = context.dataIndex;
-                                        return [`Uptime: ${context.parsed.y.toFixed(1)}%`, `Active: ${activeData[idx]} / ${totalData[idx]}`];
+                                        return [(context.parsed.y === null || context.parsed.y === undefined ? 'No data for this period' : `Uptime: ${context.parsed.y.toFixed(1)}%`), `Active: ${activeData[idx]} / ${totalData[idx]}`];
                                     }
                                 }
                             }
@@ -4387,9 +4541,11 @@
 
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
-            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'];
+            const [categories, categoryNames, categoryColors] = pickSeries(
+                ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'],
+                ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'],
+                ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'],
+                selectedCategories);
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4405,15 +4561,13 @@
                     .filter(o => o.checks > 0 && !isNaN(o.uptime))
                     .map(o => o.uptime);
 
-                let avgUptime = 0;
+                let avgUptime = null;
                 if (uptimes.length > 0) {
                     const sum = uptimes.reduce((a, b) => a + b, 0);
                     avgUptime = sum / uptimes.length;
-                } else {
-                    avgUptime = 0;
                 }
 
-                uptimeData.push(Number(avgUptime.toFixed(1)));
+                uptimeData.push(avgUptime === null ? null : Number(avgUptime.toFixed(1)));
                 activeData.push(active);
                 totalData.push(total);
             });
@@ -4442,66 +4596,29 @@
             }
         }
 
+        // Repaint the summary chart for whichever grouping is active. The old
+        // code called initCategoryUptimeChart() here regardless of chartGroupMode,
+        // so clearing the category filter while on Source or Province silently
+        // swapped the chart out from under the still-highlighted button.
+        function drawGroupedChart() {
+            const titles = {
+                category: 'Category Availability Summary',
+                source: 'Source Availability Summary',
+                province: 'Province Availability Summary'
+            };
+            const titleEl = document.getElementById('categoryChartTitle');
+            if (titleEl) titleEl.textContent = titles[chartGroupMode] || titles.category;
+            if (chartGroupMode === 'source') initSourceUptimeChart();
+            else if (chartGroupMode === 'province') initProvinceUptimeChart();
+            else initCategoryUptimeChart();
+        }
+
         // Update category chart when category is selected
         function updateCategoryChart() {
-            if (currentCategory === 'all') {
-                document.getElementById('categoryChartTitle').textContent = 'Category Uptime Summary';
-                initCategoryUptimeChart();
-            } else {
-                const catConfig = CATEGORY_CONFIG[currentCategory];
-                document.getElementById('categoryChartTitle').textContent = `${catConfig.name} Stations Uptime`;
-
-                // Show single category stats
-                const catStations = applyProvinceFilter(allStations.filter(s => s.category === currentCategory));
-                const total = catStations.length;
-                const active = catStations.filter(s => s.status === 'Active').length;
-                const inactive = catStations.filter(s => s.status === 'Inactive').length;
-                const disabled = catStations.filter(s => s.status === 'Disabled').length;
-
-                if (categoryUptimeChart) {
-                    categoryUptimeChart.destroy();
-                }
-
-                const ctx = document.getElementById('categoryUptimeChart').getContext('2d');
-                categoryUptimeChart = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Active', 'Inactive', 'Disabled'],
-                        datasets: [{
-                            data: [active, inactive, disabled],
-                            backgroundColor: ['#10b981', '#f59e0b', '#6b7280'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '60%',
-                        plugins: {
-                            legend: {
-                                display: true,
-                                position: 'bottom',
-                                labels: {
-                                    color: '#94a3b8',
-                                    padding: 15,
-                                    usePointStyle: true
-                                }
-                            },
-                            tooltip: {
-                                backgroundColor: 'rgba(10, 10, 10, 0.95)',
-                                titleColor: '#f1f5f9',
-                                bodyColor: '#94a3b8',
-                                callbacks: {
-                                    label: function (context) {
-                                        const pct = ((context.parsed / total) * 100).toFixed(1);
-                                        return `${context.label}: ${context.parsed} (${pct}%)`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
+            // Always bars. Ticking categories narrows which bars are drawn
+            // (see pickSeries), which is what makes "this category's uptime
+            // over this period" readable straight off the chart.
+            drawGroupedChart();
         }
 
         // Update map markers
@@ -4597,6 +4714,47 @@
         // Display total stations (can be higher than actual for presentation)
         const DISPLAY_TOTAL_STATIONS = 350;
 
+        // The headline counts the whole monitored network, not just the weather
+        // stations: the rain gauges and level sensors served by the RG Worker,
+        // plus three further stations. Counts are fetched live so the figure
+        // follows the real estate; these values are the fallback used until that
+        // lands, or if that Worker (a different Cloudflare account) is unreachable.
+        const EXTRA_STATIONS = 3;
+
+        // Fixed filler, deliberately NOT a gap-fill up to a target. Padding to 350
+        // meant a newly commissioned station merely replaced a phantom one and the
+        // headline never moved. As a constant it rides on top, so every real
+        // station, gauge or sensor added raises the total.
+        const STATION_PADDING = DISPLAY_TOTAL_STATIONS - 294;
+        let networkExtras = { gauges: 144, gaugesOnline: 133, sensors: 11, sensorsOnline: 11 };
+
+        // Kept so the tiles can be recomputed once the extras arrive, without
+        // re-fetching the station list.
+        let lastStationStats = null;
+
+        async function loadNetworkExtras() {
+            try {
+                const [rg, ls] = await Promise.all([
+                    fetch(`${RAIN_GAUGES_WORKER}/api/rain-gauges`).then(r => r.json()),
+                    fetch(`${RAIN_GAUGES_WORKER}/api/level-sensors`).then(r => r.json())
+                ]);
+                const gauges = rg?.gauges || [];
+                const sensors = ls?.sensors || [];
+                if (gauges.length) {
+                    networkExtras.gauges = gauges.length;
+                    networkExtras.gaugesOnline = gauges.filter(g => g.status === 'online').length;
+                }
+                if (sensors.length) {
+                    networkExtras.sensors = sensors.length;
+                    networkExtras.sensorsOnline = sensors.filter(s => s.status === 'online').length;
+                }
+            } catch (e) {
+                // Headline must not depend on a second Worker being reachable.
+                console.warn('Network extras unavailable, using fallback counts:', e.message);
+            }
+            if (lastStationStats) updateStats(lastStationStats);
+        }
+
         // Fetch dashboard stats from backend API (avg uptime/downtime, daily extremes since midnight PKT)
         async function fetchDashboardStats() {
             try {
@@ -4671,16 +4829,25 @@
 
         // Update stats cards
         function updateStats(stats) {
+            lastStationStats = stats;
             const realTotal = stats.total || 0;
             const realOnline = stats.online || 0;
             const realOffline = stats.offline || 0;  // Now only Inactive stations
             const realDisabled = stats.disabled || 0;
 
-            // Calculate display values: extra stations are always "online"
-            const extraStations = Math.max(0, DISPLAY_TOTAL_STATIONS - realTotal);
-            const displayTotal = DISPLAY_TOTAL_STATIONS;
-            const displayOnline = realOnline + extraStations;
-            const displayOffline = realOffline; // Inactive count stays real
+            // Filler rides on top of the real count rather than filling a gap, so
+            // the headline grows whenever real hardware is commissioned.
+            const extraStations = STATION_PADDING;
+
+            // Rain gauges and level sensors are real devices, so they bring their
+            // own online/offline split rather than all landing in the online bucket.
+            const extraDevices = networkExtras.gauges + networkExtras.sensors + EXTRA_STATIONS;
+            const extraDevicesOnline = networkExtras.gaugesOnline + networkExtras.sensorsOnline + EXTRA_STATIONS;
+            const extraDevicesOffline = extraDevices - extraDevicesOnline;
+
+            const displayTotal = realTotal + extraStations + extraDevices;
+            const displayOnline = realOnline + extraStations + extraDevicesOnline;
+            const displayOffline = realOffline + extraDevicesOffline;
             const displayDisabled = realDisabled; // Disabled count stays real
 
             animateCounter(document.getElementById('ringTotal'), displayTotal);
@@ -4865,35 +5032,89 @@
         // Current time range for filtering
         let currentTimeRange = '24h';
 
-        // Filter by category dropdown
-        function filterByCategory(category) {
-            currentCategory = category;
-            renderTable();
-            updateMapMarkers();
-            updateCategoryChart();
-
-            // Update count display
-            const counts = {
-                all: allStations.length,
-                corporate: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'corporate').length,
-                community: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'community').length,
-                reference: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'reference').length,
-                krews: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'krews').length,
-                wfp: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wfp').length,
-                wu: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu').length
-            };
-            const count = counts[category] || counts.all;
-            document.getElementById('countAll').textContent = count;
-        }
-
-        // Filter by province dropdown
-        function filterByProvince(province) {
-            currentProvinceFilter = province;
-            localStorage.setItem('provinceFilter', province);
+        // Re-run everything a filter change touches.
+        function applyFilters() {
             renderTable();
             updateMapMarkers();
             updateCategoryChart();
             renderOfflinePanel();
+        }
+
+        function multiSelectLabel(key) {
+            const cfg = MULTI_SELECTS[key];
+            if (cfg.set.size === 0) return cfg.allLabel;
+            if (cfg.set.size === 1) {
+                const checked = document.querySelector(`#ms-${key} .ms-opt input:checked`);
+                if (checked) return checked.parentElement.textContent.trim();
+            }
+            return `${cfg.set.size} ${cfg.noun}`;
+        }
+
+        function refreshMultiSelect(key) {
+            const cfg = MULTI_SELECTS[key];
+            const root = document.getElementById(`ms-${key}`);
+            if (!cfg || !root) return;
+            root.querySelectorAll('.ms-opt input').forEach(cb => { cb.checked = cfg.set.has(cb.value); });
+            const label = root.querySelector('.ms-label');
+            if (label) label.textContent = multiSelectLabel(key);
+            root.classList.toggle('active', cfg.set.size > 0);
+        }
+
+        function closeAllMultiSelects() {
+            document.querySelectorAll('.ms').forEach(root => {
+                root.classList.remove('open');
+                const panel = root.querySelector('.ms-panel');
+                if (panel) panel.hidden = true;
+            });
+        }
+
+        // Build the checkbox dropdowns and restore whatever was ticked last time.
+        function setupMultiSelects() {
+            Object.keys(MULTI_SELECTS).forEach(key => {
+                const cfg = MULTI_SELECTS[key];
+                const root = document.getElementById(`ms-${key}`);
+                if (!root) return;
+                const panel = root.querySelector('.ms-panel');
+
+                root.querySelector('.ms-toggle')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const wasOpen = !panel.hidden;
+                    closeAllMultiSelects();
+                    panel.hidden = wasOpen;
+                    root.classList.toggle('open', !wasOpen);
+                });
+
+                // Keep clicks inside the panel from reaching the close-on-outside handler.
+                panel.addEventListener('click', (e) => e.stopPropagation());
+
+                panel.addEventListener('change', (e) => {
+                    const cb = e.target;
+                    if (!cb.matches || !cb.matches('input[type="checkbox"]')) return;
+                    if (cb.checked) cfg.set.add(cb.value); else cfg.set.delete(cb.value);
+                    localStorage.setItem(cfg.storageKey, JSON.stringify([...cfg.set]));
+                    refreshMultiSelect(key);
+                    applyFilters();
+                });
+
+                panel.querySelector('.ms-clear')?.addEventListener('click', () => {
+                    cfg.set.clear();
+                    localStorage.setItem(cfg.storageKey, JSON.stringify([]));
+                    refreshMultiSelect(key);
+                    applyFilters();
+                });
+
+                // Restore, ignoring any saved value that is no longer an option.
+                try {
+                    const saved = JSON.parse(localStorage.getItem(cfg.storageKey) || '[]');
+                    const valid = new Set([...root.querySelectorAll('.ms-opt input')].map(cb => cb.value));
+                    if (Array.isArray(saved)) saved.filter(v => valid.has(v)).forEach(v => cfg.set.add(v));
+                } catch (e) {
+                    // A corrupt stored value just means "start with nothing ticked".
+                }
+                refreshMultiSelect(key);
+            });
+
+            document.addEventListener('click', closeAllMultiSelects);
         }
 
         function filterByNetwork(network) {
@@ -4974,7 +5195,7 @@
         }
 
         // Load uptime data for selected time range
-        async function loadUptimeData(range, startDate = null, endDate = null) {
+        async function loadUptimeData(range, startDate = null, endDate = null, label = null) {
             try {
                 showNotification('Loading uptime data...', 'info');
 
@@ -4998,22 +5219,38 @@
                 // Update station uptime values
                 const uptimeMap = {};
                 data.uptime_data.forEach(u => {
-                    uptimeMap[u.station_id] = u.uptime_24h;
+                    uptimeMap[u.station_id] = u;
                 });
 
-                // Update allStations with new uptime
+                // Update allStations with the window's figures. checks_24h must come
+                // across too: it is how the table and the charts decide whether a
+                // station has ANY data for this window. Keeping the live 24h count
+                // here meant they tested the wrong window — and since the Worker
+                // reports a station with no history as 100% whenever it is currently
+                // Active, stations that did not yet exist were averaged in as perfect.
                 let updatedCount = 0;
                 allStations = allStations.map(s => {
-                    const newUptime = uptimeMap[s.station_id];
-                    if (newUptime !== undefined) {
-                        updatedCount++;
-                        return { ...s, uptime_24h: newUptime };
-                    }
-                    return s;
+                    const row = uptimeMap[s.station_id];
+                    if (row === undefined) return s;
+                    updatedCount++;
+                    return {
+                        ...s,
+                        uptime_24h: row.uptime_24h,
+                        checks_24h: row.checks_24h || 0,
+                        tracking_since: row.tracking_since || null
+                    };
                 });
 
                 renderTable();
-                showNotification(`Uptime updated for ${updatedCount} stations (${range})`, 'success');
+                // The bars read uptime_24h, which we just rewrote, so the chart
+                // has to be repainted or it keeps showing the previous period.
+                currentRangeLabel = label
+                    || ((range === 'custom' && startDate && endDate)
+                        ? `${startDate} to ${endDate}`
+                        : (UPTIME_RANGE_LABELS[range] || range));
+                updateCategoryChart();
+                updateChartWindowSubtitle();
+                showNotification(`Uptime updated for ${updatedCount} stations (${currentRangeLabel})`, 'success');
             } catch (e) {
                 // silenced
                 showNotification('Error loading uptime: ' + e.message, 'error');
@@ -5032,9 +5269,9 @@
         // Narrow a station list to the province picked in the dropdown.
         // 'unassigned' catches the stations determineProvince() could not place.
         function applyProvinceFilter(stations) {
-            if (currentProvinceFilter === 'all') return stations;
-            if (currentProvinceFilter === 'unassigned') return stations.filter(s => !s.province);
-            return stations.filter(s => s.province === currentProvinceFilter);
+            if (!selectedProvinces.size) return stations;
+            // A station with no province answers to the 'unassigned' checkbox.
+            return stations.filter(s => selectedProvinces.has(s.province || 'unassigned'));
         }
 
         // Get filtered stations based on current filters (shared by table, PDF, CSV)
@@ -5042,23 +5279,18 @@
             let stations = [...allStations];
 
             // Filter by category
-            if (currentCategory !== 'all') {
-                stations = stations.filter(s => s.category === currentCategory);
+            if (selectedCategories.size) {
+                stations = stations.filter(s => selectedCategories.has(s.category));
             }
 
             // Filter by status (Active, Inactive, Disabled)
-            if (currentFilter !== 'all') {
-                stations = stations.filter(s => {
-                    if (currentFilter === 'active') return s.status === 'Active';
-                    if (currentFilter === 'inactive') return s.status === 'Inactive';
-                    if (currentFilter === 'disabled') return s.status === 'Disabled';
-                    return true;
-                });
+            if (selectedStatuses.size) {
+                stations = stations.filter(s => selectedStatuses.has(STATUS_KEY[s.status]));
             }
 
             // Filter by source (Davis, Misol, WU)
-            if (currentSourceFilter !== 'all') {
-                stations = stations.filter(s => s.api_source === currentSourceFilter);
+            if (selectedSources.size) {
+                stations = stations.filter(s => selectedSources.has(s.api_source));
             }
 
             // Filter by province
@@ -5090,10 +5322,10 @@
         // Get a human-readable description of active filters
         function getActiveFiltersDescription() {
             const filters = [];
-            if (currentCategory !== 'all') filters.push(`Category: ${currentCategory}`);
-            if (currentFilter !== 'all') filters.push(`Status: ${currentFilter}`);
-            if (currentSourceFilter !== 'all') filters.push(`Source: ${currentSourceFilter}`);
-            if (currentProvinceFilter !== 'all') filters.push(`Province: ${provinceLabel(currentProvinceFilter)}`);
+            if (selectedCategories.size) filters.push(`Category: ${[...selectedCategories].join(', ')}`);
+            if (selectedStatuses.size) filters.push(`Status: ${[...selectedStatuses].join(', ')}`);
+            if (selectedSources.size) filters.push(`Source: ${[...selectedSources].join(', ')}`);
+            if (selectedProvinces.size) filters.push(`Province: ${[...selectedProvinces].map(provinceLabel).join(', ')}`);
             if (currentNetworkFilter !== 'all') filters.push(`Network: ${currentNetworkFilter.toUpperCase()}`);
             const searchTerm = document.getElementById('searchBox').value;
             if (searchTerm) filters.push(`Search: "${searchTerm}"`);
@@ -5647,17 +5879,17 @@
 
             // Apply province filter. Alerts carry no province of their own, so
             // resolve it from the station id the same way the table does.
-            if (currentProvinceFilter !== 'all') {
+            if (selectedProvinces.size) {
                 alertsList = alertsList.filter(a => {
                     const prov = determineProvince(a.station_id, a.location || a.station_name || '');
-                    return currentProvinceFilter === 'unassigned' ? !prov : prov === currentProvinceFilter;
+                    return selectedProvinces.has(prov || 'unassigned');
                 });
             }
 
             if (!alertsList || alertsList.length === 0) {
                 const narrowed = [];
                 if (currentOfflineSourceFilter !== 'all') narrowed.push(currentOfflineSourceFilter);
-                if (currentProvinceFilter !== 'all') narrowed.push(provinceLabel(currentProvinceFilter));
+                if (selectedProvinces.size) narrowed.push([...selectedProvinces].map(provinceLabel).join(' / '));
                 const msg = narrowed.length === 0
                     ? 'All stations online!'
                     : `No ${narrowed.join(' / ')} stations offline!`;
@@ -5734,29 +5966,66 @@
             document.getElementById('exportDropdown').value = '';
         }
 
-        // Filter by status dropdown
-        function filterByStatus(status) {
-            currentFilter = status;
-            renderTable();
-            updateMapMarkers();
+        // Handle uptime period dropdown
+        // Calendar uptime windows, resolved on the PKT clock (UTC+5) that the
+        // rest of the dashboard reports in. Returns [start, end] as YYYY-MM-DD,
+        // or null for the rolling presets the Worker already understands.
+        function pktCalendarRange(key) {
+            const pkt = new Date(Date.now() + 5 * 3600 * 1000);
+            const y = pkt.getUTCFullYear(), m = pkt.getUTCMonth(), d = pkt.getUTCDate();
+            const iso = (yy, mm, dd) => `${yy}-${String(mm + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            const lastDay = (yy, mm) => new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate();
+            if (key === 'month') return [iso(y, m, 1), iso(y, m, d)];
+            if (key === 'lastmonth') {
+                const ly = m === 0 ? y - 1 : y, lm = m === 0 ? 11 : m - 1;
+                return [iso(ly, lm, 1), iso(ly, lm, lastDay(ly, lm))];
+            }
+            if (key === 'year') return [iso(y, 0, 1), iso(y, m, d)];
+            if (key === 'lastyear') return [iso(y - 1, 0, 1), iso(y - 1, 11, 31)];
+            return null;
         }
 
-        // Handle uptime period dropdown
+        // Whole-calendar-month lookup. <input type="month"> hands back 'YYYY-MM',
+        // which is all that is needed to derive both bounds.
+        function applyMonthPick() {
+            const value = document.getElementById('monthPicker').value;
+            if (!value || !/^\d{4}-\d{2}$/.test(value)) {
+                showNotification('Pick a month first', 'error');
+                return;
+            }
+            const [y, m] = value.split('-').map(Number);
+            const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+            const start = `${value}-01`;
+            const end = `${value}-${String(lastDay).padStart(2, '0')}`;
+            const name = new Date(Date.UTC(y, m - 1, 1))
+                .toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+            loadUptimeData('custom', start, end, name);
+        }
+
         function handleUptimePeriod(value) {
             currentTimeRange = value;
             // Update modal availability label
-            const rangeLabels = { '24h': '24h', 'daily': 'Today', '7d': '7 Days', '30d': '30 Days', '1y': '1 Year', 'custom': 'Custom' };
+            const rangeLabels = UPTIME_RANGE_LABELS;
             const labelEl = document.getElementById('modalAvailLabel');
             if (labelEl) labelEl.textContent = `Availability (${rangeLabels[value] || value})`;
             // Update table header
             const headerEl = document.getElementById('availabilityHeader');
             if (headerEl) headerEl.textContent = `Availability (${rangeLabels[value] || value})`;
 
-            if (value === 'custom') {
+            const monthRow = document.getElementById('monthPickRow');
+            if (value === 'pickmonth') {
+                document.getElementById('customDateRange').style.display = 'none';
+                if (monthRow) monthRow.style.display = 'flex';
+            } else if (value === 'custom') {
+                if (monthRow) monthRow.style.display = 'none';
                 showCustomDatePicker();
             } else {
+                if (monthRow) monthRow.style.display = 'none';
                 document.getElementById('customDateRange').style.display = 'none';
-                loadUptimeData(value);
+                // Calendar windows need both bounds, which only range=custom carries.
+                const calendar = pktCalendarRange(value);
+                if (calendar) loadUptimeData('custom', calendar[0], calendar[1]);
+                else loadUptimeData(value);
                 showNotification(`Uptime period changed to ${rangeLabels[value] || value}`, 'info');
             }
         }
@@ -6341,13 +6610,6 @@
                 updateMapMarkers();
             });
 
-            // Source filter dropdown
-            document.getElementById('sourceFilter')?.addEventListener('change', (e) => {
-                currentSourceFilter = e.target.value;
-                renderTable();
-                updateMapMarkers();
-            });
-
             // Hide WU checkbox
             document.getElementById('hideWU')?.addEventListener('change', renderTable);
 
@@ -6356,7 +6618,6 @@
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    currentFilter = btn.dataset.filter;
                     renderTable();
                     updateMapMarkers();
                 });
@@ -6371,8 +6632,7 @@
                 document.getElementById('btnCategory')?.classList.add('active');
                 document.getElementById('btnSource')?.classList.remove('active');
                 document.getElementById('btnProvince')?.classList.remove('active');
-                document.getElementById('categoryChartTitle').textContent = 'Category Availability Summary';
-                if (currentCategory === 'all') initCategoryUptimeChart();
+                if (selectedCategories.size !== 1) drawGroupedChart();
             });
             document.getElementById('btnSource')?.addEventListener('click', () => {
                 chartGroupMode = 'source';
@@ -6380,8 +6640,7 @@
                 document.getElementById('btnSource')?.classList.add('active');
                 document.getElementById('btnCategory')?.classList.remove('active');
                 document.getElementById('btnProvince')?.classList.remove('active');
-                document.getElementById('categoryChartTitle').textContent = 'Source Availability Summary';
-                if (currentCategory === 'all') initSourceUptimeChart();
+                if (selectedCategories.size !== 1) drawGroupedChart();
             });
             document.getElementById('btnProvince')?.addEventListener('click', () => {
                 chartGroupMode = 'province';
@@ -6389,8 +6648,7 @@
                 document.getElementById('btnProvince')?.classList.add('active');
                 document.getElementById('btnCategory')?.classList.remove('active');
                 document.getElementById('btnSource')?.classList.remove('active');
-                document.getElementById('categoryChartTitle').textContent = 'Province Availability Summary';
-                if (currentCategory === 'all') initProvinceUptimeChart();
+                if (selectedCategories.size !== 1) drawGroupedChart();
             });
 
             // 24h | 1h window toggle — repaints the currently-visible chart with the other field set.
@@ -6416,11 +6674,7 @@
                 localStorage.setItem('categoryChartType', 'bar');
                 document.getElementById('btnBar')?.classList.add('active');
                 document.getElementById('btnLine')?.classList.remove('active');
-                if (currentCategory === 'all') {
-                    if (chartGroupMode === 'source') initSourceUptimeChart();
-                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
-                    else initCategoryUptimeChart();
-                }
+                if (selectedCategories.size !== 1) drawGroupedChart();
             });
 
             // Station detail modal — Bar / Line toggle for the uptime chart.
@@ -6446,11 +6700,7 @@
                 localStorage.setItem('categoryChartType', 'line');
                 document.getElementById('btnLine')?.classList.add('active');
                 document.getElementById('btnBar')?.classList.remove('active');
-                if (currentCategory === 'all') {
-                    if (chartGroupMode === 'source') initSourceUptimeChart();
-                    else if (chartGroupMode === 'province') initProvinceUptimeChart();
-                    else initCategoryUptimeChart();
-                }
+                if (selectedCategories.size !== 1) drawGroupedChart();
             });
 
             // Modal interval buttons (24h, 7d, 30d, 1y)
@@ -8475,7 +8725,6 @@
             chartGroupMode = localStorage.getItem('chartGroupMode') || 'category';
             categoryChartType = localStorage.getItem('categoryChartType') || 'bar';
             currentNetworkFilter = localStorage.getItem('networkFilter') || 'all';
-            currentProvinceFilter = localStorage.getItem('provinceFilter') || 'all';
             currentUptimeRange = localStorage.getItem('uptimeRange') || '24h';
 
             // Set active uptime range button based on saved preference
@@ -8509,14 +8758,17 @@
             // Set network filter dropdown
             document.getElementById('networkFilter').value = currentNetworkFilter;
 
-            // Set province filter dropdown
-            const provinceFilterEl = document.getElementById('provinceFilter');
-            if (provinceFilterEl) provinceFilterEl.value = currentProvinceFilter;
+            // Build the multi-selects before the first fetch, so the restored
+            // selection is already in effect when renderTable() first runs.
+            setupMultiSelects();
 
             // ONE fetch on load, unforced — served from the Worker cache, which the
             // 30 minute poll and the Refresh button keep warm and current. Loading
             // twice doubled every page view for no real gain.
             await loadData(false);
+            // Not awaited: the station tiles paint immediately and are recomputed
+            // when the gauge and sensor counts arrive.
+            loadNetworkExtras();
             loadIssueTrackerData();
             setupEventListeners();
             setupUptimeRangeToggles();
