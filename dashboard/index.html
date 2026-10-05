@@ -1957,6 +1957,7 @@
                             <option value="reference">📍 Reference</option>
                             <option value="wow">🛣️ WOW</option>
                             <option value="krews">🔬 KREWS</option>
+                            <option value="wfp">🌾 WFP</option>
                             <option value="wu">🌐 External</option>
                         </select>
                         <select id="provinceFilter" class="source-filter" onchange="filterByProvince(this.value)"
@@ -3404,7 +3405,11 @@
             '232286': 'corporate', '218269': 'corporate',
             // Confirmed community, not merely defaulted to it
             '228881': 'community', '244338': 'community', '244356': 'community',
-            '146299': 'community', '234197': 'community'
+            '146299': 'community', '234197': 'community', '247015': 'community',
+            // WFP Stations
+            '244606': 'wfp', '244647': 'wfp', '245133': 'wfp', '245139': 'wfp', '245731': 'wfp',
+            // External
+            'IRAWAL36': 'wu'
         };
 
         // Category display names and colors
@@ -3414,14 +3419,17 @@
             'wu': { name: 'External', color: '#ec4899', icon: '🌐' },
             'reference': { name: 'Reference', color: '#14b8a6', icon: '📍' },
             'wow': { name: 'WOW', color: '#f59e0b', icon: '🛣️' },
-            'krews': { name: 'KREWS', color: '#e11d48', icon: '🔬' }
+            'krews': { name: 'KREWS', color: '#e11d48', icon: '🔬' },
+            'wfp': { name: 'WFP', color: '#06b6d4', icon: '🌾' }
         };
 
         // Source overrides for stations with missing/incorrect api_source from HubService
         const SOURCE_OVERRIDES = {
             '216612': 'Davis', '221544': 'Davis', '221563': 'Davis', '221555': 'Davis', '221695': 'Davis',
             '221726': 'Davis', '221703': 'Davis', '221746': 'Davis', '221873': 'Davis',
-            '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis'
+            '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis',
+            // Report WU upstream, but they are Davis units
+            '244606': 'Davis', '245139': 'Davis'
         };
 
         // Auto-detect source for stations with missing/incorrect api_source
@@ -3952,9 +3960,9 @@
             filteredStations = applyProvinceFilter(filteredStations);
 
             // Calculate uptime for each category - prefer real 24h uptime when available
-            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4379,9 +4387,9 @@
 
         // Compute category arrays (labels, uptimes, active counts, totals)
         function computeCategoryUptimeArrays() {
-            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
-            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'External'];
-            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#6b7280'];
+            const categories = ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'];
+            const categoryNames = ['Corporate', 'Community', 'Reference', 'WOW', 'KREWS', 'WFP', 'External'];
+            const categoryColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#e11d48', '#06b6d4', '#6b7280'];
             const uptimeData = [];
             const activeData = [];
             const totalData = [];
@@ -4871,6 +4879,7 @@
                 community: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'community').length,
                 reference: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'reference').length,
                 krews: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'krews').length,
+                wfp: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wfp').length,
                 wu: allStations.filter(s => (STATION_CATEGORIES[s.station_id] || 'community') === 'wu').length
             };
             const count = counts[category] || counts.all;
@@ -6153,7 +6162,11 @@
             '198090': 'AJK', '177683': 'AJK', '177740': 'AJK', '177802': 'AJK', '174057': 'AJK',
             '162588': 'AJK', '130231': 'AJK',
             // Gilgit-Baltistan
-            '146260': 'GB', '146299': 'GB'
+            '146260': 'GB', '146299': 'GB',
+            // Punjab
+            'IRAWAL36': 'Punjab', '247015': 'Punjab',
+            // KPK
+            '244606': 'KPK', '244647': 'KPK', '245133': 'KPK', '245139': 'KPK', '245731': 'KPK'
         };
 
         // Determine province from station ID or location name
@@ -6178,7 +6191,8 @@
                 loc.includes('multan') || loc.includes('faisalabad') || loc.includes('gujranwala') || loc.includes('sialkot') ||
                 loc.includes('bahawalpur') || loc.includes('sargodha') || loc.includes('jhelum') || loc.includes('chakwal') ||
                 loc.includes('attock') || loc.includes('mianwali') || loc.includes('bhakkar') || loc.includes('layyah') ||
-                loc.includes('murree') || loc.includes('westridge') || loc.includes('bahria town')) return 'Punjab';
+                loc.includes('murree') || loc.includes('westridge') || loc.includes('bahria town') ||
+                loc.includes('jalalpur peerwala')) return 'Punjab';
 
             // KPK
             if (loc.includes('peshawar') || loc.includes('abbottabad') || loc.includes('mardan') || loc.includes('swat') ||
@@ -6186,7 +6200,8 @@
                 loc.includes('charsadda') || loc.includes('nowshera') || loc.includes('swabi') || loc.includes('haripur') ||
                 loc.includes('mansehra') || loc.includes('nathiagali') || loc.includes('waziristan') ||
                 loc.includes('tarnab') || loc.includes('sardaryab') || loc.includes('manki sharif') ||
-                loc.includes('pashtun garhi') || loc.includes('shedu')) return 'KPK';
+                loc.includes('pashtun garhi') || loc.includes('shedu') ||
+                loc.includes('cherat') || loc.includes('jalozai') || loc.includes('pir pai')) return 'KPK';
 
             // Sindh
             if (loc.includes('karachi') || loc.includes('hyderabad') || loc.includes('sukkur') || loc.includes('larkana') ||

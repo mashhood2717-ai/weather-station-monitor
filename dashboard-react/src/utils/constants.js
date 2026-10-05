@@ -100,7 +100,11 @@ export const STATION_CATEGORIES = {
     '232286': 'corporate', '218269': 'corporate',
     // Confirmed community, not merely defaulted to it
     '228881': 'community', '244338': 'community', '244356': 'community',
-    '146299': 'community', '234197': 'community',
+    '146299': 'community', '234197': 'community', '247015': 'community',
+    // WFP Stations
+    '244606': 'wfp', '244647': 'wfp', '245133': 'wfp', '245139': 'wfp', '245731': 'wfp',
+    // External
+    'IRAWAL36': 'wu',
 };
 
 // Source overrides for stations with missing/incorrect api_source
@@ -108,6 +112,8 @@ export const SOURCE_OVERRIDES = {
     '216612': 'Davis', '221544': 'Davis', '221563': 'Davis', '221555': 'Davis', '221695': 'Davis',
     '221726': 'Davis', '221703': 'Davis', '221746': 'Davis', '221873': 'Davis',
     '221910': 'Davis', '221938': 'Davis', '221884': 'Davis', '228127': 'Davis', '221876': 'Davis', '221803': 'Davis',
+    // Report WU upstream, but they are Davis units
+    '244606': 'Davis', '245139': 'Davis',
 };
 
 // Station province mapping
@@ -173,6 +179,10 @@ export const STATION_PROVINCES = {
     '198090': 'AJK', '177683': 'AJK', '177740': 'AJK', '177802': 'AJK', '174057': 'AJK',
     '162588': 'AJK', '130231': 'AJK',
     '146260': 'GB', '146299': 'GB',
+    // Punjab
+    'IRAWAL36': 'Punjab', '247015': 'Punjab',
+    // KPK
+    '244606': 'KPK', '244647': 'KPK', '245133': 'KPK', '245139': 'KPK', '245731': 'KPK',
 };
 
 // Category display config — user's own categories
@@ -183,6 +193,7 @@ export const CATEGORY_CONFIG = {
     reference: { name: 'Reference', color: '#14b8a6', icon: '📍' },
     wow: { name: 'WOW', color: '#f59e0b', icon: '🛣️' },
     krews: { name: 'KREWS', color: '#e11d48', icon: '🔬' },
+    wfp: { name: 'WFP', color: '#06b6d4', icon: '🌾' },
 };
 
 // Province display config
@@ -197,4 +208,4 @@ export const PROVINCE_CONFIG = {
 };
 
 export const PROVINCE_LIST = ['Islamabad', 'Punjab', 'KPK', 'Sindh', 'Balochistan', 'AJK', 'GB'];
-export const CATEGORY_LIST = ['corporate', 'community', 'reference', 'wow', 'krews', 'wu'];
+export const CATEGORY_LIST = ['corporate', 'community', 'reference', 'wow', 'krews', 'wfp', 'wu'];
