@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Tag, Radio, Spin } from 'antd';
 import axios from 'axios';
 import { API_BASE, CATEGORY_CONFIG } from '../utils/constants';
+import StationThread from './StationThread';
 
 function formatDate(dateStr) {
     if (!dateStr) return '--';
@@ -484,6 +485,9 @@ export default function StationDetailModal({ station, onClose, isDark }) {
                     }
                 </div>
             </div>
+
+            {/* Call log + history for this station */}
+            <StationThread station={station} isDark={isDark} />
 
             {/* Recent Outages */}
             <div>

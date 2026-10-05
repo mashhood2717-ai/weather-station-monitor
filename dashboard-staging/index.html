@@ -849,6 +849,88 @@
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
 
+        /* Station thread: issues and calls for one station, newest first. */
+        .thread-btn {
+            padding: 4px 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .thread-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .thread-btn .thread-count {
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .thread-list {
+            max-height: 320px;
+            overflow-y: auto;
+            padding-left: 4px;
+        }
+
+        .thread-item {
+            position: relative;
+            padding: 0 0 14px 22px;
+            border-left: 2px solid var(--border);
+        }
+
+        .thread-item:last-child {
+            border-left-color: transparent;
+            padding-bottom: 0;
+        }
+
+        .thread-item::before {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 3px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+        }
+
+        .thread-item.call::before { border-color: var(--primary); }
+        .thread-item.opened::before { border-color: var(--danger); }
+        .thread-item.resolved::before { border-color: var(--success); }
+
+        .thread-when {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 2px;
+        }
+
+        .thread-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .thread-detail {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            white-space: pre-wrap;
+        }
+
+        .thread-empty {
+            font-size: 13px;
+            color: var(--text-secondary);
+            padding: 6px 0;
+        }
+
         /* Multi-select filter: a styled checkbox dropdown. A native
            <select multiple> renders as a list box, which this toolbar cannot
            accommodate. */
@@ -2140,6 +2222,7 @@
                                 <th onclick="sortTable('uptime')"><span id="availabilityHeader">Availability</span> ↕
                                 </th>
                                 <th onclick="sortTable('last_seen')">Last Online ↕</th>
+                                <th>Calls</th>
                             </tr>
                         </thead>
                         <tbody id="stationsTable">
@@ -2252,7 +2335,7 @@
                                 </tr>
                             </thead>
                             <tbody id="issuesTableBody">
-                                <tr><td colspan="7" style="text-align:center; color:var(--text-secondary);">Loading...</td></tr>
+                                <tr><td colspan="8" style="text-align:center; color:var(--text-secondary);">Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -2947,6 +3030,48 @@
                 <div class="modal-downtime-section" id="modalDowntimeList">
                     <h3>Recent Outages</h3>
                     <div id="downtimeRecords">No outages recorded</div>
+                </div>
+                <div class="modal-downtime-section" id="modalThreadSection">
+                    <h3 style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        Station Thread
+                        <span id="threadSummary" style="font-size:12px; font-weight:400; color:var(--text-secondary);"></span>
+                        <button class="thread-btn" style="margin-left:auto;" onclick="toggleStationCallForm()">📞 Log a Call</button>
+                    </h3>
+
+                    <div id="stationCallForm" style="display:none; margin-bottom:14px; padding:12px; border:1px solid var(--border); border-radius:8px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                            <div>
+                                <label style="font-size:12px; color:var(--text-secondary);">Caller (you) *</label>
+                                <input id="threadCaller" class="form-input" placeholder="Your name">
+                            </div>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-secondary);">Contact person (host)</label>
+                                <input id="threadContact" class="form-input" placeholder="Who you spoke to">
+                            </div>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-secondary);">Duration (minutes)</label>
+                                <input id="threadDuration" type="number" min="0" class="form-input" placeholder="5">
+                            </div>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-secondary);">Outcome</label>
+                                <select id="threadOutcome" class="form-input">
+                                    <option value="answered">✅ Answered</option>
+                                    <option value="no_answer" selected>📵 No Answer</option>
+                                    <option value="busy">🔴 Busy</option>
+                                    <option value="voicemail">📧 Voicemail</option>
+                                    <option value="callback_scheduled">📅 Callback</option>
+                                </select>
+                            </div>
+                        </div>
+                        <label style="font-size:12px; color:var(--text-secondary);">Notes</label>
+                        <textarea id="threadNotes" class="form-input" rows="2" placeholder="What did the host say?"></textarea>
+                        <div style="display:flex; gap:8px; margin-top:10px;">
+                            <button class="apply-btn" onclick="submitStationCall()">Save call</button>
+                            <button class="thread-btn" onclick="toggleStationCallForm(false)">Cancel</button>
+                        </div>
+                    </div>
+
+                    <div id="stationThread" class="thread-list"></div>
                 </div>
             </div>
         </div>
@@ -5413,6 +5538,12 @@
                     <td>${rainDisplay}</td>
                     <td><strong ${availClass}>${availDisplay}</strong></td>
                     <td><small>${lastOnline}</small></td>
+                    <td>
+                        <button class="thread-btn" title="Call log and history for this station"
+                            onclick="event.stopPropagation(); openStationThread('${station.station_id}')">
+                            📞 <span class="thread-count">${stationCallCounts[String(station.station_id)] || 0}</span>
+                        </button>
+                    </td>
                 </tr>
             `;
             }).join('');
@@ -5445,6 +5576,185 @@
         let stationChartType = localStorage.getItem('stationChartType') === 'line' ? 'line' : 'bar';
 
         // Open station modal and load details
+        // ---- Station call log + thread ---------------------------------------
+        // The Issue Tracker already records every issue and call; this surfaces
+        // them per station so you can see whether the host has been rung.
+        let stationCallsCache = [];
+        let stationCallCounts = {};
+
+        async function loadStationCalls() {
+            try {
+                const resp = await fetch(`${WORKER_API}/api/calls?range=1y`);
+                const data = await resp.json();
+                stationCallsCache = data.calls || [];
+                stationCallCounts = {};
+                stationCallsCache.forEach(c => {
+                    const key = String(c.station_id);
+                    stationCallCounts[key] = (stationCallCounts[key] || 0) + 1;
+                });
+            } catch (e) {
+                // The table still renders; the Calls column just shows zero.
+                console.warn('Call log unavailable:', e.message);
+            }
+        }
+
+        function threadTime(value) {
+            if (!value) return '';
+            // D1 stores naive UTC; render on the PKT clock like everything else.
+            const d = new Date(value.replace(' ', 'T') + 'Z');
+            if (isNaN(d)) return value;
+            return d.toLocaleString('en-GB', { timeZone: 'Asia/Karachi', hour12: false,
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' PKT';
+        }
+
+        const CALL_OUTCOME_LABELS = {
+            answered: '✅ Answered', no_answer: '📵 No answer', busy: '🔴 Busy',
+            voicemail: '📧 Voicemail', callback_scheduled: '📅 Callback scheduled'
+        };
+
+        // Open the station modal straight at its thread.
+        function openStationThread(stationId) {
+            openStationModal(stationId);
+            setTimeout(() => {
+                document.getElementById('modalThreadSection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 150);
+        }
+
+        function toggleStationCallForm(show) {
+            const form = document.getElementById('stationCallForm');
+            if (!form) return;
+            const next = show === undefined ? form.style.display === 'none' : show;
+            form.style.display = next ? 'block' : 'none';
+            if (next) document.getElementById('threadCaller')?.focus();
+        }
+
+        async function loadStationThread(stationId) {
+            const list = document.getElementById('stationThread');
+            const summary = document.getElementById('threadSummary');
+            if (!list) return;
+            list.innerHTML = '<div class="thread-empty">Loading history\u2026</div>';
+            try {
+                const issues = await fetch(`${WORKER_API}/api/issues?station_id=${encodeURIComponent(stationId)}`)
+                    .then(r => r.json());
+                const calls = stationCallsCache.filter(c => String(c.station_id) === String(stationId));
+
+                // One entry per event, so an issue contributes both its opening
+                // and (if closed) its resolution.
+                const entries = [];
+                (Array.isArray(issues) ? issues : []).forEach(i => {
+                    entries.push({
+                        at: i.created_at, kind: 'opened', title: `Issue opened — ${i.title || 'Untitled'}`,
+                        detail: [i.description, i.priority ? `Priority: ${i.priority}` : null]
+                            .filter(Boolean).join('\n')
+                    });
+                    if (i.resolved_at) {
+                        entries.push({
+                            at: i.resolved_at, kind: 'resolved',
+                            title: `Issue ${i.status === 'unresolvable' ? 'closed as unresolvable' : 'resolved'} — ${i.title || 'Untitled'}`,
+                            detail: ''
+                        });
+                    }
+                });
+                calls.forEach(c => {
+                    entries.push({
+                        at: c.call_time, kind: 'call',
+                        title: `Call by ${c.caller_name || 'unknown'}${c.contact_person ? ' → ' + c.contact_person : ''}`,
+                        detail: [CALL_OUTCOME_LABELS[c.outcome] || c.outcome,
+                                 c.duration_minutes ? `${c.duration_minutes} min` : null,
+                                 c.notes].filter(Boolean).join(' · ')
+                    });
+                });
+
+                entries.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+
+                if (summary) {
+                    const issueCount = Array.isArray(issues) ? issues.length : 0;
+                    summary.textContent = `${calls.length} call${calls.length === 1 ? '' : 's'} · ${issueCount} issue${issueCount === 1 ? '' : 's'}`;
+                }
+
+                if (!entries.length) {
+                    list.innerHTML = '<div class="thread-empty">Nothing recorded for this station yet.</div>';
+                    return;
+                }
+                list.innerHTML = entries.map(e => `
+                    <div class="thread-item ${e.kind}">
+                        <div class="thread-when">${threadTime(e.at)}</div>
+                        <div class="thread-title">${escapeHtml(e.title)}</div>
+                        ${e.detail ? `<div class="thread-detail">${escapeHtml(e.detail)}</div>` : ''}
+                    </div>
+                `).join('');
+            } catch (e) {
+                list.innerHTML = `<div class="thread-empty">Could not load history: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function submitStationCall() {
+            const station = currentModalStation;
+            if (!station) { showNotification('No station selected', 'error'); return; }
+            const stationId = station.station_id;
+            const caller = document.getElementById('threadCaller').value.trim();
+            if (!caller) { showNotification('Caller name is required', 'error'); return; }
+
+            const body = {
+                caller_name: caller,
+                contact_person: document.getElementById('threadContact').value.trim() || null,
+                duration_minutes: parseInt(document.getElementById('threadDuration').value) || null,
+                outcome: document.getElementById('threadOutcome').value,
+                notes: document.getElementById('threadNotes').value.trim() || null
+            };
+
+            try {
+                // Calls hang off an issue, so an open one is needed. Reuse the
+                // station's live issue when there is one rather than opening a
+                // duplicate for every call.
+                const issues = await fetch(`${WORKER_API}/api/issues?station_id=${encodeURIComponent(stationId)}`)
+                    .then(r => r.json());
+                let target = (Array.isArray(issues) ? issues : [])
+                    .find(i => i.status === 'open' || i.status === 'in_progress');
+
+                if (!target) {
+                    const created = await fetch(`${WORKER_API}/api/issues`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            station_id: String(stationId),
+                            title: `Host contact — ${station.station_name || stationId}`,
+                            description: 'Opened from the station thread to record a call to the host.',
+                            priority: 'medium',
+                            created_by: caller
+                        })
+                    }).then(r => r.json());
+                    if (!created || !created.id) throw new Error('could not open an issue to attach the call to');
+                    target = { id: created.id };
+                }
+
+                const saved = await fetch(`${WORKER_API}/api/issues/${target.id}/calls`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }).then(r => r.json());
+                if (!saved || !saved.success) throw new Error('the call was not saved');
+
+                ['threadContact', 'threadDuration', 'threadNotes'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                toggleStationCallForm(false);
+                await loadStationCalls();
+                await loadStationThread(stationId);
+                renderTable();
+                showNotification('Call logged', 'success');
+            } catch (e) {
+                showNotification('Failed to log call: ' + e.message, 'error');
+            }
+        }
+
         async function openStationModal(stationId) {
             const modal = document.getElementById('stationModal');
             modal.style.display = 'flex';
@@ -5452,6 +5762,10 @@
             // Find station in allStations (this has correct data)
             const station = allStations.find(s => String(s.station_id) === String(stationId));
             currentModalStation = station; // Store for reference in updateModalWithData
+
+            // Thread is per-station, so it reloads with every modal open.
+            toggleStationCallForm(false);
+            loadStationThread(stationId);
 
             // Set basic info immediately from LOCAL data (not API)
             document.getElementById('modalStationName').textContent = station?.station_name || 'Loading...';
@@ -8751,6 +9065,8 @@
             // Not awaited: the station tiles paint immediately and are recomputed
             // when the gauge and sensor counts arrive.
             loadNetworkExtras();
+            // Call counts for the table's Calls column; re-renders when ready.
+            loadStationCalls().then(renderTable);
             loadIssueTrackerData();
             setupEventListeners();
             setupUptimeRangeToggles();

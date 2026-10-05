@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Input, Select, Tag, Table, Progress, Space, Button, Typography, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { SearchOutlined, DownloadOutlined } from '@ant-design/icons';
+import { SearchOutlined, DownloadOutlined, PhoneOutlined } from '@ant-design/icons';
 import { CATEGORY_CONFIG } from '../utils/constants';
 import { UPTIME_RANGE_LABELS, rangeLabelFor } from '../hooks/useRangeUptimes';
 
@@ -60,7 +60,7 @@ function getUptimeValue(station, rangeUptimes) {
 }
 
 export default function StationTable({ stations, statusFilter, categoryFilter, onFilterChange, onCategoryChange, onStationClick,
-    range, onRangeChange, rangeUptimes, rangeLoading }) {
+    range, onRangeChange, rangeUptimes, rangeLoading, callCounts }) {
     const [search, setSearch] = useState('');
     const [sourceFilter, setSourceFilter] = useState([]);
     const [provinceFilter, setProvinceFilter] = useState([]);
@@ -198,6 +198,18 @@ export default function StationTable({ stations, statusFilter, categoryFilter, o
             key: 'province',
             sorter: (a, b) => (a.province || '').localeCompare(b.province || ''),
             render: (value) => value || '--',
+        },
+        {
+            title: 'Calls',
+            key: 'calls',
+            width: 90,
+            sorter: (a, b) => (callCounts?.[String(a.station_id)] || 0) - (callCounts?.[String(b.station_id)] || 0),
+            render: (_, record) => (
+                <Button size="small" icon={<PhoneOutlined />} onClick={(e) => { e.stopPropagation(); onStationClick(record); }}
+                    title="Call log and history for this station">
+                    {callCounts?.[String(record.station_id)] || 0}
+                </Button>
+            ),
         },
     ];
 

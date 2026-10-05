@@ -15,6 +15,7 @@ import StormWatchAlert from './components/StormWatchAlert';
 import { useStations } from './hooks/useStations';
 import { useRangeUptimes } from './hooks/useRangeUptimes';
 import { useNetworkExtras } from './hooks/useNetworkExtras';
+import { useCallCounts } from './hooks/useCallCounts';
 
 const { Content } = Layout;
 
@@ -33,6 +34,7 @@ export default function App() {
     // Rain gauges and level sensors are real monitored devices, so the headline
     // counts them alongside the weather stations.
     const extras = useNetworkExtras();
+    const callCounts = useCallCounts();
     const headlineStats = useMemo(() => ({
         ...stats,
         total: stats.total + extras.total,
@@ -162,6 +164,7 @@ export default function App() {
                                                     onRangeChange={setUptimeRange}
                                                     rangeUptimes={rangeUptimes}
                                                     rangeLoading={rangeLoading}
+                                                    callCounts={callCounts}
                                                 />
                                             </Col>
                                         </Row>
